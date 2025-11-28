@@ -1,0 +1,28 @@
+{
+  "recipient": {
+    "name": "Max Mustermann",
+    "street": "Musterstr. 1",
+    "zip": "12345",
+    "city": "Musterstadt"
+  },
+  "invoice": {
+    "invoice_number": "20250015",
+    "date": "2025-01-02",
+    "category": "GESELLSCHAFTEN",
+    "receipt_date": "2025-01-01"
+  },
+  "items": [
+    {
+      "description": "Menü",
+      "quantity": 2,
+      "unit_price_gross": 39.90,
+      "vat_key": 1
+    },
+    {
+      "description": "Getränk",
+      "quantity": 3,
+      "unit_price_gross": 5.50,
+      "vat_key": 2
+    }
+  ]
+}

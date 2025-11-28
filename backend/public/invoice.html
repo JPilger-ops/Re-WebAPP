@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rechnung</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-title">Rechnungen</div>
+        <nav class="sidebar-nav">
+            <button class="nav-item" id="nav-dashboard">Dashboard</button>
+            <button class="nav-item nav-item-active" id="nav-invoices">Rechnungsübersicht</button>
+            <button class="nav-item" id="nav-create">Neue Rechnung</button>
+            <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
+            <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+            <button id="nav-account" class="nav-item">Account</button>
+            <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+            <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+        </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 class="topbar-title" id="title">Rechnung</h1>
+        <div>
+          <button class="secondary-button" id="btn-pdf-open">
+            PDF anzeigen
+          </button>
+
+          <button class="primary-button" id="btn-pdf-download">
+            PDF herunterladen
+           </button>
+        </div>
+      </header>
+
+      <div class="card" style="padding:28px;">
+        
+        <h2 class="section-h">Rechnungsdaten</h2>
+        <div class="detail-grid">
+          <div>Nummer</div><div id="d-number"></div>
+          <div>Datum</div><div id="d-date"></div>
+          <div>Belegdatum</div><div id="d-receipt"></div>
+          <div>Kategorie</div><div id="d-cat"></div>
+          <div>Status</div><div id="d-status"></div>
+        </div>
+
+        <h2 class="section-h" style="margin-top:24px;">Empfänger</h2>
+        <div class="detail-grid">
+          <div>Name</div><div id="r-name"></div>
+          <div>Straße</div><div id="r-street"></div>
+          <div>PLZ</div><div id="r-zip"></div>
+          <div>Stadt</div><div id="r-city"></div>
+        </div>
+
+        <h2 class="section-h" style="margin-top:24px;">Positionen</h2>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Beschreibung</th>
+              <th>Menge</th>
+              <th>Preis</th>
+              <th>Gesamt</th>
+            </tr>
+          </thead>
+          <tbody id="pos-body"></tbody>
+        </table>
+
+        <h2 class="section-h" style="margin-top:24px;">Summen</h2>
+        <div class="detail-grid">
+          <div>Zwischensumme</div><div id="sum-net"></div>
+          <div>MwSt</div><div id="sum-vat"></div>
+          <div style="font-size:18px;"><strong>Gesamtbetrag</strong></div>
+          <div style="font-size:18px;" id="sum-total"></div>
+        </div>
+
+        <h2 class="section-h" style="margin-top:24px;">Status ändern</h2>
+
+        <div class="detail-status-buttons">
+          <button class="secondary-button" onclick="setStatus('sent')">Als versendet markieren</button>
+          <button class="secondary-button" onclick="setStatus('paid')">Als bezahlt markieren</button>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- iOS Circle Loader Popup -->
+  <div id="download-progress-popup"
+      style="position: fixed;
+              top: 50%; left: 50%;
+              transform: translate(-50%, -50%);
+              width: 260px;
+              padding: 30px 28px;
+              background: rgba(255,255,255,0.88);
+              backdrop-filter: blur(22px);
+              -webkit-backdrop-filter: blur(22px);
+              border-radius: 22px;
+              box-shadow: 0 20px 45px rgba(0,0,0,0.15);
+              text-align: center;
+              display: none;
+              z-index: 9999;">
+
+      <h3 style="margin:0 0 18px; font-size:17px; font-weight:600; color:#1c1c1e;">
+          Lade PDF herunter…
+      </h3>
+
+      <div class="ios-loader">
+          <svg viewBox="0 0 100 100" class="ios-loader-svg">
+              <circle class="ios-loader-track" cx="50" cy="50" r="42" />
+              <circle class="ios-loader-fill" cx="50" cy="50" r="42" />
+          </svg>
+          <div id="progress-text" class="ios-loader-text">0%</div>
+      </div>
+
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/invoice.js"></script>
+</body>
+</html>

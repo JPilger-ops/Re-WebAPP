@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Account – Passwort ändern</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-title">Rechnungsapp</div>
+
+      <div class="sidebar-nav">
+        <button id="nav-dashboard" class="nav-item">Dashboard</button>
+        <button id="nav-invoices" class="nav-item">Rechnungsübersicht</button>
+        <button id="nav-create" class="nav-item">Neue Rechnung</button>
+        <button id="nav-customers" class="nav-item">Kundenverwaltung</button>
+        <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+        <button id="nav-account" class="nav-item nav-item-active">Account</button>
+        <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+        <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <h1 class="topbar-title">Account</h1>
+
+      <div class="card" style="max-width:460px;">
+        <h2 class="section-h">Passwort ändern</h2>
+
+        <div id="error-box" class="error-box hidden"></div>
+        <div id="success-box" class="success-box hidden"></div>
+
+        <label class="input-label">Aktuelles Passwort</label>
+        <input id="currentPw" type="password" class="input">
+
+        <label class="input-label">Neues Passwort</label>
+        <div class="password-wrapper">
+          <input id="newPw" type="password" class="input">
+          <span id="toggle-newPw" class="password-toggle">👁</span>
+        </div>
+
+        <div id="pw-strength" class="pw-strength">Passwort-Stärke: -</div>
+
+        <label class="input-label">Neues Passwort wiederholen</label>
+        <div class="password-wrapper">
+          <input id="newPw2" type="password" class="input">
+          <span id="toggle-newPw2" class="password-toggle">👁</span>
+        </div>
+
+        <button id="changePw" class="primary-button" style="margin-top:15px;">Speichern</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/account.js"></script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rechnung erstellen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-title">Rechnungen</div>
+      <nav class="sidebar-nav">
+        <button class="nav-item" id="nav-dashboard">Dashboard</button>
+        <button class="nav-item" id="nav-invoices">Rechnungsübersicht</button>
+        <button class="nav-item nav-item-active" id="nav-create">Neue Rechnung</button>
+        <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
+        <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+        <button id="nav-account" class="nav-item">Account</button>
+        <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+        <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 class="topbar-title">Rechnung erstellen</h1>
+      </header>
+
+      <div id="error-box" class="error-box hidden"></div>
+
+      <!-- FORMULAR -->
+      <div class="card" style="padding:28px;">
+
+        <!-- GRID -->
+        <div class="create-grid">
+
+          <!-- Empfänger -->
+          <div>
+            <h2 class="section-h">Empfänger</h2>
+
+            <div class="customer-select-header">
+                <label class="input-label">Kunde auswählen</label>
+                <button id="btn-new-customer" class="secondary-button small-btn">Neuen Kunden</button>
+            </div>
+
+            <div id="customer-selected-tag" class="customer-tag hidden">
+                Bestehender Kunde ausgewählt
+            </div>
+
+            <!-- Nur Suchfeld + Ergebnisliste, kein Dropdown -->
+            <div style="position: relative; margin-top: 6px; margin-bottom: 14px;">
+              <input id="customer-search" class="input" placeholder="Kunde suchen…" />
+              <div id="customer-results" class="customer-results hidden"></div>
+            </div>
+
+            <label class="input-label">Name</label>
+            <input id="r_name" class="input" type="text" />
+
+            <label class="input-label">Straße</label>
+            <input id="r_street" class="input" type="text" />
+
+            <label class="input-label">PLZ</label>
+            <input id="r_zip" class="input" type="text" />
+
+            <label class="input-label">Stadt</label>
+            <input id="r_city" class="input" type="text" />
+          </div>
+
+          <!-- Rechnung -->
+          <div>
+            <h2 class="section-h">Rechnungsdaten</h2>
+
+            <label class="input-label">Rechnungsnummer</label>
+            <input id="i_number" class="input" type="text" />
+
+            <label class="input-label">Rechnungsdatum</label>
+            <input id="i_date" class="input" type="date" />
+
+            <label class="input-label">Kategorie</label>
+            <select id="i_category" class="input">
+              <option>GESELLSCHAFTEN</option>
+              <option>GUTSCHEIN</option>
+              <option>WEIHNACHTSMARKT</option>
+            </select>
+
+            <label class="input-label">Belegdatum</label>
+            <input id="i_receipt" class="input" type="date" />
+          </div>
+
+        </div>
+
+        <!-- POSITIONEN -->
+        <h2 class="section-h" style="margin-top:30px;">Positionen</h2>
+
+        <table class="table create-table">
+          <thead>
+            <tr>
+              <th>Beschreibung</th>
+              <th>Menge</th>
+              <th>Brutto €</th>
+              <th>MwSt</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="item-body"></tbody>
+        </table>
+
+        <button class="primary-button" id="add-item" style="margin-top: 12px;">
+          + Position hinzufügen
+        </button>
+
+        <!-- SUMMEN -->
+        <div class="total-box">
+          <div><strong>Zwischensumme:</strong> <span id="sum-net">0.00 €</span></div>
+          <div><strong>MwSt:</strong> <span id="sum-vat">0.00 €</span></div>
+          <div style="font-size:20px; margin-top:8px;">
+            <strong>Gesamt:</strong> <span id="sum-total">0.00 €</span>
+          </div>
+        </div>
+
+        <!-- SUBMIT -->
+        <button class="primary-button" id="submit-invoice" style="margin-top: 26px;">
+          Rechnung erstellen
+        </button>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/create.js"></script>
+</body>
+</html>

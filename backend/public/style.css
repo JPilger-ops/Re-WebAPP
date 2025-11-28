@@ -1,0 +1,924 @@
+:root {
+  --bg: #f5f5f7;
+  --bg-card: #ffffff;
+  --border-subtle: #e5e5ea;
+  --text: #111111;
+  --text-muted: #6e6e73;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.12);
+  --radius-xl: 18px;
+  --radius-md: 12px;
+  --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.08);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* Layout */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+
+.sidebar {
+  background: #f8f8fa;
+  border-right: 1px solid var(--border-subtle);
+  padding: 24px 20px;
+}
+
+.sidebar-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 15px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.nav-item-active {
+  background: #ffffff;
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Main area */
+
+.main {
+  padding: 24px 32px;
+}
+
+/* Topbar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.topbar-title {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+/* Buttons */
+
+.primary-button {
+  border: none;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 8px 16px rgba(10, 132, 255, 0.35);
+}
+
+.primary-button:hover {
+  filter: brightness(1.05);
+}
+
+/* KPI cards */
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-soft);
+}
+
+.kpi-number {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.kpi-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Content cards */
+
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 20px 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+/* Table */
+
+.table-wrapper {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.table thead {
+  background: #f9f9fb;
+}
+
+.table th,
+.table td {
+  font-size: 13px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f1f4;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Status badges */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-sent {
+  background: #e5e5ea;
+  color: #111;
+}
+
+.badge-paid {
+  background: #34c75922;
+  color: #0b6c2c;
+}
+
+.badge-overdue {
+  background: #ff3b3022;
+  color: #b0130b;
+}
+
+.badge-draft {
+  background: #f2f2f7;
+  color: #3a3a3c;
+}
+
+/* Responsive */
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main {
+    padding: 16px;
+  }
+
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* CREATE FORM */
+.create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+}
+
+.section-h {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.input-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  border-radius: 12px;
+  border: 1px solid #d3d3d8;
+  background: #fafafc;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #0a84ff;
+  background: #fff;
+}
+
+.create-table input,
+.create-table select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.total-box {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+  font-size: 16px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  row-gap: 8px;
+  column-gap: 20px;
+  font-size: 15px;
+}
+
+.detail-status-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.secondary-button {
+  border: 1px solid #bbb;
+  background: #fff;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.secondary-button:hover {
+  background: #f2f2f2;
+}
+
+.invoice-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.status-open {
+  background: #ffe5e5;
+  color: #b20000;
+}
+
+.status-sent {
+  background: #e6f0ff;
+  color: #0052cc;
+}
+
+.status-paid {
+  background: #e7ffe5;
+  color: #118800;
+}
+
+.table td button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f2f2f2;
+  border: 1px solid #ddd;
+  cursor: pointer;
+}
+
+.table td button:hover {
+  background: #e6e6e6;
+}
+
+/* ------------------------------------------
+   Kunde auswählen – Apple-Style Dropdown
+------------------------------------------- */
+
+.customer-select-wrapper {
+  position: relative;
+  margin-top: 8px;
+  margin-bottom: 18px;
+}
+
+.customer-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #f5f5f7;
+  border-radius: 12px;
+  border: 1px solid #d2d2d7;
+  padding: 10px 38px 10px 14px; /* Platz rechts für Pfeil */
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6),
+              0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  color: #1d1d1f;
+}
+
+.customer-select:hover {
+  background-color: #ebebf0;
+}
+
+.customer-select:focus {
+  outline: none;
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+  background-color: #ffffff;
+}
+
+.customer-select-arrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  pointer-events: none;
+  color: #6e6e73;
+}
+
+/* Optional: Option-Padding in der Dropdown-Liste */
+.customer-select option {
+  padding: 8px 10px;
+}
+
+/* -------------------------------
+   Header über dem Kunden-Dropdown
+--------------------------------*/
+.customer-select-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.small-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 10px;
+}
+
+/* -------------------------------
+   Tag bei bestehendem Kunden
+--------------------------------*/
+.customer-tag {
+    background-color: #e5f1ff;
+    color: #0071e3;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: inline-block;
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+.customer-tag.hidden {
+    display: none;
+}
+
+/* ------------------------------
+   Layout für Seitenstruktur
+--------------------------------*/
+.page-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 240px;
+}
+
+.content {
+    flex: 1;
+    padding: 40px;
+}
+
+.page-title {
+    font-size: 32px;
+    font-weight: 600;
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.section-title {
+    font-size: 20px;
+    margin-bottom: 12px;
+}
+
+.card {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    margin-bottom: 20px;
+}
+
+/* Small buttons */
+.small-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-content {
+    width: 380px;
+    padding: 24px;
+}
+
+.modal-title {
+    margin-bottom: 16px;
+}
+
+.modal-actions {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.error-box {
+  background: #ffe5e5;
+  border: 1px solid #ffb3b3;
+  color: #b20000;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.input-error {
+  border-color: #ff4d4d !important;
+  background: #fff0f0 !important;
+}
+
+.customer-results {
+  position: absolute;
+  z-index: 500;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  width: 100%;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.customer-results div {
+  padding: 10px;
+  cursor: pointer;
+}
+
+.customer-results div:hover {
+  background: #f5f5f5;
+}
+
+.customer-results {
+  position: absolute;
+  top: 65px;
+  left: 0;
+  z-index: 500;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  width: 100%;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.customer-results div {
+  padding: 10px;
+  cursor: pointer;
+}
+
+.customer-results div:hover {
+  background: #f5f5f5;
+}
+
+/* Passwort-Stärke Anzeige */
+.pw-strength {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  transition: 0.2s ease;
+}
+
+/* Erfolgsmeldung Grün + Animation */
+.success-box {
+  background: #e2ffe6;
+  border: 1px solid #8be89b;
+  padding: 10px 14px;
+  color: #067a12;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Passwort-Auge */
+.password-wrapper {
+  position: relative;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.5;
+  cursor: pointer;
+  user-select: none;
+  transition: 0.15s ease;
+}
+
+.password-toggle:hover {
+  opacity: 0.9;
+}
+
+/* ===================================================================
+   BENUTZERVERWALTUNG – ZUSATZ STYLES (RISIKOFREI)
+   Diese Klassen wirken NUR auf user-management.html
+   und überschreiben KEINE vorhandenen globalen Styles.
+=================================================================== */
+
+/* Container: Einheitliche Abstände in der Benutzerverwaltung */
+.user-management-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Actions-Spalte: Buttons kompakter und klarer */
+.user-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Modal-Optimierung – ohne restliche Seiten zu verändern */
+.user-management-modal .modal-content {
+  background: #ffffff;
+  padding: 26px;
+  border-radius: 16px;
+  width: 420px;
+  box-shadow: 0 6px 40px rgba(0,0,0,0.15);
+}
+
+.user-management-modal .modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 14px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* Form-Felder im Modal schöner strukturieren */
+.user-management-modal .input-group {
+  margin-bottom: 14px;
+}
+
+/* Buttons im Modal besser gruppieren */
+.user-management-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+/* Passwort-Stärke im Modal spezifisch */
+.user-management-modal .pw-strength {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+
+/* Optional: Buttons in der Tabelle leicht modernisieren */
+.user-management-table-btn {
+  background: #f7f7f7;
+  border: 1px solid #dadada;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.user-management-table-btn:hover {
+  background: #ececec;
+}
+
+/* Danger-Variante */
+.user-management-table-btn.danger {
+  background: #ffe8e8;
+  border-color: #ffc1c1;
+  color: #b20000;
+}
+
+.user-management-table-btn.danger:hover {
+  background: #ffd7d7;
+}
+
+/* ===========================================================
+   iOS Style Progress Popup
+   =========================================================== */
+
+#download-progress-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  padding: 28px 32px;
+
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15);
+
+  text-align: center;
+  z-index: 9999;
+  display: none;
+
+  /* WICHTIG: KEINE animation hier! */
+  opacity: 0;
+}
+
+@keyframes iosPopupIn {
+  from { opacity: 0; transform: translate(-50%, -46%); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+/* Titel */
+#download-progress-popup h3 {
+  margin: 0 0 18px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #1c1c1e;
+}
+
+/* iOS Progress Bar Container */
+.ios-progress-bar {
+  width: 100%;
+  height: 12px;
+  background: rgba(120, 120, 128, 0.16); /* iOS tertiary system fill */
+  border-radius: 100px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Fortschritt */
+#progress-bar-fill {
+  width: 0%;
+  height: 100%;
+  
+  /* iOS blue gradient */
+  background: linear-gradient(
+    90deg,
+    #0a84ff,
+    #0a7aff
+  );
+
+  border-radius: 100px;
+  transition: width 0.22s cubic-bezier(0.25, 0.9, 0.3, 1);
+}
+
+/* Prozentanzeige */
+#progress-text {
+  margin-top: 12px;
+  font-size: 15px;
+  color: #3a3a3c;
+}
+
+/* ===========================================
+   iOS Circle Loader – FIXED ANIMATION
+   =========================================== */
+
+.ios-loader {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  margin: 0 auto;
+}
+
+.ios-loader-svg {
+  width: 110px;
+  height: 110px;
+  transform: rotate(-90deg);
+}
+
+.ios-loader-track {
+  fill: none;
+  stroke: rgba(120,120,128,0.16);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+/* ANIMATION FIX */
+.ios-loader-fill {
+  fill: none;
+  stroke: #0a84ff;
+  stroke-width: 10;
+  stroke-linecap: round;
+
+  stroke-dasharray: 264;  
+  stroke-dashoffset: 264; /* Start voll geschlossen */
+
+  transition: stroke-dashoffset 0.35s cubic-bezier(0.25, 0.90, 0.30, 1);
+}
+
+.ios-loader-text {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  font-weight: 600;
+  color: #1c1c1e;
+}
+
+/* ===========================================
+   iOS Fade-Out Animation für Download Popup
+   =========================================== */
+
+@keyframes iosFadeOut {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+    filter: blur(3px);
+  }
+}
+
+.popup-fade-out {
+  animation: iosFadeOut 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+/* ===========================================
+   iOS Fade-In + Fade-Out für Download Popup
+   =========================================== */
+
+#download-progress-popup {
+  transition:
+    opacity 0.6s cubic-bezier(0.22,0.61,0.36,1),
+    transform 0.6s cubic-bezier(0.22,0.61,0.36,1);
+}
+
+/* ======================================================
+   Apple-Style Multi-Action Buttons (Invoices)
+   ====================================================== */
+
+/* DOWNLOAD BUTTON (PRIMARY) */
+#btn-multi-download {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 8px 16px rgba(10,132,255,0.35);
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.18s ease;
+}
+
+#btn-multi-download:hover {
+    background: #0a7aff;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 22px rgba(10,132,255,0.45);
+}
+
+/* DELETE BUTTON (DANGER, APPLE-STYLE) */
+#btn-multi-delete {
+    background: #f8f8f8;
+    color: #b20000;
+    border: 1px solid #e4c5c5;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.18s ease;
+}
+
+#btn-multi-delete:hover {
+    background: #ffecec;
+    transform: translateY(-1px);
+}
+
+/* Kleine Variante beibehalten */
+.small-btn {
+    padding: 8px 14px !important;
+    font-size: 14px !important;
+    border-radius: 999px !important;
+}

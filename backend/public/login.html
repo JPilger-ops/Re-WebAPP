@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login – Rechnungsapp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+
+  <style>
+    .login-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #f5f7fa;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      padding: 34px;
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 12px 38px rgba(0,0,0,0.12);
+    }
+
+    .login-title {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 28px;
+      letter-spacing: -0.5px;
+      color: #111;
+    }
+
+    .password-wrapper {
+      position: relative;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      opacity: 0.5;
+      transition: 0.15s;
+      user-select: none;
+      font-size: 15px;
+    }
+
+    .password-toggle:hover {
+      opacity: 0.9;
+    }
+
+    .error-box.shake {
+      animation: shake 0.25s ease;
+    }
+
+    @keyframes shake {
+      25%  { transform: translateX(-4px); }
+      50%  { transform: translateX(4px); }
+      75%  { transform: translateX(-2px); }
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <div class="login-wrapper">
+
+    <div class="login-card">
+
+      <h1 class="login-title">Anmeldung</h1>
+
+      <!-- WICHTIG für Safari AutoFill -->
+      <form 
+        id="login-form"
+        name="login"
+        action="/api/auth/login"
+        method="post"
+        autocomplete="on"
+      >
+
+        <div id="error-box" class="error-box hidden"></div>
+
+        <label class="input-label">Benutzername</label>
+        <input 
+          id="login-username"
+          name="username"
+          class="input"
+          autocomplete="username"
+          required
+        />
+
+        <label class="input-label" style="margin-top:15px;">Passwort</label>
+
+        <div class="password-wrapper">
+          <input 
+            id="login-password"
+            name="password"
+            type="password"
+            class="input"
+            autocomplete="current-password"
+            required
+          />
+          <span id="password-toggle" class="password-toggle">👁</span>
+        </div>
+
+        <button 
+          id="login-btn"
+          class="primary-button"
+          type="submit"
+          style="margin-top:26px;width:100%;padding:12px;font-size:17px;"
+        >
+          Einloggen
+        </button>
+
+      </form>
+
+    </div>
+
+  </div>
+
+  <script src="/login.js"></script>
+
+</body>
+</html>

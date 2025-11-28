@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Benutzerverwaltung</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-title">Rechnungsapp</div>
+
+      <div class="sidebar-nav">
+        <button class="nav-item" id="nav-dashboard">Dashboard</button>
+        <button class="nav-item" id="nav-invoices">Rechnungsübersicht</button>
+        <button class="nav-item" id="nav-create">Neue Rechnung</button>
+        <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
+        <button id="nav-users" class="nav-item nav-item-active">Benutzerverwaltung</button>
+        <button id="nav-account" class="nav-item">Account</button>
+        <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+        <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+      <h1 class="topbar-title">Benutzerverwaltung</h1>
+
+      <div class="card user-management-card" style="max-width:900px;">
+        <div class="card-header">
+          <h2 class="section-h">Alle Benutzer</h2>
+          <button id="btn-new-user" class="primary-button small-btn">+ Neuer Benutzer</button>
+        </div>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Benutzername</th>
+              <th>Rolle</th>
+              <th>Erstellt am</th>
+              <th style="width:200px;">Aktionen</th>
+            </tr>
+          </thead>
+
+          <tbody id="user-table-body"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal" class="modal user-management-modal hidden">
+    <div class="modal-content">
+      <h2 id="modal-title" class="section-h"></h2>
+
+      <div id="user-error-box" class="error-box hidden"></div>
+      <div id="user-success-box" class="success-box hidden"></div>
+
+      <div class="input-group">
+        <label class="input-label">Benutzername</label>
+        <input id="u_username" class="input">
+      </div>
+
+      <div id="pw-section" class="input-group">
+        <label class="input-label">Passwort</label>
+        <div class="password-wrapper">
+          <input id="u_password" type="password" class="input">
+          <span id="toggle-u_password" class="password-toggle">👁</span>
+        </div>
+        <div id="u_pw-strength" class="pw-strength">Passwort-Stärke: -</div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Rolle</label>
+        <select id="u_role" class="input"></select>
+      </div>
+
+      <div class="modal-actions">
+        <button id="save-user" class="primary-button">Speichern</button>
+        <button id="close-modal" class="secondary-button">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/user-management.js"></script>
+</body>
+</html>

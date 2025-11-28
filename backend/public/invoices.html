@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rechnungen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-title">Rechnungen</div>
+        <nav class="sidebar-nav">
+            <button class="nav-item" id="nav-dashboard">Dashboard</button>
+            <button class="nav-item nav-item-active" id="nav-invoices">Rechnungsübersicht</button>
+            <button class="nav-item" id="nav-create">Neue Rechnung</button>
+            <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
+            <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+            <button id="nav-account" class="nav-item">Account</button>
+            <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+            <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+        </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 class="topbar-title">Rechnungsübersicht</h1>
+      </header>
+
+      <div class="card" style="padding: 24px;">
+
+        <!-- Suche + Filter -->
+        <div class="invoice-controls">
+          <input id="search" class="input" placeholder="🔍 Suche nach Empfänger oder Nummer" />
+
+          <select id="filter" class="input">
+            <option value="all">Alle</option>
+            <option value="open">Offen</option>
+            <option value="sent">Versendet</option>
+            <option value="paid">Bezahlt</option>
+          </select>
+
+          <select id="sort" class="input">
+            <option value="date_desc">Datum ↓</option>
+            <option value="date_asc">Datum ↑</option>
+            <option value="num_desc">Nummer ↓</option>
+            <option value="num_asc">Nummer ↑</option>
+            <option value="total_desc">Betrag ↓</option>
+            <option value="total_asc">Betrag ↑</option>
+          </select>
+        </div>
+        
+        <div style="display:flex; gap:12px; margin-bottom:14px;">
+          <div id="multi-download-status"
+              style="margin-bottom:14px; font-size:14px; color:#333; display:none;">
+            <!-- Status wird per JS aktualisiert -->
+          </div>
+          <button id="btn-multi-download" class="primary-button small-btn">
+            Ausgewählte herunterladen
+          </button>
+
+          <button id="btn-multi-delete" class="danger-button small-btn">
+            Ausgewählte löschen
+          </button>
+        </div>
+
+        <!-- Tabelle -->
+        <table class="table" style="margin-top: 20px;">
+          <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all"></th>
+            <th>Nr.</th>
+            <th>Datum</th>
+            <th>Empfänger</th>
+            <th>Gesamt (€)</th>
+            <th>Status</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+          <tbody id="invoice-list"></tbody>
+        </table>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/invoices.js"></script>
+
+  <!-- iOS Circle Loader Popup -->
+<div id="download-progress-popup"
+     style="position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 260px;
+            padding: 30px 28px;
+            background: rgba(255,255,255,0.88);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border-radius: 22px;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.15);
+            text-align: center;
+            display: none;
+            z-index: 9999;">
+
+    <h3 style="margin:0 0 18px; font-size:17px; font-weight:600; color:#1c1c1e;">
+        Lade Rechnungen herunter…
+    </h3>
+
+    <!-- Kreis Loader -->
+    <div class="ios-loader">
+        <svg viewBox="0 0 100 100" class="ios-loader-svg">
+            <circle class="ios-loader-track" cx="50" cy="50" r="42" />
+            <circle class="ios-loader-fill"  cx="50" cy="50" r="42" />
+        </svg>
+        <div id="progress-text" class="ios-loader-text">0%</div>
+    </div>
+
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Rollenverwaltung</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-title">Rechnungsapp</div>
+      <div class="sidebar-nav">
+        <button id="nav-dashboard" class="nav-item">Dashboard</button>
+        <button id="nav-invoices" class="nav-item">Rechnungsübersicht</button>
+        <button id="nav-create" class="nav-item">Neue Rechnung</button>
+        <button id="nav-customers" class="nav-item">Kundenverwaltung</button>
+        <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+        <button id="nav-account" class="nav-item">Account</button>
+        <button id="nav-roles" class="nav-item nav-item-active">Rollenverwaltung</button>
+        <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <h1 class="topbar-title">Rollenverwaltung</h1>
+
+      <div class="card user-management-card" style="max-width:900px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <h2 class="section-h">Alle Rollen</h2>
+          <button id="btn-new-role" class="primary-button small-btn">+ Neue Rolle</button>
+        </div>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Beschreibung</th>
+              <th style="width:160px;">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody id="role-table-body"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div id="modal" class="modal user-management-modal hidden">
+    <div class="modal-content" style="max-width:540px;">
+      <h2 id="modal-title" class="section-h">Neue Rolle</h2>
+
+      <div id="role-error-box" class="error-box hidden"></div>
+      <div id="role-success-box" class="success-box hidden"></div>
+
+      <label class="input-label">Rollenname</label>
+      <input id="r_name" class="input" />
+
+      <label class="input-label">Beschreibung</label>
+      <input id="r_description" class="input" />
+
+      <h3 class="section-h" style="margin-top:20px;">Berechtigungen</h3>
+      <div id="permission-list" class="permission-list" style="max-height:260px;overflow-y:auto;"></div>
+
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button id="save-role" class="primary-button" style="flex:1;">Speichern</button>
+        <button id="close-modal" class="secondary-button" style="flex:1;">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/role-management.js"></script>
+</body>
+</html>

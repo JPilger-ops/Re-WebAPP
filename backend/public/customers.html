@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Kundenverwaltung</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="nav.js" defer></script>
+    <script src="customers.js" defer></script>
+</head>
+
+<body>
+
+<div class="app-shell">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-title">RechnungsApp</div>
+
+        <div class="sidebar-nav">
+            <button id="nav-dashboard" class="nav-item">Dashboard</button>
+            <button id="nav-invoices" class="nav-item">Rechnungen</button>
+            <button id="nav-create" class="nav-item">Neue Rechnung</button>
+            <button id="nav-customers" class="nav-item nav-item-active">Kundenverwaltung</button>
+            <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+            <button id="nav-account" class="nav-item">Account</button>
+            <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+            <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+        <div class="topbar">
+            <div class="topbar-title">Kundenverwaltung</div>
+            <button id="btn-new" class="primary-button">+ Neuer Kunde</button>
+        </div>
+
+        <div class="card">
+
+            <h2 class="card-title">Alle Kunden</h2>
+
+            <div class="table-wrapper">
+                <table class="table" id="customer-table">
+                    <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Straße</th>
+                        <th>PLZ</th>
+                        <th>Ort</th>
+                        <th style="width: 160px;">Aktionen</th>
+                    </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal hidden">
+    <div class="modal-content card">
+
+        <h2 id="modal-title" class="modal-title">Kunde</h2>
+
+        <label class="input-label">Name</label>
+        <input id="c_name" class="input" type="text">
+
+        <label class="input-label">Straße</label>
+        <input id="c_street" class="input" type="text">
+
+        <label class="input-label">PLZ</label>
+        <input id="c_zip" class="input" type="text">
+
+        <label class="input-label">Ort</label>
+        <input id="c_city" class="input" type="text">
+
+        <div class="modal-actions">
+            <button id="save-customer" class="primary-button">Speichern</button>
+            <button id="close-modal" class="secondary-button">Abbrechen</button>
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>

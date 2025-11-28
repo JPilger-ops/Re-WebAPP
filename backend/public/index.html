@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rechnungen – Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-title">Rechnungen</div>
+      <nav class="sidebar-nav">
+        <button class="nav-item nav-item-active" id="nav-dashboard">Dashboard</button>
+        <button class="nav-item" id="nav-invoices">Rechnungsübersicht</button>
+        <button class="nav-item" id="nav-create">Neue Rechnung</button>
+        <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
+        <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+        <button id="nav-account" class="nav-item">Account</button>
+        <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+        <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+      </nav>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar">
+        <h1 class="topbar-title">Dashboard</h1>
+        <button class="primary-button" id="btn-create">
+          + Rechnung erstellen
+        </button>
+      </header>
+
+      <!-- KPI-Karten -->
+      <section class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-number" id="kpi-created">–</div>
+          <div class="kpi-label">Erstellt</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-number" id="kpi-sent">–</div>
+          <div class="kpi-label">Versendet</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-number" id="kpi-paid">–</div>
+          <div class="kpi-label">Bezahlt</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-number" id="kpi-overdue">–</div>
+          <div class="kpi-label">Überfällig</div>
+        </div>
+      </section>
+
+      <!-- Tabelle aktuelle Rechnungen -->
+      <section class="card">
+        <h2 class="card-title">Aktuelle Rechnungen</h2>
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Rechnung</th>
+                <th>Kunde</th>
+                <th>Datum</th>
+                <th>Betrag</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="invoice-table-body">
+              <!-- wird per JS gefüllt -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/main.js"></script>
+</body>
+</html>

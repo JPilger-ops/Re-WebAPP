@@ -1,0 +1,25 @@
+# Node
+backend/node_modules/
+backend/npm-debug.log*
+backend/yarn-error.log*
+
+# Env / Secrets
+backend/.env
+
+# Build / Cache / Temp
+backend/pdfs/
+backend/dist/
+backend/.cache/
+backend/.tmp/
+.tmp/
+backend/core/
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# OS / Editor
+.vscode/
+.idea/
+*.swp
