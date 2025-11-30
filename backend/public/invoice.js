@@ -66,7 +66,7 @@ async function loadInvoice() {
   const btnDownload = document.getElementById("btn-pdf-download");
   if (btnOpen) {
     btnOpen.onclick = () => {
-      window.open(`/api/invoices/${id}/pdf?preview=1`, "_blank");
+      window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
     };
   }
 
