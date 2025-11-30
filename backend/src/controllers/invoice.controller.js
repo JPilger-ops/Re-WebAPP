@@ -746,6 +746,43 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
 <div class="page">
 
+  <!-- DIN 5008 Knickmarken -->
+  <div style="
+    position:absolute;
+    left:5mm;
+    top:87mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
+  <div style="
+    position:absolute;
+    left:5mm;
+    top:192mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
+  <div style="
+    position:absolute;
+    right:5mm;
+    top:87mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
+  <div style="
+    position:absolute;
+    right:5mm;
+    top:192mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
   <div class="brand-box">
   <img src="data:image/png;base64,${logoBase64}" />
   <div class="brand-sub">
