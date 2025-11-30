@@ -124,6 +124,12 @@ if (!invoice.date || invoice.date.trim() === "") {
   return res.status(400).json({ message: "Rechnungsdatum fehlt." });
 }
 
+// B2B → USt-ID Pflicht
+if (invoice.b2b) {
+  if (!invoice.ust_id || invoice.ust_id.trim() === "") {
+    return res.status(400).json({ message: "Für B2B ist eine USt-ID erforderlich." });
+  }
+}
 
 // --- Positionen prüfen ---
 if (!Array.isArray(items) || items.length === 0) {
@@ -216,46 +222,54 @@ for (let i = 0; i < items.length; i++) {
     const receiptDate = invoice.receipt_date && invoice.receipt_date.trim() !== "" ? invoice.receipt_date : null;
     const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category : null;
 
+    // B2B + USt-ID aus dem Payload
+    const isB2B  = invoice.b2b === true;              // kommt als boolean aus dem Frontend
+    const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
     // 3. Rechnung anlegen
-    const invoiceResult = await client.query(
-      `
-      INSERT INTO invoices (
-        invoice_number,
-        date,
-        recipient_id,
-        category,
-        receipt_date,
-        net_19, vat_19, gross_19,
-        net_7, vat_7, gross_7,
-        gross_total
-      )
-      VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8,
-        $9, $10, $11,
-        $12
-      )
-      RETURNING id
-      `,
-      [
-        invoice.invoice_number,
-        invoice.date || null,
-        recipientId,
-        invoice.category || null,
-        invoice.receipt_date || null,
+  const invoiceResult = await client.query(
+    `
+    INSERT INTO invoices (
+      invoice_number,
+      date,
+      recipient_id,
+      category,
+      receipt_date,
+      b2b,
+      ust_id,
+      net_19, vat_19, gross_19,
+      net_7, vat_7, gross_7,
+      gross_total
+    )
+    VALUES (
+      $1, $2, $3, $4, $5,
+      $6, $7,
+      $8, $9, $10,
+      $11, $12, $13,
+      $14
+    )
+    RETURNING id
+    `,
+    [
+      invoice.invoice_number,
+      invoiceDate,
+      recipientId,
+      category,
+      receiptDate,
+      isB2B,
+      ustId,
 
-        totals.net_19,
-        totals.vat_19,
-        totals.gross_19,
+      totals.net_19,
+      totals.vat_19,
+      totals.gross_19,
 
-        totals.net_7,
-        totals.vat_7,
-        totals.gross_7,
+      totals.net_7,
+      totals.vat_7,
+      totals.gross_7,
 
-        totals.gross_total
-      ]
-    );
+      totals.gross_total
+    ]
+  );
 
     const invoiceId = invoiceResult.rows[0].id;
 
@@ -433,6 +447,8 @@ export const getInvoicePdf = async (req, res) => {
       invoice_number: row.invoice_number,
       date: row.date,
       receipt_date: row.receipt_date,
+      b2b: row.b2b === true,
+      ust_id: row.ust_id || null,
       net_19: n(row.net_19),
       net_7: n(row.net_7),
       vat_19: n(row.vat_19),
@@ -445,6 +461,10 @@ export const getInvoicePdf = async (req, res) => {
         city: row.recipient_city
       }
     };
+
+    // Hilfswerte für die Anzeige im PDF
+    const totalNet = invoice.net_19 + invoice.net_7;
+    const totalVat = invoice.vat_19 + invoice.vat_7;
 
     const itemsResult = await client.query(
       "SELECT description, quantity, unit_price_gross, line_total_gross FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
@@ -548,21 +568,20 @@ export const getInvoicePdf = async (req, res) => {
     const pdfDir = path.join(__dirname, "../../pdfs");
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
 
-    const filename = `Rechnung-${invoice.invoice_number}.pdf`;
+    const filename = `RE-${invoice.invoice_number}.pdf`;
     const filepath = path.join(pdfDir, filename);
 
     fs.writeFileSync(filepath, pdfBuffer);
 
-    // Header abhängig von Preview-Modus setzen
-    const preview = req.query.preview === "1";
+        const mode = req.query.mode;
 
     res.setHeader("Content-Type", "application/pdf");
 
-    if (preview) {
-      // Browser soll das PDF anzeigen (nicht downloaden)
+    if (mode === "inline") {
       res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    } else if (mode === "download") {
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     } else {
-      // PDF soll direkt heruntergeladen werden
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     }
 
@@ -625,7 +644,7 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
   /* Absender DIN */
   .sender-line {
     position: absolute;
-    top: 32mm;
+    top: 40mm;
     left: 20mm;
     font-size: 10px;
     color: #6e6e73;
@@ -696,6 +715,15 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
     text-align: right;
   }
 
+  .final-box-label {
+    margin-top: 6mm;
+    background: #fff5f5ff;
+    border: 1px solid #ffd9d9ff;
+    padding: 8px;
+    border-radius: 10px;
+    text-align: right;
+  }
+
   .final-total-value {
     font-size: 18px;
     font-weight: 700;
@@ -718,11 +746,48 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
 <div class="page">
 
+  <!-- DIN 5008 Knickmarken -->
+  <div style="
+    position:absolute;
+    left:5mm;
+    top:87mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
+  <div style="
+    position:absolute;
+    left:5mm;
+    top:192mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
+  <div style="
+    position:absolute;
+    right:5mm;
+    top:87mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
+  <div style="
+    position:absolute;
+    right:5mm;
+    top:192mm;
+    width:4mm;
+    height:0;
+    border-top:0.3mm solid #999;
+  "></div>
+
   <div class="brand-box">
   <img src="data:image/png;base64,${logoBase64}" />
   <div class="brand-sub">
-      Mauspfad 3 · 53842 Troisdorf<br>
       Thomas Pilger<br>
+      Mauspfad 3 · 53842 Troisdorf<br>
       Tel: 02241 76649<br>
       E-Mail: welcome@forsthaus-telegraph.de<br>
       www.der-heidekoenig.de
@@ -745,9 +810,11 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
       <div><strong>Rechnungsnr:</strong> ${invoice.invoice_number}</div>
       <div><strong>Datum:</strong> ${formattedDate}</div>
       ${formattedReceiptDate ? `<div><strong>Belegdatum:</strong> ${formattedReceiptDate}</div>` : ""}
+      ${invoice.b2b && invoice.ust_id ? `<div><strong>USt-ID Kunde:</strong> ${invoice.ust_id}</div>` : ""}
     </div>
-
-    <div class="invoice-title">Rechnung</div>
+    <div class="invoice-title">
+      Rechnung${invoice.b2b ? " (B2B)" : ""}
+    </div>
 
     <table>
       <thead>
@@ -771,24 +838,47 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
       </table>
 
       <div class="final-total-box">
-        <div class="final-total-value"><span class="amount">${invoice.gross_total.toFixed(2)} €</span></div>
+      <div class="final-total-value">
+        <span class="amount">
+          ${
+            invoice.b2b
+              ? (invoice.net_19 + invoice.net_7).toFixed(2) + " € (Netto-Endbetrag)"
+              : invoice.gross_total.toFixed(2) + " €"
+          }
+        </span>
+      </div>
       </div>
     </div>
-
+        
   </div>
 
-    <!-- SEPA QR-Code rechts unten -->
-  <div style="position:absolute; bottom:35mm; right:15mm; text-align:center;">
-    <img src="${sepaQrBase64}" style="width:45mm; height:45mm; margin-bottom:4px;" />
-    <div style="font-size:11px; color:#333;">SEPA-QR bezahlen</div>
-  </div>
+  <!-- SEPA QR-Code rechts unten -->
+    <div class="final-total-box" style="position:absolute; bottom:30mm; right:15mm; text-align:center;">
+      <img src="${sepaQrBase64}" style="width:25mm; height:25mm; margin-bottom:4px;" />
+      <div style="font-size:11px; color:#333;">Bequem per SEPA-QR bezahlen</div>
+    </div>
 
-  <div class="footer">
-    Steuernummer: 220/5060/2434 · USt-IdNr.: DE123224453<br>
-    Bankverbindung: VR-Bank Bonn Rhein-Sieg eG · 
-    IBAN: DE48 3706 9520 1104 1850 25 · 
-    BIC: GENODED1RST
-  </div>
+    <!-- Reverse-Charge Hinweis links unten (nur B2B) -->
+    ${
+      invoice.b2b
+        ? `
+    <div class="final-box-label" style="position:absolute; bottom:30mm; left:15mm; text-align:left;">
+      <p style="margin-top:10px; font-size:12px; color:#444;">
+        Innergemeinschaftliche Leistung / Reverse-Charge.<br>
+        MwSt wird ausgewiesen, der Rechnungsendbetrag ist jedoch ein Netto-Endbetrag gemäß <br>
+        Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG).
+      </p>
+    </div>
+    `
+        : ""
+    }
+
+    <div class="footer">
+      Steuernummer: 220/5060/2434 · USt-IdNr.: DE123224453<br>
+      Bankverbindung: VR-Bank Bonn Rhein-Sieg eG · 
+      IBAN: DE48 3706 9520 1104 1850 25 · 
+      BIC: GENODED1RST
+    </div>
 
 </div>
 
@@ -903,21 +993,44 @@ export const deleteInvoice = async (req, res) => {
 };
 
 // -------------------------------------------------------------
-// 🔢 Automatische Rechnungsnummer aus der Datenbank auslesen
+// 🔢 Automatische Rechnungsnummer im Format YYYYMM001
+//    – pro Monat neu beginnend
 // -------------------------------------------------------------
 export const getNextInvoiceNumber = async (req, res) => {
   try {
-    const result = await db.query(`
-      SELECT MAX(invoice_number)::bigint AS last
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const prefix = `${year}${month}`; // z.B. "202502"
+
+    const result = await db.query(
+      `
+      SELECT invoice_number
       FROM invoices
-    `);
+      WHERE invoice_number LIKE $1
+      ORDER BY invoice_number DESC
+      LIMIT 1
+      `,
+      [prefix + "%"]
+    );
 
-    const last = result.rows[0].last || 0;
-    const next = last + 1;
+    let nextRunningNumber = 1;
 
-    res.json({ next });
+    if (result.rowCount > 0) {
+      const lastNumber = result.rows[0].invoice_number;
+      const lastSuffix = lastNumber.substring(6); // alles nach YYYYMM
+      const lastInt = parseInt(lastSuffix, 10) || 0;
+      nextRunningNumber = lastInt + 1;
+    }
+
+    const suffix = String(nextRunningNumber).padStart(3, "0");
+    const next = `${prefix}${suffix}`;
+
+    return res.json({ next });
   } catch (err) {
     console.error("Fehler bei next-number:", err);
-    res.status(500).json({ message: "Fehler beim Ermitteln der Rechnungsnummer" });
+    return res
+      .status(500)
+      .json({ message: "Fehler beim Ermitteln der Rechnungsnummer" });
   }
 };

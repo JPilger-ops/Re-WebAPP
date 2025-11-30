@@ -12,6 +12,9 @@ const i_number   = document.getElementById("i_number");
 const i_date     = document.getElementById("i_date");
 const i_category = document.getElementById("i_category");
 const i_receipt  = document.getElementById("i_receipt");
+const b2b_check = document.getElementById("b2b_check");
+const ust_id = document.getElementById("ust_id");
+const ust_wrapper = document.getElementById("ustid_wrapper");
 
 // -------------------------------------------------
 // 🔥 Fehlerbox & Fehler-Styles
@@ -104,6 +107,15 @@ async function loadCustomers() {
     }
   });
 }
+
+b2b_check.addEventListener("change", () => {
+  if (b2b_check.checked) {
+    ust_wrapper.classList.remove("hidden");
+  } else {
+    ust_wrapper.classList.add("hidden");
+    ust_id.value = "";
+  }
+});
 
 // -------------------------------------------------------------
 // 🔢 Nächste freie Rechnungsnummer vom Server holen
@@ -331,6 +343,15 @@ function validateForm() {
     }
   }
 
+  // B2B → USt-ID Pflicht
+  if (b2b_check.checked) {
+    if (!ust_id.value.trim()) {
+      ust_id.classList.add("input-error");
+      showError("Bitte USt-ID für B2B-Rechnung eingeben.");
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -353,6 +374,8 @@ async function createInvoice() {
       date: i_date.value,
       category: i_category.value,
       receipt_date: i_receipt.value,
+      b2b: b2b_check.checked,
+      ust_id: ust_id.value.trim(),
     },
     items: items,
   };
@@ -378,15 +401,71 @@ async function createInvoice() {
     return;
   }
 
-  const id = data.invoice_id;
-  if (!id) {
-    showError("Rechnung wurde gespeichert, aber keine ID zurückgegeben.");
-    return;
-  }
-
- window.open(`/api/invoices/${id}/pdf`, "_blank");
+   const id = data.invoice_id;
+if (!id) {
+  showError("Rechnung gespeichert, aber keine ID zurückgegeben.");
+  return;
 }
 
+// Popup Elemente
+const popup = document.getElementById("invoiceCreatedPopup");
+const popupTitle = document.getElementById("popupTitle");
+const popupSubtitle = document.getElementById("popupSubtitle");
+const popupButtons = document.getElementById("popupButtons");
+const circle = document.querySelector(".ios-loader-fill");
+const text = document.getElementById("progress-text");
+
+popup.classList.remove("hidden");
+
+// Loader vorbereiten
+const fullDash = 264;
+circle.style.strokeDasharray = fullDash;
+circle.style.strokeDashoffset = fullDash;
+text.textContent = "0%";
+
+// Loader Animation simulieren (wie invoices.js)
+(async () => {
+  const totalTime = 1500 + Math.random() * 700; 
+  const steps = 30;
+  const stepTime = totalTime / steps;
+
+  for (let s = 0; s <= steps; s++) {
+    const p = (s / steps) * 100;
+    const dashOffset = fullDash - (fullDash * (p / 100));
+
+    circle.style.strokeDashoffset = dashOffset;
+    text.textContent = `${Math.round(p)}%`;
+
+    await new Promise(r => setTimeout(r, stepTime));
+  }
+
+  // Loader fertig
+  popupTitle.textContent = "Rechnung erfolgreich erstellt!";
+  popupSubtitle.textContent = "Was möchten Sie jetzt tun?";
+  text.textContent = "Fertig";
+
+  // Buttons anzeigen
+  popupButtons.style.display = "block";
+
+  // Button Events
+  document.getElementById("openInvoice").onclick = () => {
+    window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
+  };
+
+  document.getElementById("downloadInvoice").onclick = () => {
+    window.location.href = `/api/invoices/${id}/pdf?mode=download`;
+  };
+
+  document.getElementById("goToInvoices").onclick = () => {
+    window.location.href = "invoices.html";
+  };
+
+  document.getElementById("closePopup").onclick = () => {
+    popup.classList.add("hidden");
+  };
+
+})();
+}
 // -------------------------------------------------
 // Event-Handler & Initialisierung
 // -------------------------------------------------
@@ -402,6 +481,5 @@ loadNextInvoiceNumber();
 loadCustomers();
 
 document.getElementById("btn-new-customer").onclick = () => {
-  window.open("/customers.html", "_blank");
 };
 

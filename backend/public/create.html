@@ -84,6 +84,17 @@
               <option>WEIHNACHTSMARKT</option>
             </select>
 
+            <label class="input-label" style="margin-top:18px;">B2B (inner-EU)</label>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+              <input id="b2b_check" type="checkbox" style="width:20px; height:20px;">
+              <span>Reverse Charge / inner-EU Geschäftskunde</span>
+            </div>
+
+            <div id="ustid_wrapper" class="hidden">
+              <label class="input-label">USt-ID des Kunden</label>
+              <input id="ust_id" class="input" type="text" placeholder="z. B. ATU12345678" />
+            </div>
+
             <label class="input-label">Belegdatum</label>
             <input id="i_receipt" class="input" type="date" />
           </div>
@@ -127,6 +138,47 @@
       </div>
     </main>
   </div>
+
+  <div id="invoiceCreatedPopup" class="popup hidden">
+  <div class="popup-content">
+    
+    <!-- X schließen -->
+    <span id="closePopup" class="close-btn">&times;</span>
+
+    <!-- Titel -->
+    <h2 id="popupTitle" style="margin-top: 0;">
+      Rechnung wird erstellt…
+    </h2>
+
+    <!-- Untertitel -->
+    <p id="popupSubtitle" style="margin-top: 0; color: #555;">
+      Bitte warten…
+    </p>
+
+    <!-- Kreis-Loader -->
+    <div class="ios-loader">
+      <svg viewBox="0 0 100 100" class="ios-loader-svg">
+        <circle class="ios-loader-track" cx="50" cy="50" r="42" />
+        <circle class="ios-loader-fill"  cx="50" cy="50" r="42" />
+      </svg>
+      <div id="progress-text" class="ios-loader-text">0%</div>
+    </div>
+
+    <!-- BUTTONS – erst sichtbar wenn Loader fertig -->
+    <div id="popupButtons" style="margin-top: 20px; display: none;">
+      <button id="openInvoice" class="primary-button" style="margin-bottom:10px; width:100%;">
+        Rechnung öffnen
+      </button>
+      <button id="downloadInvoice" class="primary-button" style="margin-bottom:10px; width:100%;">
+        Rechnung herunterladen
+      </button>
+      <button id="goToInvoices" class="secondary-button" style="width:100%;">
+        Zur Rechnungsübersicht
+      </button>
+    </div>
+
+  </div>
+</div>
 
   <script src="/nav.js"></script>
   <script src="/create.js"></script>
