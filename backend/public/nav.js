@@ -55,6 +55,7 @@ async function initNavigation() {
   if (!perms.includes("users.read")) hide("nav-users");
   if (!perms.includes("roles.read")) hide("nav-roles");
   if (!perms.includes("customers.read")) hide("nav-customers");
+  if (!perms.includes("categories.read")) hide("nav-categories");
   // Rechnungsübersicht darf praktisch jeder, also lassen wir die sichtbar.
 
   // 3. Navigation-Buttons mit Aktionen verknüpfen
@@ -79,6 +80,7 @@ async function initNavigation() {
   bind("nav-users", "/user-management.html");
   bind("nav-roles", "/role-management.html");
   bind("nav-account", "/account.html");
+  bind("nav-categories", "/categories.html");
   bind("nav-logout", "#logout");
 }
 

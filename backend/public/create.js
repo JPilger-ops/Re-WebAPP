@@ -54,6 +54,8 @@ async function loadCustomers() {
 
   // Eingabe im Suchfeld
   search.oninput = () => {
+    // 🔗 Suchfeld = Name (auch für neue Kunden)
+    r_name.value = search.value;
     const q = search.value.toLowerCase();
 
     if (!q) {
@@ -116,6 +118,31 @@ b2b_check.addEventListener("change", () => {
     ust_id.value = "";
   }
 });
+
+async function loadCategoriesForSelect() {
+  try {
+    const res = await fetch("/api/categories", { credentials: "include" });
+
+    if (res.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    const cats = await res.json();
+
+    // Select leeren
+    i_category.innerHTML = "";
+
+    cats.forEach(cat => {
+      const opt = document.createElement("option");
+      opt.value = cat.key;       // für DB-Join
+      opt.textContent = cat.label;
+      i_category.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Fehler beim Laden der Kategorien:", err);
+  }
+}
 
 // -------------------------------------------------------------
 // 🔢 Nächste freie Rechnungsnummer vom Server holen
@@ -480,6 +507,5 @@ loadNextInvoiceNumber();
 // Kundenliste fürs Dropdown laden
 loadCustomers();
 
-document.getElementById("btn-new-customer").onclick = () => {
-};
+loadCategoriesForSelect();
 

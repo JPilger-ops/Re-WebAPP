@@ -33,15 +33,15 @@ const {
   SEPA_CREDITOR_BIC
 } = process.env;
 
-// Richtiger Pfad zum Logo
-const logoPath = path.join(__dirname, "../../public/HK_LOGO.png");
+// 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
+const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
 
-let logoBase64 = "";
+let defaultLogoBase64 = "";
 try {
-  logoBase64 = fs.readFileSync(logoPath, "base64");
-  console.log("Logo erfolgreich geladen:", logoPath);
+  defaultLogoBase64 = fs.readFileSync(defaultLogoPath, "base64");
+  console.log("Standard-Logo erfolgreich geladen:", defaultLogoPath);
 } catch (err) {
-  console.error("Logo konnte NICHT geladen werden:", logoPath, err);
+  console.error("Standard-Logo konnte NICHT geladen werden:", defaultLogoPath, err);
 }
 
 const n = (value) => Number(value) || 0;
@@ -345,23 +345,19 @@ export const getInvoiceById = async (req, res) => {
   const client = await db.connect();
 
   try {
-    const invoiceResult = await client.query(
-      `
+    const invoiceResult = await client.query(`
       SELECT 
         i.*,
-        r.id AS recipient_id,
-        r.name AS recipient_name,
+        r.name  AS recipient_name,
         r.street AS recipient_street,
-        r.zip AS recipient_zip,
-        r.city AS recipient_city,
-        r.email AS recipient_email,
-        r.phone AS recipient_phone
+        r.zip   AS recipient_zip,
+        r.city  AS recipient_city,
+        c.logo_file AS category_logo_file
       FROM invoices i
       LEFT JOIN recipients r ON i.recipient_id = r.id
+      LEFT JOIN invoice_categories c ON c.key = i.category
       WHERE i.id = $1
-      `,
-      [id]
-    );
+    `, [id]);
 
     if (invoiceResult.rowCount === 0)
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
@@ -413,6 +409,23 @@ export const getInvoiceById = async (req, res) => {
   } finally {
     client.release();
   }
+
+  // Kategorie-Logo bestimmen
+  let logoBase64ForInvoice = defaultLogoBase64;
+
+  if (row.category_logo_file) {
+    try {
+      const catLogoPath = path.join(__dirname, "../../public/logos", row.category_logo_file);
+      if (fs.existsSync(catLogoPath)) {
+        logoBase64ForInvoice = fs.readFileSync(catLogoPath, "base64");
+      } else {
+        console.warn("Kategorie-Logo nicht gefunden, verwende Default:", catLogoPath);
+      }
+    } catch (e) {
+      console.warn("Fehler beim Laden des Kategorie-Logos, verwende Default:", e.message);
+    }
+  }
+
 };
 
 /**
@@ -429,12 +442,14 @@ export const getInvoicePdf = async (req, res) => {
     const invoiceResult = await client.query(`
       SELECT 
         i.*,
-        r.name AS recipient_name,
+        r.name   AS recipient_name,
         r.street AS recipient_street,
-        r.zip AS recipient_zip,
-        r.city AS recipient_city
+        r.zip    AS recipient_zip,
+        r.city   AS recipient_city,
+        c.logo_file AS category_logo_file
       FROM invoices i
       LEFT JOIN recipients r ON i.recipient_id = r.id
+      LEFT JOIN invoice_categories c ON c.key = i.category
       WHERE i.id = $1
     `, [id]);
 
@@ -461,6 +476,30 @@ export const getInvoicePdf = async (req, res) => {
         city: row.recipient_city
       }
     };
+
+    // 🔹 Logo für diese konkrete Rechnung bestimmen
+// Standard: Default-Logo
+let logoBase64ForInvoice = defaultLogoBase64;
+
+// Wenn in der Kategorie ein eigenes Logo hinterlegt ist → versuchen zu laden
+if (row.category_logo_file) {
+  try {
+    const categoryLogoPath = path.join(
+      __dirname,
+      "../../public/logos",
+      row.category_logo_file
+    );
+
+    if (fs.existsSync(categoryLogoPath)) {
+      logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
+      console.log("Kategorie-Logo geladen:", categoryLogoPath);
+    } else {
+      console.warn("Kategorie-Logo nicht gefunden, nutze Default-Logo:", categoryLogoPath);
+    }
+  } catch (err) {
+    console.warn("Fehler beim Laden des Kategorie-Logos, nutze Default-Logo:", err);
+  }
+}
 
     // Hilfswerte für die Anzeige im PDF
     const totalNet = invoice.net_19 + invoice.net_7;
@@ -529,7 +568,7 @@ export const getInvoicePdf = async (req, res) => {
     });
 
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
-    const html = generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64);
+    const html = generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice);
 
     //
     // ⭐ PUPPETEER FIX – DAMIT LOGO & ASSETS LADEN ⭐
@@ -595,7 +634,7 @@ export const getInvoicePdf = async (req, res) => {
   }
 };
 
-function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64) {
+function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice) {
   return `
 <!DOCTYPE html>
 <html lang="de">
@@ -784,7 +823,7 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
   "></div>
 
   <div class="brand-box">
-  <img src="data:image/png;base64,${logoBase64}" />
+  <img src="data:image/png;base64,${logoBase64ForInvoice}" />
   <div class="brand-sub">
       Thomas Pilger<br>
       Mauspfad 3 · 53842 Troisdorf<br>
