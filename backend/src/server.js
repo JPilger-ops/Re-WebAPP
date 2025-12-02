@@ -14,6 +14,7 @@ import { authRequired } from "./middleware/auth.middleware.js";
 import userRoutes from "./routes/user.routes.js";
 import roleRoutes from "./routes/role.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
+import settingsRoutes from "./routes/settings.routes.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,7 +39,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 app.use(morgan("dev"));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 /* -------------------------
@@ -56,6 +57,7 @@ app.use("/api/invoices", authRequired, invoiceRoutes);
 app.use("/api/customers", authRequired, customerRoutes);
 app.use("/api/testdb", authRequired, testRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/settings", settingsRoutes);
 
 /* -------------------------
    🌐 FRONTEND ROUTE

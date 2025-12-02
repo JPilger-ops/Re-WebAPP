@@ -65,9 +65,7 @@ async function loadInvoice() {
   const btnOpen = document.getElementById("btn-pdf-open");
   const btnDownload = document.getElementById("btn-pdf-download");
   if (btnOpen) {
-    btnOpen.onclick = () => {
-      window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
-    };
+    btnOpen.onclick = () => openPdfInline(id);
   }
 
   // PDF Direkt-Download (erzwingt Download)
@@ -164,3 +162,27 @@ function formatDate(v) {
 }
 
 loadInvoice();
+
+async function openPdfInline(invoiceId) {
+  const url = `/api/invoices/${invoiceId}/pdf?mode=inline`;
+
+  // Versuch 1: direktes window.open (wenn Popup erlaubt + Cookie mitgeschickt)
+  const win = window.open(url, "_blank", "noopener");
+  if (win) return;
+
+  // Fallback: PDF als Blob holen und in neuem Tab öffnen
+  try {
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) {
+      alert("PDF konnte nicht geladen werden (Fehler " + res.status + ").");
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch (err) {
+    console.error("PDF laden fehlgeschlagen:", err);
+    alert("PDF konnte nicht geladen werden.");
+  }
+}

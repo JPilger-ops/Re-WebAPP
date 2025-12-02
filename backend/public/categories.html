@@ -2,14 +2,14 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>Kategorien verwalten</title>
+  <title>Einstellungen</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="sidebar-title">Rechnungen</div>
+      <div class="sidebar-title">Rechnungsapp</div>
       <nav class="sidebar-nav">
         <button class="nav-item" id="nav-dashboard">Dashboard</button>
         <button class="nav-item" id="nav-invoices">Rechnungsübersicht</button>
@@ -25,44 +25,141 @@
 
     <main class="main">
       <header class="topbar">
-        <h1 class="topbar-title">Kategorien verwalten</h1>
+        <div>
+          <div class="chip">Einstellungen</div>
+          <h1 class="topbar-title">Bank & Kategorien</h1>
+          <div class="muted">Passe Rechnungs-Fußzeile, SEPA-Daten und Kategorien zentral an.</div>
+        </div>
       </header>
 
-      <div id="error-box" class="error-box hidden"></div>
-
-      <div class="card" style="padding:24px;">
-        <h2 class="section-h">Bestehende Kategorien</h2>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Key</th>
-              <th>Label</th>
-              <th>Logo-Datei</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="cat-body"></tbody>
-        </table>
-
-        <h2 class="section-h" style="margin-top:24px;">Neue Kategorie</h2>
-        <div class="form-row">
-          <div>
-            <label class="input-label">Key (z. B. GESELLSCHAFTEN)</label>
-            <input id="cat-key" class="input" type="text" />
+      <div class="settings-grid">
+        <section class="card">
+          <div class="settings-card-header">
+            <div>
+              <h2 class="section-h">Bankdaten</h2>
+              <div class="settings-card-subtitle">Wird im Rechnungs-PDF und SEPA-QR-Code verwendet.</div>
+            </div>
           </div>
-          <div>
-            <label class="input-label">Label (Anzeige)</label>
-            <input id="cat-label" class="input" type="text" />
-          </div>
-        </div>
-        <div>
-          <label class="input-label">Logo-Datei (z. B. HK_LOGO.png)</label>
-          <input id="cat-logo" class="input" type="text" placeholder="Datei in /public/logos/" />
-        </div>
 
-        <button id="cat-add" class="primary-button" style="margin-top:16px;">
-          Kategorie hinzufügen
-        </button>
+          <div id="bank-error" class="error-box hidden"></div>
+          <div id="bank-success" class="success-box hidden"></div>
+
+          <label class="input-label">Kontoinhaber</label>
+          <input id="bank-holder" class="input" type="text" placeholder="z. B. Waldwirtschaft Heidekönig" />
+
+          <label class="input-label">Bankname</label>
+          <input id="bank-name" class="input" type="text" placeholder="z. B. VR-Bank Bonn Rhein-Sieg eG" />
+
+          <div class="field-grid">
+            <div>
+              <label class="input-label">IBAN</label>
+              <input id="bank-iban" class="input" type="text" placeholder="DE00 0000 0000 0000 0000 00" />
+            </div>
+            <div>
+              <label class="input-label">BIC</label>
+              <input id="bank-bic" class="input" type="text" placeholder="GENODEXX" />
+            </div>
+          </div>
+
+          <div class="settings-note">Die Angaben werden für neue Rechnungen und den SEPA-QR-Code genutzt.</div>
+          <div style="display:flex; gap:10px; margin-top:12px;">
+            <button id="bank-save" class="primary-button">Bankdaten speichern</button>
+            <button id="bank-reload" class="secondary-button">Zurücksetzen</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="settings-card-header">
+            <div>
+              <h2 class="section-h">Kategorien & Logos</h2>
+              <div class="settings-card-subtitle">Labels und Logos für Rechnungen pflegen.</div>
+            </div>
+            <div class="settings-actions">
+              <input id="cat-filter" class="input slim-input" type="text" placeholder="Suchen nach Key oder Label" />
+              <button id="cat-refresh" class="secondary-button small-btn">Neu laden</button>
+            </div>
+          </div>
+
+          <div id="error-box" class="error-box hidden"></div>
+          <div id="cat-success" class="success-box hidden"></div>
+
+          <div class="category-layout">
+            <div class="category-stack">
+              <div class="mini-card">
+                <div class="mini-card-head">
+                  <div>
+                    <div class="badge subtle">Neu</div>
+                    <h3 class="section-h" style="margin:8px 0 6px;">Kategorie anlegen</h3>
+                    <div class="settings-card-subtitle">Key, Label und Logo in einem Schritt erfassen.</div>
+                  </div>
+                </div>
+
+                <div class="field-grid">
+                  <div>
+                    <label class="input-label">Key (z. B. GESELLSCHAFTEN)</label>
+                    <input id="cat-key" class="input" type="text" />
+                  </div>
+                  <div>
+                    <label class="input-label">Label (Anzeige)</label>
+                    <input id="cat-label" class="input" type="text" />
+                  </div>
+                  <div style="grid-column: span 2;">
+                    <label class="input-label">Logo-Datei</label>
+                    <input id="cat-logo" class="input" type="text" placeholder="HK_LOGO.png" />
+                    <div class="settings-note">Dateiname aus /public/logos/. Wird nach Upload automatisch gesetzt.</div>
+                  </div>
+                </div>
+
+                <div class="category-add-actions">
+                  <button id="cat-add" class="primary-button">Kategorie hinzufügen</button>
+                </div>
+              </div>
+
+              <div class="mini-card upload-card">
+                <div class="mini-card-head">
+                  <div>
+                    <div class="badge subtle">Logos</div>
+                    <h4 class="mini-title">Logo hochladen</h4>
+                    <div class="settings-card-subtitle">PNG, JPG oder SVG · max. 1.5 MB</div>
+                  </div>
+                </div>
+                <div id="logo-dropzone" class="dropzone">
+                  <input type="file" id="logo-file" accept=".png,.jpg,.jpeg,.svg" hidden />
+                  <p class="dropzone-title">Datei hier ablegen oder klicken</p>
+                  <p class="settings-note" id="logo-file-name">Keine Datei ausgewählt</p>
+                  <button type="button" id="logo-file-btn" class="secondary-button small-btn">Datei wählen</button>
+                </div>
+                <div class="settings-note">Nach dem Upload wird der Dateiname ins Formular übernommen.</div>
+              </div>
+
+              <div class="mini-card tip-card">
+                <h4 class="mini-title">Logo-Hinweise</h4>
+                <ul class="tip-list">
+                  <li>Transparentes PNG oder SVG wirkt am besten.</li>
+                  <li>Pfad ist <code>/public/logos/DATEI</code>; im Feld nur den Dateinamen nutzen.</li>
+                  <li>Nach Upload kannst du das Logo direkt in der neuen Kategorie verwenden.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="category-table-block">
+              <div class="table-wrapper">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th style="width: 18%;">Key</th>
+                      <th>Label</th>
+                      <th>Logo-Datei</th>
+                      <th style="width: 90px;">Vorschau</th>
+                      <th style="width: 180px;">Aktionen</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cat-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   </div>

@@ -1,4 +1,6 @@
 // Sidebar Navigation + Rollen/Permissions-Steuerung
+window.userLoaded = false;
+
 window.ensureAuthReady = async function () {
   if (!window.userLoaded) {
     await new Promise(resolve => {
@@ -52,6 +54,7 @@ async function initNavigation() {
 
   if (!user) {
     // nicht eingeloggt → ab zur Login-Seite
+    window.userLoaded = true;
     window.location.href = "/login.html";
     return;
   }
@@ -66,7 +69,7 @@ async function initNavigation() {
   if (!perms.includes("users.read")) hide("nav-users");
   if (!perms.includes("roles.read")) hide("nav-roles");
   if (!perms.includes("customers.read")) hide("nav-customers");
-  if (!perms.includes("categories.read")) hide("nav-categories");
+  if (!perms.includes("categories.read") && !perms.includes("settings.general")) hide("nav-categories");
   // Rechnungsübersicht darf praktisch jeder, also lassen wir die sichtbar.
 
   // 3. Navigation-Buttons mit Aktionen verknüpfen
@@ -93,8 +96,9 @@ async function initNavigation() {
   bind("nav-account", "/account.html");
   bind("nav-categories", "/categories.html");
   bind("nav-logout", "#logout");
+
+  // Signal: Benutzer + Permissions sind bereit
+  window.userLoaded = true;
 }
 
 document.addEventListener("DOMContentLoaded", initNavigation);
-
-window.userLoaded = true;

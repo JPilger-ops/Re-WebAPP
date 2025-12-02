@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { getBankSettings } from "../utils/bankSettings.js";
 
 dotenv.config();
 
@@ -25,13 +26,6 @@ function normalizeEpcText(text) {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-//--- SEPA QR-Code ---
-const {
-  SEPA_CREDITOR_NAME,
-  SEPA_CREDITOR_IBAN,
-  SEPA_CREDITOR_BIC
-} = process.env;
 
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
 const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
@@ -437,8 +431,12 @@ export const getInvoicePdf = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
   const client = await db.connect();
+  const pdfDir = path.join(__dirname, "../../pdfs");
 
   try {
+    const mode = req.query.mode;
+
+    // Prüfen, ob PDF bereits existiert → schnell zurückgeben
     const invoiceResult = await client.query(`
       SELECT 
         i.*,
@@ -457,6 +455,18 @@ export const getInvoicePdf = async (req, res) => {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
 
     const row = invoiceResult.rows[0];
+    const filename = `RE-${row.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+
+    if (fs.existsSync(filepath)) {
+      res.setHeader("Content-Type", "application/pdf");
+      if (mode === "inline") {
+        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      } else {
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      }
+      return res.sendFile(filepath);
+    }
 
     const invoice = {
       invoice_number: row.invoice_number,
@@ -511,6 +521,7 @@ if (row.category_logo_file) {
     );
 
     const items = itemsResult.rows;
+    const bankSettings = await getBankSettings();
 
     const formattedDate =
       invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
@@ -534,11 +545,13 @@ if (row.category_logo_file) {
       })
       .join("");
 
-        // 🔹 SEPA QR-Daten im EPC-Format
-    // Werte aus .env laden – mit Fallback, falls etwas fehlt
-    const creditorName = SEPA_CREDITOR_NAME || "UNBEKANNT";
-    const creditorIban = SEPA_CREDITOR_IBAN || "DE00000000000000000000";
-    const creditorBic = SEPA_CREDITOR_BIC || "UNKNOWNBIC";
+    // 🔹 SEPA QR-Daten im EPC-Format
+    // Werte aus Settings (mit Fallback), Spaces entfernen
+    const creditorName = normalizeEpcText(
+      bankSettings.account_holder || bankSettings.bank_name || "UNBEKANNT"
+    );
+    const creditorIban = (bankSettings.iban || "DE00000000000000000000").replace(/\s+/g, "");
+    const creditorBic = (bankSettings.bic || "UNKNOWNBIC").replace(/\s+/g, "");
 
     const amount = invoice.gross_total || 0; // Number
     const sepaAmount = `EUR${amount.toFixed(2)}`; // z.B. "EUR123.45"
@@ -568,7 +581,15 @@ if (row.category_logo_file) {
     });
 
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
-    const html = generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice);
+    const html = generateInvoiceHtml(
+      invoice,
+      formattedDate,
+      formattedReceiptDate,
+      itemsRowsHtml,
+      sepaQrBase64,
+      logoBase64ForInvoice,
+      bankSettings
+    );
 
     //
     // ⭐ PUPPETEER FIX – DAMIT LOGO & ASSETS LADEN ⭐
@@ -604,15 +625,9 @@ if (row.category_logo_file) {
 
     await browser.close();
 
-    const pdfDir = path.join(__dirname, "../../pdfs");
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
 
-    const filename = `RE-${invoice.invoice_number}.pdf`;
-    const filepath = path.join(pdfDir, filename);
-
     fs.writeFileSync(filepath, pdfBuffer);
-
-        const mode = req.query.mode;
 
     res.setHeader("Content-Type", "application/pdf");
 
@@ -634,7 +649,19 @@ if (row.category_logo_file) {
   }
 };
 
-function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice) {
+function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice, bankSettings) {
+  const formatIban = (iban) => {
+    if (!iban) return "-";
+    return iban.replace(/(.{4})/g, "$1 ").trim();
+  };
+
+  const bankDisplay = {
+    account_holder: bankSettings?.account_holder || "-",
+    bank_name: bankSettings?.bank_name || "-",
+    iban: formatIban(bankSettings?.iban),
+    bic: (bankSettings?.bic || "-").toUpperCase(),
+  };
+
   return `
 <!DOCTYPE html>
 <html lang="de">
@@ -914,9 +941,8 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
     <div class="footer">
       Steuernummer: 220/5060/2434 · USt-IdNr.: DE123224453<br>
-      Bankverbindung: VR-Bank Bonn Rhein-Sieg eG · 
-      IBAN: DE48 3706 9520 1104 1850 25 · 
-      BIC: GENODED1RST
+      Bank: ${bankDisplay.bank_name} · IBAN: ${bankDisplay.iban} · BIC: ${bankDisplay.bic}<br>
+      Kontoinhaber: ${bankDisplay.account_holder}
     </div>
 
 </div>

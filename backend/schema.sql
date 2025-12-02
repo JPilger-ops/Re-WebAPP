@@ -78,3 +78,17 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     permission_key VARCHAR(100) NOT NULL,
     PRIMARY KEY (role_id, permission_key)
 );
+
+-- Bankeinstellungen
+CREATE TABLE IF NOT EXISTS bank_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    account_holder TEXT NOT NULL,
+    bank_name TEXT NOT NULL,
+    iban TEXT NOT NULL,
+    bic TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO bank_settings (id, account_holder, bank_name, iban, bic)
+VALUES (1, 'Waldwirtschaft Heidekönig', 'VR-Bank Bonn Rhein-Sieg eG', 'DE48 3706 9520 1104 1850 25', 'GENODED1RST')
+ON CONFLICT (id) DO NOTHING;

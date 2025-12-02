@@ -1,4 +1,12 @@
 import { db } from "../utils/db.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const logosDir = path.join(__dirname, "../../public/logos");
+const MAX_LOGO_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
 
 // Alle Kategorien holen
 export const getAllCategories = async (req, res) => {
@@ -83,5 +91,50 @@ export const deleteCategory = async (req, res) => {
   } catch (err) {
     console.error("Fehler beim Löschen der Kategorie:", err);
     res.status(500).json({ message: "Fehler beim Löschen der Kategorie" });
+  }
+};
+
+// Logo-Upload (Base64 über JSON)
+export const uploadLogo = async (req, res) => {
+  try {
+    const { filename, dataUrl } = req.body || {};
+  if (!filename || !dataUrl) {
+    return res.status(400).json({ message: "filename und dataUrl sind erforderlich." });
+  }
+
+  const safeName = filename.split(/[/\\]/).pop().replace(/[^a-zA-Z0-9._-]/g, "");
+    if (!safeName) {
+      return res.status(400).json({ message: "Dateiname ist ungültig." });
+    }
+
+  const ext = path.extname(safeName).toLowerCase();
+  const allowed = [".png", ".jpg", ".jpeg", ".svg"];
+  if (!allowed.includes(ext)) {
+    return res.status(400).json({ message: "Nur PNG, JPG oder SVG sind erlaubt." });
+  }
+
+  const match = dataUrl.match(/^data:[^;]+;base64,(.*)$/);
+  if (!match) {
+    return res.status(400).json({ message: "Ungültiges Datei-Format." });
+  }
+
+  const base64 = match[1];
+  const buffer = Buffer.from(base64, "base64");
+
+    if (buffer.length > MAX_LOGO_SIZE) {
+      return res.status(400).json({ message: "Datei ist zu groß (max. 1.5 MB)." });
+    }
+
+    if (!fs.existsSync(logosDir)) {
+      fs.mkdirSync(logosDir, { recursive: true });
+    }
+
+    const targetPath = path.join(logosDir, safeName);
+    fs.writeFileSync(targetPath, buffer);
+
+    return res.json({ filename: safeName, size: buffer.length });
+  } catch (err) {
+    console.error("Fehler beim Logo-Upload:", err);
+    return res.status(500).json({ message: "Logo konnte nicht gespeichert werden." });
   }
 };
