@@ -1,5 +1,16 @@
 // Sidebar Navigation + Rollen/Permissions-Steuerung
-
+window.ensureAuthReady = async function () {
+  if (!window.userLoaded) {
+    await new Promise(resolve => {
+      const check = setInterval(() => {
+        if (window.userLoaded) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 20);
+    });
+  }
+}
 // Hilfsfunktion: Element ausblenden
 function hide(id) {
   const el = document.getElementById(id);
@@ -85,3 +96,5 @@ async function initNavigation() {
 }
 
 document.addEventListener("DOMContentLoaded", initNavigation);
+
+window.userLoaded = true;

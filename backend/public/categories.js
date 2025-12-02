@@ -1,3 +1,5 @@
+await ensureAuthReady();
+
 async function loadCategories() {
   const res = await fetch("/api/categories", { credentials: "include" });
   if (res.status === 401) {
