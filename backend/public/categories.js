@@ -7,6 +7,7 @@
   const canDeleteCategories = perms.includes("categories.delete");
   const canEditBank = perms.includes("settings.general");
   let categoriesCache = [];
+  let logosCache = [];
 
   const elements = {
     catError: document.getElementById("error-box"),
@@ -17,6 +18,7 @@
     newKey: document.getElementById("cat-key"),
     newLabel: document.getElementById("cat-label"),
     newLogo: document.getElementById("cat-logo"),
+    keyHint: document.getElementById("cat-key-hint"),
     bankHolder: document.getElementById("bank-holder"),
     bankName: document.getElementById("bank-name"),
     bankIban: document.getElementById("bank-iban"),
@@ -43,6 +45,21 @@
 
   const normalizeIban = (value) => (value || "").replace(/\s+/g, "").toUpperCase();
   const normalizeBic = (value) => (value || "").replace(/\s+/g, "").toUpperCase();
+  const formatCategoryKey = (value) => {
+    if (!value) return "";
+    const cleaned = value
+      .trim()
+      .replace(/ä/gi, "ae")
+      .replace(/ö/gi, "oe")
+      .replace(/ü/gi, "ue")
+      .replace(/ß/gi, "ss")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return cleaned.toUpperCase();
+  };
 
   const isValidBic = (bic) =>
     /^[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(normalizeBic(bic));
@@ -82,6 +99,53 @@
     box.classList.remove("hidden");
   };
 
+  const ensureLogoOption = (filename) => {
+    if (!filename) return;
+    if (!logosCache.includes(filename)) {
+      logosCache.push(filename);
+      logosCache.sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+    }
+  };
+
+  const renderLogoOptions = (selected) => {
+    if (!elements.newLogo) return;
+    const currentValue = selected ?? elements.newLogo.value;
+    elements.newLogo.innerHTML = "";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.disabled = true;
+    placeholder.selected = !currentValue;
+    placeholder.textContent = "Logo auswählen...";
+    elements.newLogo.appendChild(placeholder);
+
+    logosCache.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      if (currentValue === name) opt.selected = true;
+      elements.newLogo.appendChild(opt);
+    });
+
+    // falls ein Wert gesetzt ist, aber nicht in der Liste steckt
+    if (currentValue && !logosCache.includes(currentValue)) {
+      const opt = document.createElement("option");
+      opt.value = currentValue;
+      opt.textContent = currentValue;
+      opt.selected = true;
+      elements.newLogo.appendChild(opt);
+    }
+  };
+
+  const updateKeyHint = (valueFromInput) => {
+    if (!elements.keyHint) return;
+    const source = valueFromInput ?? elements.newKey?.value ?? elements.newLabel?.value ?? "";
+    const formatted = formatCategoryKey(source);
+    elements.keyHint.textContent = formatted
+      ? `Empfohlener Schlüssel: ${formatted}`
+      : "Großbuchstaben und Unterstriche werden automatisch gesetzt.";
+  };
+
   const clearCategoryMessages = () => {
     hideBox(elements.catError);
     hideBox(elements.catSuccess);
@@ -91,6 +155,36 @@
     hideBox(elements.bankError);
     hideBox(elements.bankSuccess);
   };
+
+  async function loadLogos(preselect) {
+    if (!canReadCategories && !canWriteCategories) return logosCache;
+
+    try {
+      const res = await fetch("/api/categories/logos", { credentials: "include" });
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        // still render existing value if provided
+        renderLogoOptions(preselect);
+        return;
+      }
+      if (!res.ok) {
+        renderLogoOptions(preselect);
+        return;
+      }
+
+      const data = await res.json();
+      logosCache = Array.isArray(data) ? data : [];
+      renderLogoOptions(preselect);
+      return logosCache;
+    } catch (err) {
+      console.error("Logos laden fehlgeschlagen", err);
+      renderLogoOptions(preselect);
+    }
+    return logosCache;
+  }
 
   const disableBankForm = (message) => {
     [elements.bankHolder, elements.bankName, elements.bankIban, elements.bankBic, elements.bankSave, elements.bankReload].forEach((el) => {
@@ -207,6 +301,7 @@
     }
 
     try {
+      await loadLogos();
       const res = await fetch("/api/categories", { credentials: "include" });
       if (res.status === 401) {
         window.location.href = "/login.html";
@@ -222,6 +317,8 @@
       }
 
       categoriesCache = await res.json();
+      categoriesCache.forEach((cat) => ensureLogoOption(cat.logo_file));
+      renderLogoOptions(elements.newLogo?.value);
       renderCategoryTable(getFilteredCategories());
     } catch (err) {
       console.error("Kategorien laden fehlgeschlagen", err);
@@ -246,6 +343,39 @@
     if (!elements.catBody) return;
     elements.catBody.innerHTML = "";
 
+    const buildLogoSelect = (value, id) => {
+      const current = (value || "").trim();
+      const options = [`<option value="">Kein Logo</option>`];
+      const all = new Set([current, ...logosCache.filter(Boolean)]);
+      all.delete("");
+      Array.from(all)
+        .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }))
+        .forEach((name) => {
+          const selected = name === current ? "selected" : "";
+          options.push(`<option value="${escapeHtml(name)}" ${selected}>${escapeHtml(name)}</option>`);
+        });
+
+      return `<select class="input select-input table-select" data-id="${id}" data-field="logo_file" ${canWriteCategories ? "" : "disabled"}>
+        ${options.join("")}
+      </select>`;
+    };
+
+    const buildLogoThumb = (cat) => {
+      const rawLogo = (cat.logo_file || "").trim();
+      const logoSrc = rawLogo ? `/logos/${encodeURIComponent(rawLogo)}` : "";
+      const placeholder = ((cat.label || cat.key || "?").trim() || "?").slice(0, 2).toUpperCase();
+
+      if (!rawLogo) {
+        return `<div class="logo-thumb" data-logo-id="${cat.id}"><span class="logo-placeholder">${placeholder}</span></div>`;
+      }
+
+      return `
+        <div class="logo-thumb" data-logo-id="${cat.id}">
+          <img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(cat.label || cat.key || rawLogo)} Logo" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');" />
+          <span class="logo-placeholder hidden">${placeholder}</span>
+        </div>`;
+    };
+
     if (!categories || categories.length === 0) {
       const emptyRow = document.createElement("tr");
       emptyRow.innerHTML = `
@@ -267,8 +397,9 @@
 
       const key = escapeHtml(cat.key);
       const label = escapeHtml(cat.label);
-      const logo = escapeHtml(cat.logo_file || "");
-      const logoSrc = logo ? `/logos/${logo}` : "";
+      const rawLogo = (cat.logo_file || "").trim();
+      const logo = escapeHtml(rawLogo);
+      const logoSrc = rawLogo ? `/logos/${encodeURIComponent(rawLogo)}` : "";
 
       const actions = [];
       if (canWriteCategories) {
@@ -290,15 +421,11 @@
           <input class="input" value="${label}" data-id="${cat.id}" data-field="label" ${canWriteCategories ? "" : "disabled"} />
         </td>
         <td>
-          <input class="input" value="${logo}" data-id="${cat.id}" data-field="logo_file" ${canWriteCategories ? "" : "disabled"} />
+          ${buildLogoSelect(cat.logo_file, cat.id)}
           <div class="settings-note">Dateiname aus /public/logos/</div>
         </td>
         <td>
-          ${
-            logo
-              ? `<div class="logo-thumb"><img src="${logoSrc}" alt="${label || key} Logo" onerror="this.parentElement.innerHTML='Fehlt';"></div>`
-              : `<div class="settings-note">Kein Logo</div>`
-          }
+          ${buildLogoThumb(cat)}
         </td>
         <td class="table-actions">
           ${actionMarkup}
@@ -324,7 +451,7 @@
         return;
       }
 
-      const rowInputs = elements.catBody.querySelectorAll(`input[data-id="${id}"]`);
+      const rowInputs = elements.catBody.querySelectorAll(`[data-id="${id}"]`);
       const payload = {};
       rowInputs.forEach((inp) => {
         payload[inp.dataset.field] = inp.value.trim();
@@ -401,11 +528,14 @@
       return;
     }
 
-    const key = elements.newKey?.value.trim() || "";
+    const rawKey = elements.newKey?.value || "";
+    const formattedKey = formatCategoryKey(rawKey);
     const label = elements.newLabel?.value.trim() || "";
     const logo = elements.newLogo?.value.trim() || "";
 
-    if (!key || !label || !logo) {
+    if (elements.newKey) elements.newKey.value = formattedKey;
+
+    if (!formattedKey || !label || !logo) {
       showBox(elements.catError, "Bitte alle Felder ausfüllen.");
       return;
     }
@@ -415,7 +545,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ key, label, logo_file: logo }),
+        body: JSON.stringify({ key: formattedKey, label, logo_file: logo }),
       });
 
       if (res.status === 401) {
@@ -434,12 +564,50 @@
       if (elements.newKey) elements.newKey.value = "";
       if (elements.newLabel) elements.newLabel.value = "";
       if (elements.newLogo) elements.newLogo.value = "";
+      updateKeyHint("");
 
       showBox(elements.catSuccess, "Kategorie angelegt.");
       loadCategories();
     } catch (err) {
       console.error("Kategorie anlegen fehlgeschlagen", err);
       showBox(elements.catError, "Fehler beim Anlegen der Kategorie.");
+    }
+  }
+
+  function updateRowLogoPreview(id, filename) {
+    if (!elements.catBody) return;
+    const target = elements.catBody.querySelector(`[data-logo-id="${id}"]`);
+    const value = (filename || "").trim();
+
+    const placeholder = ((elements.catBody.querySelector(`input[data-id="${id}"][data-field="label"]`)?.value ||
+      elements.catBody.querySelector(`input[data-id="${id}"][data-field="key"]`)?.value ||
+      value ||
+      "?`).trim() || "?")
+      .slice(0, 2)
+      .toUpperCase();
+
+    const container = document.createElement("div");
+    container.className = "logo-thumb";
+    container.setAttribute("data-logo-id", id);
+
+    if (value) {
+      const img = document.createElement("img");
+      img.src = `/logos/${encodeURIComponent(value)}`;
+      img.alt = `${placeholder} Logo`;
+      img.onerror = () => {
+        img.style.display = "none";
+        placeholderEl.classList.remove("hidden");
+      };
+      container.appendChild(img);
+    }
+
+    const placeholderEl = document.createElement("span");
+    placeholderEl.className = value ? "logo-placeholder hidden" : "logo-placeholder";
+    placeholderEl.textContent = placeholder;
+    container.appendChild(placeholderEl);
+
+    if (target?.parentElement) {
+      target.parentElement.replaceChild(container, target);
     }
   }
 
@@ -518,7 +686,10 @@
       }
 
       // Dateiname ins Formular übernehmen
-      if (elements.newLogo) elements.newLogo.value = body.filename || file.name;
+      const savedName = body.filename || file.name;
+      ensureLogoOption(savedName);
+      renderLogoOptions(savedName);
+      if (elements.newLogo) elements.newLogo.value = savedName;
       showBox(elements.catSuccess, `Logo gespeichert (${body.filename || file.name}).`);
     } catch (err) {
       console.error("Logo-Upload fehlgeschlagen", err);
@@ -543,11 +714,36 @@
 
   if (elements.catBody) {
     elements.catBody.addEventListener("click", handleCategoryAction);
+    elements.catBody.addEventListener("change", (e) => {
+      const select = e.target.closest("select[data-field=\"logo_file\"]");
+      if (!select) return;
+      updateRowLogoPreview(select.dataset.id, select.value);
+    });
   }
   const addBtn = document.getElementById("cat-add");
   if (addBtn) addBtn.addEventListener("click", addCategory);
+  if (elements.newKey) {
+    elements.newKey.addEventListener("input", (e) => updateKeyHint(e.target.value));
+    elements.newKey.addEventListener("blur", (e) => {
+      e.target.value = formatCategoryKey(e.target.value);
+      updateKeyHint(e.target.value);
+    });
+  }
+  if (elements.newLabel) {
+    elements.newLabel.addEventListener("input", (e) => {
+      if (elements.newKey && !elements.newKey.value.trim()) {
+        elements.newKey.value = formatCategoryKey(e.target.value);
+      }
+      updateKeyHint(e.target.value);
+    });
+  }
   const refreshBtn = document.getElementById("cat-refresh");
-  if (refreshBtn) refreshBtn.addEventListener("click", loadCategories);
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      loadLogos();
+      loadCategories();
+    });
+  }
   if (elements.bankSave) elements.bankSave.addEventListener("click", saveBankData);
   if (elements.bankReload) elements.bankReload.addEventListener("click", loadBankData);
   if (elements.catFilter) {
@@ -582,6 +778,8 @@
     elements.logoDropzone.addEventListener("click", () => elements.logoInput?.click());
   }
 
+  updateKeyHint();
   loadBankData();
+  loadLogos();
   loadCategories();
 })();

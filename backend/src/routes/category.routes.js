@@ -9,6 +9,7 @@ import {
   updateCategory,
   deleteCategory,
   uploadLogo,
+  listLogos,
 } from "../controllers/category.controller.js";
 
 const router = Router();
@@ -32,6 +33,12 @@ router.post(
   "/logo",
   requirePermission("categories.write"),
   uploadLogo
+);
+
+router.get(
+  "/logos",
+  requirePermission("categories.read"),
+  listLogos
 );
 
 router.put(

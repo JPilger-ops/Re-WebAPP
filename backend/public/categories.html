@@ -88,61 +88,83 @@
               <div class="mini-card">
                 <div class="mini-card-head">
                   <div>
-                    <div class="badge subtle">Neu</div>
-                    <h3 class="section-h" style="margin:8px 0 6px;">Kategorie anlegen</h3>
-                    <div class="settings-card-subtitle">Key, Label und Logo in einem Schritt erfassen.</div>
+                    <div class="badge subtle">Workflow</div>
+                    <h3 class="section-h" style="margin:8px 0 6px;">Logo & Kategorie erfassen</h3>
+                    <div class="settings-card-subtitle">1) Logo hochladen · 2) Felder ausfüllen · 3) Speichern</div>
                   </div>
                 </div>
 
-                <div class="field-grid">
-                  <div>
-                    <label class="input-label">Key (z. B. GESELLSCHAFTEN)</label>
-                    <input id="cat-key" class="input" type="text" />
-                  </div>
-                  <div>
-                    <label class="input-label">Label (Anzeige)</label>
-                    <input id="cat-label" class="input" type="text" />
-                  </div>
-                  <div style="grid-column: span 2;">
-                    <label class="input-label">Logo-Datei</label>
-                    <input id="cat-logo" class="input" type="text" placeholder="HK_LOGO.png" />
-                    <div class="settings-note">Dateiname aus /public/logos/. Wird nach Upload automatisch gesetzt.</div>
+                <div class="step-block">
+                  <div class="step-pill">1</div>
+                  <div class="step-body">
+                    <div class="mini-title">Logo hochladen (funktioniert eigenständig)</div>
+                    <div class="settings-card-subtitle">PNG, JPG oder SVG · max. 1.5 MB · wird sofort gespeichert</div>
+                    <div id="logo-dropzone" class="dropzone">
+                      <input type="file" id="logo-file" accept=".png,.jpg,.jpeg,.svg" hidden />
+                      <p class="dropzone-title">Datei hier ablegen oder klicken</p>
+                      <p class="settings-note" id="logo-file-name">Keine Datei ausgewählt</p>
+                      <div class="dropzone-actions">
+                        <div class="inline-hint compact">Upload speichert ohne Kategorie. Danach erscheint die Datei im Dropdown.</div>
+                      </div>
+                    </div>
+                    <div class="settings-note">Liegt nach Upload direkt unter <code>/public/logos/</code>.</div>
                   </div>
                 </div>
 
-                <div class="category-add-actions">
-                  <button id="cat-add" class="primary-button">Kategorie hinzufügen</button>
-                </div>
-              </div>
+                <div class="mini-divider"></div>
 
-              <div class="mini-card upload-card">
-                <div class="mini-card-head">
-                  <div>
-                    <div class="badge subtle">Logos</div>
-                    <h4 class="mini-title">Logo hochladen</h4>
-                    <div class="settings-card-subtitle">PNG, JPG oder SVG · max. 1.5 MB</div>
+                <div class="step-block">
+                  <div class="step-pill">2</div>
+                  <div class="step-body">
+                    <div class="mini-title">Kategorie anlegen</div>
+                    <div class="settings-card-subtitle">Key = interner Schlüssel, Label = Anzeigename.</div>
+
+                    <div class="field-grid">
+                      <div>
+                        <label class="input-label">Key (z. B. GESELLSCHAFTEN)</label>
+                        <input id="cat-key" class="input" type="text" />
+                        <div class="settings-note" id="cat-key-hint">Großbuchstaben und Unterstriche werden automatisch gesetzt.</div>
+                      </div>
+                      <div>
+                        <label class="input-label">Label (Anzeige)</label>
+                        <input id="cat-label" class="input" type="text" />
+                        <div class="settings-note">So erscheint die Kategorie in Rechnungen.</div>
+                      </div>
+                      <div style="grid-column: span 2;">
+                        <label class="input-label">Logo-Datei</label>
+                        <select id="cat-logo" class="input select-input">
+                          <option value="" selected disabled>Logo auswählen...</option>
+                        </select>
+                        <div class="settings-note">Upload fügt neue Dateien automatisch zur Liste hinzu.</div>
+                      </div>
+                    </div>
+
+                    <div class="category-add-actions">
+                      <button id="cat-add" class="primary-button">Kategorie speichern</button>
+                      <div class="settings-note form-inline-hint">Speichern fügt den Eintrag rechts hinzu.</div>
+                    </div>
                   </div>
                 </div>
-                <div id="logo-dropzone" class="dropzone">
-                  <input type="file" id="logo-file" accept=".png,.jpg,.jpeg,.svg" hidden />
-                  <p class="dropzone-title">Datei hier ablegen oder klicken</p>
-                  <p class="settings-note" id="logo-file-name">Keine Datei ausgewählt</p>
-                  <button type="button" id="logo-file-btn" class="secondary-button small-btn">Datei wählen</button>
-                </div>
-                <div class="settings-note">Nach dem Upload wird der Dateiname ins Formular übernommen.</div>
               </div>
 
               <div class="mini-card tip-card">
-                <h4 class="mini-title">Logo-Hinweise</h4>
+                <h4 class="mini-title">Hinweise</h4>
                 <ul class="tip-list">
-                  <li>Transparentes PNG oder SVG wirkt am besten.</li>
-                  <li>Pfad ist <code>/public/logos/DATEI</code>; im Feld nur den Dateinamen nutzen.</li>
-                  <li>Nach Upload kannst du das Logo direkt in der neuen Kategorie verwenden.</li>
+                  <li>Key kurz und eindeutig halten (z. B. <code>HOTEL</code> oder <code>GESELLSCHAFT</code>).</li>
+                  <li>Logo-Datei nur als Dateinamen eintragen. Upload legt sie unter <code>/public/logos/</code> ab.</li>
+                  <li>Bestehende Zeilen rechts sind direkt editierbar; Speichern je Zeile anwenden.</li>
                 </ul>
               </div>
             </div>
 
             <div class="category-table-block">
+              <div class="table-top-note">
+                <div>
+                  <div class="badge subtle">Bestehende Kategorien</div>
+                  <div class="settings-card-subtitle">Werte direkt anpassen und je Zeile speichern.</div>
+                </div>
+                <div class="settings-note">Logo-Vorschau nutzt den Dateinamen aus der Spalte.</div>
+              </div>
               <div class="table-wrapper">
                 <table class="table">
                   <thead>

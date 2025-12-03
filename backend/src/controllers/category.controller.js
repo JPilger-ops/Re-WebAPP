@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const logosDir = path.join(__dirname, "../../public/logos");
 const MAX_LOGO_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
+const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 
 // Alle Kategorien holen
 export const getAllCategories = async (req, res) => {
@@ -98,28 +99,27 @@ export const deleteCategory = async (req, res) => {
 export const uploadLogo = async (req, res) => {
   try {
     const { filename, dataUrl } = req.body || {};
-  if (!filename || !dataUrl) {
-    return res.status(400).json({ message: "filename und dataUrl sind erforderlich." });
-  }
+    if (!filename || !dataUrl) {
+      return res.status(400).json({ message: "filename und dataUrl sind erforderlich." });
+    }
 
-  const safeName = filename.split(/[/\\]/).pop().replace(/[^a-zA-Z0-9._-]/g, "");
+    const safeName = filename.split(/[/\\]/).pop().replace(/[^a-zA-Z0-9._-]/g, "");
     if (!safeName) {
       return res.status(400).json({ message: "Dateiname ist ungültig." });
     }
 
-  const ext = path.extname(safeName).toLowerCase();
-  const allowed = [".png", ".jpg", ".jpeg", ".svg"];
-  if (!allowed.includes(ext)) {
-    return res.status(400).json({ message: "Nur PNG, JPG oder SVG sind erlaubt." });
-  }
+    const ext = path.extname(safeName).toLowerCase();
+    if (!allowedLogoExt.includes(ext)) {
+      return res.status(400).json({ message: "Nur PNG, JPG oder SVG sind erlaubt." });
+    }
 
-  const match = dataUrl.match(/^data:[^;]+;base64,(.*)$/);
-  if (!match) {
-    return res.status(400).json({ message: "Ungültiges Datei-Format." });
-  }
+    const match = dataUrl.match(/^data:[^;]+;base64,(.*)$/);
+    if (!match) {
+      return res.status(400).json({ message: "Ungültiges Datei-Format." });
+    }
 
-  const base64 = match[1];
-  const buffer = Buffer.from(base64, "base64");
+    const base64 = match[1];
+    const buffer = Buffer.from(base64, "base64");
 
     if (buffer.length > MAX_LOGO_SIZE) {
       return res.status(400).json({ message: "Datei ist zu groß (max. 1.5 MB)." });
@@ -136,5 +136,26 @@ export const uploadLogo = async (req, res) => {
   } catch (err) {
     console.error("Fehler beim Logo-Upload:", err);
     return res.status(500).json({ message: "Logo konnte nicht gespeichert werden." });
+  }
+};
+
+// Logos aus dem /public/logos Verzeichnis auflisten
+export const listLogos = async (req, res) => {
+  try {
+    if (!fs.existsSync(logosDir)) {
+      return res.json([]);
+    }
+
+    const files = fs
+      .readdirSync(logosDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => allowedLogoExt.includes(path.extname(name).toLowerCase()))
+      .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+
+    return res.json(files);
+  } catch (err) {
+    console.error("Fehler beim Auflisten der Logos:", err);
+    return res.status(500).json({ message: "Logos konnten nicht geladen werden." });
   }
 };
