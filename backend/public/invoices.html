@@ -88,6 +88,43 @@
     </main>
   </div>
 
+  <!-- Modal: Rechnung per E-Mail -->
+  <div id="email-modal" class="modal hidden">
+    <div class="modal-content card" style="width: 520px; max-width: 90%;">
+      <div style="display:flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px;">
+        <div>
+          <h3 class="modal-title" id="email-modal-title" style="margin: 0;">Rechnung per E-Mail versenden</h3>
+          <div id="email-modal-subtitle" style="color:#6e6e73; font-size:13px; margin-top:4px;"></div>
+        </div>
+        <button id="email-close" class="secondary-button small-btn">Schließen</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+        <label style="font-weight:600; font-size:14px;">
+          Empfänger E-Mail
+          <input id="email-to" type="email" class="input" placeholder="kunde@example.com" style="margin-top:6px;">
+        </label>
+
+        <label style="font-weight:600; font-size:14px;">
+          Betreff
+          <input id="email-subject" type="text" class="input" style="margin-top:6px;">
+        </label>
+
+        <label style="font-weight:600; font-size:14px;">
+          Nachricht
+          <textarea id="email-message" class="input" rows="5" style="margin-top:6px; resize: vertical;" placeholder="Ihre Nachricht an den Empfänger"></textarea>
+        </label>
+      </div>
+
+      <div id="email-status" style="font-size:13px; color:#444; min-height:18px; margin-top:10px;"></div>
+
+      <div class="modal-actions">
+        <button id="email-cancel" class="secondary-button">Abbrechen</button>
+        <button id="email-send" class="primary-button">Senden</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/nav.js"></script>
   <script src="/invoices.js"></script>
 

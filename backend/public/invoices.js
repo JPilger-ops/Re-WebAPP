@@ -1,4 +1,45 @@
 let allInvoices = [];
+let currentEmailInvoice = null;
+let bankDataCache = null;
+let bankDataRequest = null;
+
+const numberOrZero = (value) => Number(value) || 0;
+
+const addDays = (value, days) => {
+  const date = new Date(value);
+  if (isNaN(date)) return null;
+  date.setDate(date.getDate() + days);
+  return date;
+};
+
+const formatDateDe = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  return isNaN(date) ? "-" : date.toLocaleDateString("de-DE");
+};
+
+const formatIban = (iban) => {
+  if (!iban) return "-";
+  return iban.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim();
+};
+
+const formatAmount = (value) =>
+  numberOrZero(value).toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+async function loadBankData() {
+  if (bankDataCache) return bankDataCache;
+  if (!bankDataRequest) {
+    bankDataRequest = fetch("/api/settings/bank", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null);
+  }
+  const data = await bankDataRequest;
+  if (data) bankDataCache = data;
+  return bankDataCache;
+}
 
 async function waitForPermissions() {
   return new Promise(resolve => {
@@ -137,6 +178,7 @@ function renderList() {
       <td>${status}</td>
       <td>
         <button onclick="openInvoice(${i.id})">Öffnen</button>
+        <button class="secondary-button small-btn" onclick="openEmailModal(${i.id})">Verschicken per E-Mail</button>
 
         ${
           (window.currentUserPermissions || []).includes("invoices.delete")
@@ -311,6 +353,145 @@ async function deleteInvoice(id, number) {
 }
 
 // ---------------------------------------------------------
+// Rechnung per E-Mail versenden
+// ---------------------------------------------------------
+function setEmailStatus(message, type = "info") {
+  const statusEl = document.getElementById("email-status");
+  if (!statusEl) return;
+
+  statusEl.textContent = message || "";
+
+  if (type === "error") statusEl.style.color = "#b20000";
+  else if (type === "success") statusEl.style.color = "#0a7c2f";
+  else statusEl.style.color = "#444";
+}
+
+async function openEmailModal(invoiceId) {
+  const modal = document.getElementById("email-modal");
+  const invoice = allInvoices.find(inv => Number(inv.id) === Number(invoiceId));
+
+  if (!invoice || !modal) {
+    alert("Rechnung konnte nicht gefunden werden.");
+    return;
+  }
+
+  currentEmailInvoice = invoice;
+
+  const toInput = document.getElementById("email-to");
+  const subjectInput = document.getElementById("email-subject");
+  const messageInput = document.getElementById("email-message");
+  const title = document.getElementById("email-modal-title");
+  const subtitle = document.getElementById("email-modal-subtitle");
+  const sendBtn = document.getElementById("email-send");
+
+  if (sendBtn) {
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Senden";
+  }
+
+  if (title) title.textContent = "Rechnung per E-Mail versenden";
+  if (subtitle) {
+    const recipientLabel = invoice.recipient_name || "Empfänger";
+    subtitle.textContent = `Rechnung #${invoice.invoice_number} an ${recipientLabel}`;
+  }
+
+  const bankData = await loadBankData();
+  const invoiceDate = formatDateDe(invoice.date);
+  const serviceDate = formatDateDe(invoice.receipt_date || invoice.date);
+  const dueDate = formatDateDe(addDays(invoice.date, 14));
+
+  const bankName = bankData?.bank_name || "-";
+  const ibanDisplay = formatIban(bankData?.iban);
+  const bicDisplay = (bankData?.bic || "-").toUpperCase();
+
+  const amountValue = invoice.b2b
+    ? numberOrZero(invoice.net_19) + numberOrZero(invoice.net_7)
+    : numberOrZero(invoice.gross_total);
+
+  const amountDisplay = formatAmount(amountValue);
+
+  const senderName = "Thomas Pilger";
+  const senderCompany = "Waldwirtschaft Heidekönig";
+  const senderPhone = "02241 76649";
+  const senderEmail = "Rechnungen@der-heidekoenig.de";
+
+  const defaultSubject = `Rechnung Nr. ${invoice.invoice_number}`;
+  const defaultMessage = `Hallo ${invoice.recipient_name || "Kunde"},\n\nanbei erhältst du deine Rechnung Nr. ${invoice.invoice_number} vom ${invoiceDate}.\n\nDer Betrag von ${amountDisplay} € ist fällig bis ${dueDate}.\n\nBankverbindung:\n${bankName}\nIBAN: ${ibanDisplay}\nBIC: ${bicDisplay}\n\nBei Fragen melde dich gerne jederzeit.\n\nVielen Dank!\n\nBeste Grüße\n${senderName}\n${senderCompany}\n${senderPhone}\n${senderEmail}`;
+
+  if (toInput) toInput.value = invoice.recipient_email || "";
+  if (subjectInput) subjectInput.value = defaultSubject;
+  if (messageInput) messageInput.value = defaultMessage;
+
+  setEmailStatus("");
+  modal.classList.remove("hidden");
+}
+
+function closeEmailModal() {
+  const modal = document.getElementById("email-modal");
+  if (modal) modal.classList.add("hidden");
+  currentEmailInvoice = null;
+  setEmailStatus("");
+}
+
+async function sendEmailForInvoice() {
+  if (!currentEmailInvoice) {
+    alert("Keine Rechnung ausgewählt.");
+    return;
+  }
+
+  const toInput = document.getElementById("email-to");
+  const subjectInput = document.getElementById("email-subject");
+  const messageInput = document.getElementById("email-message");
+  const sendBtn = document.getElementById("email-send");
+
+  const email = (toInput?.value || "").trim();
+  const subject = (subjectInput?.value || "").trim();
+  const message = messageInput?.value || "";
+
+  if (!email) {
+    setEmailStatus("Bitte eine E-Mail-Adresse angeben.", "error");
+    return;
+  }
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = "Senden…";
+  }
+  setEmailStatus("Sende E-Mail…", "info");
+
+  try {
+    const res = await fetch(`/api/invoices/${currentEmailInvoice.id}/send-email`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ to: email, subject, message })
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg = data?.message || "E-Mail konnte nicht versendet werden.";
+      setEmailStatus(msg, "error");
+      return;
+    }
+
+    setEmailStatus(data?.message || "E-Mail wurde verschickt.", "success");
+    await loadInvoices();
+    setTimeout(() => closeEmailModal(), 700);
+  } catch (err) {
+    console.error("Fehler beim Versand:", err);
+    setEmailStatus("E-Mail konnte nicht versendet werden.", "error");
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Senden";
+    }
+  }
+}
+
+// ---------------------------------------------------------
 // Select-All Checkbox Handler
 // ---------------------------------------------------------
 function setupSelectAllHandler() {
@@ -335,6 +516,12 @@ document.getElementById("sort").addEventListener("change", renderList);
 // Buttons mit Funktionen verbinden
 document.getElementById("btn-multi-download")?.addEventListener("click", downloadSelectedInvoices);
 document.getElementById("btn-multi-delete")?.addEventListener("click", deleteSelectedInvoices);
+document.getElementById("email-send")?.addEventListener("click", sendEmailForInvoice);
+document.getElementById("email-cancel")?.addEventListener("click", closeEmailModal);
+document.getElementById("email-close")?.addEventListener("click", closeEmailModal);
+document.getElementById("email-modal")?.addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeEmailModal();
+});
 
 // Start
 (async () => {

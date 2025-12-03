@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { getBankSettings } from "../utils/bankSettings.js";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ const __dirname = path.dirname(__filename);
 
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
 const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
+const pdfDir = path.join(__dirname, "../../pdfs");
 
 let defaultLogoBase64 = "";
 try {
@@ -39,6 +41,45 @@ try {
 }
 
 const n = (value) => Number(value) || 0;
+
+// Setzt den PDF-Metadaten-Titel (Acrobat zeigt sonst file://invoice_temp.html)
+function setPdfTitle(buffer, title) {
+  try {
+    const escapePdfString = (text) =>
+      String(text || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/\(/g, "\\(")
+        .replace(/\)/g, "\\)");
+
+    const pdfText = buffer.toString("latin1");
+    const escapedTitle = escapePdfString(title);
+    const titleRegex = /\/Title\s*\(([^)]*)\)/;
+
+    if (titleRegex.test(pdfText)) {
+      const updated = pdfText.replace(titleRegex, `/Title (${escapedTitle})`);
+      return Buffer.from(updated, "latin1");
+    }
+
+    // Fallback: rohe Zeichenkette austauschen, falls Chromium "invoice_temp.html" reinschreibt
+    const needle = "invoice_temp.html";
+    const idx = pdfText.indexOf(needle);
+    if (idx !== -1) {
+      const target = escapedTitle;
+      const maxLen = needle.length;
+      let replacement = target.slice(0, maxLen);
+      if (replacement.length < maxLen) {
+        replacement = replacement.padEnd(maxLen, " ");
+      }
+      const updated = pdfText.slice(0, idx) + replacement + pdfText.slice(idx + maxLen);
+      return Buffer.from(updated, "latin1");
+    }
+
+    return buffer;
+  } catch (err) {
+    console.warn("Konnte PDF-Titel nicht setzen, nutze Original-PDF.", err);
+    return buffer;
+  }
+}
 
 function calculateTotals(items) {
   let net_19 = 0, vat_19 = 0, gross_19 = 0;
@@ -314,7 +355,7 @@ for (let i = 0; i < items.length; i++) {
 export const getAllInvoices = async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT invoices.*, recipients.name AS recipient_name
+      SELECT invoices.*, recipients.name AS recipient_name, recipients.email AS recipient_email
       FROM invoices
       LEFT JOIN recipients ON invoices.recipient_id = recipients.id
       ORDER BY invoices.id DESC
@@ -346,6 +387,8 @@ export const getInvoiceById = async (req, res) => {
         r.street AS recipient_street,
         r.zip   AS recipient_zip,
         r.city  AS recipient_city,
+        r.email AS recipient_email,
+        r.phone AS recipient_phone,
         c.logo_file AS category_logo_file
       FROM invoices i
       LEFT JOIN recipients r ON i.recipient_id = r.id
@@ -403,23 +446,6 @@ export const getInvoiceById = async (req, res) => {
   } finally {
     client.release();
   }
-
-  // Kategorie-Logo bestimmen
-  let logoBase64ForInvoice = defaultLogoBase64;
-
-  if (row.category_logo_file) {
-    try {
-      const catLogoPath = path.join(__dirname, "../../public/logos", row.category_logo_file);
-      if (fs.existsSync(catLogoPath)) {
-        logoBase64ForInvoice = fs.readFileSync(catLogoPath, "base64");
-      } else {
-        console.warn("Kategorie-Logo nicht gefunden, verwende Default:", catLogoPath);
-      }
-    } catch (e) {
-      console.warn("Fehler beim Laden des Kategorie-Logos, verwende Default:", e.message);
-    }
-  }
-
 };
 
 /**
@@ -430,13 +456,34 @@ export const getInvoicePdf = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
-  const client = await db.connect();
-  const pdfDir = path.join(__dirname, "../../pdfs");
-
   try {
+    const { buffer, filename } = await ensureInvoicePdf(id);
     const mode = req.query.mode;
 
-    // Prüfen, ob PDF bereits existiert → schnell zurückgeben
+    res.setHeader("Content-Type", "application/pdf");
+    if (mode === "inline") {
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    } else {
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    }
+
+    return res.send(buffer);
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("Fehler bei der PDF-Erstellung:", err);
+    return res.status(500).json({ error: "Fehler bei der PDF-Erstellung" });
+  }
+};
+
+/**
+ * Erstellt bei Bedarf das PDF und liefert Buffer + Metadaten zurück
+ */
+async function ensureInvoicePdf(id) {
+  const client = await db.connect();
+
+  try {
     const invoiceResult = await client.query(`
       SELECT 
         i.*,
@@ -444,6 +491,8 @@ export const getInvoicePdf = async (req, res) => {
         r.street AS recipient_street,
         r.zip    AS recipient_zip,
         r.city   AS recipient_city,
+        r.email  AS recipient_email,
+        r.phone  AS recipient_phone,
         c.logo_file AS category_logo_file
       FROM invoices i
       LEFT JOIN recipients r ON i.recipient_id = r.id
@@ -451,21 +500,19 @@ export const getInvoicePdf = async (req, res) => {
       WHERE i.id = $1
     `, [id]);
 
-    if (invoiceResult.rowCount === 0)
-      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    if (invoiceResult.rowCount === 0) {
+      const error = new Error("Rechnung nicht gefunden");
+      error.code = "NOT_FOUND";
+      throw error;
+    }
 
     const row = invoiceResult.rows[0];
     const filename = `RE-${row.invoice_number}.pdf`;
     const filepath = path.join(pdfDir, filename);
 
     if (fs.existsSync(filepath)) {
-      res.setHeader("Content-Type", "application/pdf");
-      if (mode === "inline") {
-        res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-      } else {
-        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-      }
-      return res.sendFile(filepath);
+      const buffer = fs.readFileSync(filepath);
+      return { buffer, filename, filepath, invoiceRow: row };
     }
 
     const invoice = {
@@ -487,33 +534,25 @@ export const getInvoicePdf = async (req, res) => {
       }
     };
 
-    // 🔹 Logo für diese konkrete Rechnung bestimmen
-// Standard: Default-Logo
-let logoBase64ForInvoice = defaultLogoBase64;
+    let logoBase64ForInvoice = defaultLogoBase64;
+    if (row.category_logo_file) {
+      try {
+        const categoryLogoPath = path.join(
+          __dirname,
+          "../../public/logos",
+          row.category_logo_file
+        );
 
-// Wenn in der Kategorie ein eigenes Logo hinterlegt ist → versuchen zu laden
-if (row.category_logo_file) {
-  try {
-    const categoryLogoPath = path.join(
-      __dirname,
-      "../../public/logos",
-      row.category_logo_file
-    );
-
-    if (fs.existsSync(categoryLogoPath)) {
-      logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
-      console.log("Kategorie-Logo geladen:", categoryLogoPath);
-    } else {
-      console.warn("Kategorie-Logo nicht gefunden, nutze Default-Logo:", categoryLogoPath);
+        if (fs.existsSync(categoryLogoPath)) {
+          logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
+          console.log("Kategorie-Logo geladen:", categoryLogoPath);
+        } else {
+          console.warn("Kategorie-Logo nicht gefunden, nutze Default-Logo:", categoryLogoPath);
+        }
+      } catch (err) {
+        console.warn("Fehler beim Laden des Kategorie-Logos, nutze Default-Logo:", err);
+      }
     }
-  } catch (err) {
-    console.warn("Fehler beim Laden des Kategorie-Logos, nutze Default-Logo:", err);
-  }
-}
-
-    // Hilfswerte für die Anzeige im PDF
-    const totalNet = invoice.net_19 + invoice.net_7;
-    const totalVat = invoice.vat_19 + invoice.vat_7;
 
     const itemsResult = await client.query(
       "SELECT description, quantity, unit_price_gross, line_total_gross FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
@@ -617,11 +656,14 @@ if (row.category_logo_file) {
       waitUntil: "networkidle0"
     });
 
-    const pdfBuffer = await page.pdf({
+    let pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true
     });
+
+    // PDF-Metadaten-Titel auf Rechnungsdatei setzen
+    pdfBuffer = setPdfTitle(pdfBuffer, filename);
 
     await browser.close();
 
@@ -629,25 +671,11 @@ if (row.category_logo_file) {
 
     fs.writeFileSync(filepath, pdfBuffer);
 
-    res.setHeader("Content-Type", "application/pdf");
-
-    if (mode === "inline") {
-      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-    } else if (mode === "download") {
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    } else {
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    }
-
-    return res.send(pdfBuffer);
-
-  } catch (err) {
-    console.error("Fehler bei der PDF-Erstellung:", err);
-    return res.status(500).json({ error: "Fehler bei der PDF-Erstellung" });
+    return { buffer: pdfBuffer, filename, filepath, invoiceRow: row };
   } finally {
     client.release();
   }
-};
+}
 
 function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice, bankSettings) {
   const formatIban = (iban) => {
@@ -667,6 +695,7 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 <html lang="de">
 <head>
 <meta charset="utf-8" />
+<title>RE-${invoice.invoice_number}</title>
 
 <style>
   @page { size: A4; margin: 0; }
@@ -971,6 +1000,150 @@ export const markSent = async (req, res) => {
   } catch (err) {
     console.error("Fehler beim Markieren als versendet:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
+  }
+};
+
+/**
+ * POST /api/invoices/:id/send-email
+ * Rechnung per E-Mail mit PDF-Anhang versenden
+ */
+export const sendInvoiceEmail = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  const { to, subject, message } = req.body || {};
+  const email = (to || "").trim();
+
+  if (!email) {
+    return res.status(400).json({ message: "E-Mail-Adresse fehlt." });
+  }
+
+  const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ message: "E-Mail-Adresse ist ungültig." });
+  }
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const fromAddress = process.env.MAIL_FROM || smtpUser;
+  const secure = process.env.SMTP_SECURE === "true" || smtpPort === 465;
+
+  if (!smtpHost || !smtpUser || !smtpPass || !fromAddress) {
+    return res.status(400).json({
+      message: "SMTP-Konfiguration fehlt (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM)."
+    });
+  }
+
+  try {
+    const { buffer, filename, filepath, invoiceRow } = await ensureInvoicePdf(id);
+    const bankSettings = await getBankSettings();
+
+    const addDays = (value, days) => {
+      const d = new Date(value);
+      if (isNaN(d)) return null;
+      d.setDate(d.getDate() + days);
+      return d;
+    };
+
+    const formatDateDe = (value) => {
+      if (!value) return "–";
+      const d = new Date(value);
+      return isNaN(d) ? "–" : d.toLocaleDateString("de-DE");
+    };
+
+    const formatIban = (iban) => {
+      if (!iban) return "-";
+      return iban.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim();
+    };
+
+    const amountValue = invoiceRow.b2b
+      ? n(invoiceRow.net_19) + n(invoiceRow.net_7)
+      : n(invoiceRow.gross_total);
+
+    const amountDisplay = amountValue.toLocaleString("de-DE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+
+    const invoiceDate = formatDateDe(invoiceRow.date);
+    const serviceDate = formatDateDe(invoiceRow.receipt_date || invoiceRow.date);
+    const dueDate = formatDateDe(addDays(invoiceRow.date, 14));
+
+    const bankName = bankSettings?.bank_name || "-";
+    const ibanDisplay = formatIban(bankSettings?.iban);
+    const bicDisplay = (bankSettings?.bic || "-").toUpperCase();
+
+    const recipientName = invoiceRow.recipient_name || "Kunde";
+    const senderName = "Thomas Pilger";
+    const senderCompany = "Waldwirtschaft Heidekönig";
+    const senderPhone = "02241 76649";
+    const senderEmail = "Rechnungen@der-heidekoenig.de";
+
+    const fallbackSubject = `Rechnung Nr. ${invoiceRow.invoice_number}`;
+    const emailSubject = (subject || "").trim() || fallbackSubject;
+
+    const defaultBody = `Hallo ${recipientName},
+
+anbei erhältst du deine Rechnung Nr. ${invoiceRow.invoice_number} vom ${invoiceDate}.
+Der Betrag von ${amountDisplay} € ist fällig bis ${dueDate}.
+
+Bankverbindung:
+${bankName}
+IBAN: ${ibanDisplay}
+BIC: ${bicDisplay}
+
+Bei Fragen melde dich gerne jederzeit.
+
+Vielen Dank für deinen Auftrag!
+
+Beste Grüße
+${senderName}
+${senderCompany}
+${senderPhone} 
+${senderEmail}`;
+
+    const emailText = (message || "").trim() || defaultBody;
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+
+    await transporter.sendMail({
+      from: fromAddress,
+      to: email,
+      subject: emailSubject,
+      text: emailText,
+      attachments: [
+        {
+          filename,
+          // Verwende den gespeicherten Pfad, damit der Anhang zuverlässig als PDF erkannt wird
+          path: filepath,
+          contentType: "application/pdf",
+          contentDisposition: "attachment"
+        }
+      ]
+    });
+
+    await db.query(
+      "UPDATE invoices SET status_sent = true, status_sent_at = NOW() WHERE id = $1",
+      [id]
+    );
+
+    return res.json({ message: "Rechnung per E-Mail verschickt." });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("Fehler beim E-Mail-Versand:", err);
+    return res.status(500).json({ message: "E-Mail konnte nicht versendet werden." });
   }
 };
 
