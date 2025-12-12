@@ -21,6 +21,7 @@
             <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
             <button id="nav-account" class="nav-item">Account</button>
             <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+            <button id="nav-categories" class="nav-item">Einstellungen</button>
             <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
         </nav>
     </aside>
@@ -77,6 +78,7 @@
             <th>Empfänger</th>
             <th>Gesamt (€)</th>
             <th>Status</th>
+            <th>DATEV</th>
             <th>Aktion</th>
           </tr>
         </thead>
@@ -87,8 +89,53 @@
     </main>
   </div>
 
+  <!-- Modal: Rechnung per E-Mail -->
+  <div id="email-modal" class="modal hidden">
+    <div class="modal-content card" style="width: 520px; max-width: 90%;">
+      <div style="display:flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px;">
+        <div>
+          <h3 class="modal-title" id="email-modal-title" style="margin: 0;">Rechnung per E-Mail versenden</h3>
+          <div id="email-modal-subtitle" style="color:#6e6e73; font-size:13px; margin-top:4px;"></div>
+        </div>
+        <button id="email-close" class="secondary-button small-btn">Schließen</button>
+      </div>
+
+      <div id="email-meta" style="display:flex; flex-wrap:wrap; gap:8px; margin: 6px 0 8px;">
+        <span id="email-template-info" style="padding:6px 10px; background:#f5f5f7; border-radius:10px; font-size:12px; color:#4a4a4a;">Vorlage wird geladen…</span>
+        <span id="email-from-info" style="padding:6px 10px; background:#f5f5f7; border-radius:10px; font-size:12px; color:#4a4a4a;">Absender wird geladen…</span>
+        <span id="email-datev-info" style="padding:6px 10px; background:#f5f5f7; border-radius:10px; font-size:12px; color:#4a4a4a;">DATEV wird geladen…</span>
+      </div>
+      <div id="email-template-note" style="font-size:12px; color:#6e6e73; margin-bottom:6px;">Nachricht basiert auf der Kategorien-Vorlage und kann angepasst werden. Über „Senden + DATEV“ geht die Mail zusätzlich an die DATEV-Adresse (BCC).</div>
+
+      <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+        <label style="font-weight:600; font-size:14px;">
+          Empfänger E-Mail
+          <input id="email-to" type="email" class="input" placeholder="kunde@example.com" style="margin-top:6px;">
+        </label>
+
+        <label style="font-weight:600; font-size:14px;">
+          Betreff
+          <input id="email-subject" type="text" class="input" style="margin-top:6px;">
+        </label>
+
+        <label style="font-weight:600; font-size:14px;">
+          Nachricht
+          <textarea id="email-message" class="input" rows="5" style="margin-top:6px; resize: vertical;" placeholder="Ihre Nachricht an den Empfänger"></textarea>
+        </label>
+      </div>
+
+      <div id="email-status" style="font-size:13px; color:#444; min-height:18px; margin-top:10px;"></div>
+
+      <div class="modal-actions">
+        <button id="email-cancel" class="secondary-button">Abbrechen</button>
+        <button id="email-send-datev" class="success-button">Senden + DATEV</button>
+        <button id="email-send" class="primary-button">Senden</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/nav.js"></script>
-  <script src="/invoices.js"></script>
+  <script src="/invoices.js?v=3"></script>
 
   <!-- iOS Circle Loader Popup -->
 <div id="download-progress-popup"
@@ -119,7 +166,6 @@
         <div id="progress-text" class="ios-loader-text">0%</div>
     </div>
 
-</div>
 </div>
 </body>
 </html>

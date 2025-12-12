@@ -46,7 +46,10 @@ permissions = [
   "roles.create",
   "roles.update",
   "roles.delete",
-  "settings.general"
+  "settings.general",
+  "categories.read",
+  "categories.write",
+  "categories.delete",
 ];
 
 // -----------------------------------------------

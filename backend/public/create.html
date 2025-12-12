@@ -18,6 +18,7 @@
         <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
         <button id="nav-account" class="nav-item">Account</button>
         <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+        <button id="nav-categories" class="nav-item">Einstellungen</button>
         <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
       </nav>
     </aside>
@@ -40,8 +41,7 @@
             <h2 class="section-h">Empfänger</h2>
 
             <div class="customer-select-header">
-                <label class="input-label">Kunde auswählen</label>
-                <button id="btn-new-customer" class="secondary-button small-btn">Neuen Kunden</button>
+                <label class="input-label">Name</label> 
             </div>
 
             <div id="customer-selected-tag" class="customer-tag hidden">
@@ -54,8 +54,8 @@
               <div id="customer-results" class="customer-results hidden"></div>
             </div>
 
-            <label class="input-label">Name</label>
-            <input id="r_name" class="input" type="text" />
+            <!-- Internes Namensfeld, wird per JS aus dem Suchfeld befüllt -->
+            <input id="r_name" type="hidden" />
 
             <label class="input-label">Straße</label>
             <input id="r_street" class="input" type="text" />
@@ -79,9 +79,7 @@
 
             <label class="input-label">Kategorie</label>
             <select id="i_category" class="input">
-              <option>GESELLSCHAFTEN</option>
-              <option>GUTSCHEIN</option>
-              <option>WEIHNACHTSMARKT</option>
+              <!-- wird per JS aus /api/categories gefüllt -->
             </select>
 
             <label class="input-label" style="margin-top:18px;">B2B (inner-EU)</label>

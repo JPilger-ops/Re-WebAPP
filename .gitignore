@@ -15,6 +15,11 @@ backend/.tmp/
 backend/core/
 .DS_Store
 
+# SSL Certificates
+backend/certificates/**/*.pem
+backend/certificates/**/*.key
+backend/certificates/**/*.crt
+
 # Logs
 logs/
 *.log

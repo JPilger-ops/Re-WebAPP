@@ -54,6 +54,8 @@ async function loadCustomers() {
 
   // Eingabe im Suchfeld
   search.oninput = () => {
+    // 🔗 Suchfeld = Name (auch für neue Kunden)
+    r_name.value = search.value;
     const q = search.value.toLowerCase();
 
     if (!q) {
@@ -116,6 +118,31 @@ b2b_check.addEventListener("change", () => {
     ust_id.value = "";
   }
 });
+
+async function loadCategoriesForSelect() {
+  try {
+    const res = await fetch("/api/categories", { credentials: "include" });
+
+    if (res.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    const cats = await res.json();
+
+    // Select leeren
+    i_category.innerHTML = "";
+
+    cats.forEach(cat => {
+      const opt = document.createElement("option");
+      opt.value = cat.key;       // für DB-Join
+      opt.textContent = cat.label;
+      i_category.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Fehler beim Laden der Kategorien:", err);
+  }
+}
 
 // -------------------------------------------------------------
 // 🔢 Nächste freie Rechnungsnummer vom Server holen
@@ -448,9 +475,7 @@ text.textContent = "0%";
   popupButtons.style.display = "block";
 
   // Button Events
-  document.getElementById("openInvoice").onclick = () => {
-    window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
-  };
+  document.getElementById("openInvoice").onclick = () => openPdfInline(id);
 
   document.getElementById("downloadInvoice").onclick = () => {
     window.location.href = `/api/invoices/${id}/pdf?mode=download`;
@@ -480,6 +505,26 @@ loadNextInvoiceNumber();
 // Kundenliste fürs Dropdown laden
 loadCustomers();
 
-document.getElementById("btn-new-customer").onclick = () => {
-};
+loadCategoriesForSelect();
 
+async function openPdfInline(invoiceId) {
+  const url = `/api/invoices/${invoiceId}/pdf?mode=inline`;
+
+  const win = window.open(url, "_blank", "noopener");
+  if (win) return;
+
+  try {
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) {
+      alert("PDF konnte nicht geladen werden (Fehler " + res.status + ").");
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch (err) {
+    console.error("PDF laden fehlgeschlagen:", err);
+    alert("PDF konnte nicht geladen werden.");
+  }
+}

@@ -13,12 +13,29 @@ import customerRoutes from "./routes/customer.routes.js"; // NEU
 import { authRequired } from "./middleware/auth.middleware.js";
 import userRoutes from "./routes/user.routes.js";
 import roleRoutes from "./routes/role.routes.js";
+import categoryRoutes from "./routes/category.routes.js";
+import settingsRoutes from "./routes/settings.routes.js";
+import versionRoutes from "./routes/version.routes.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Etags/Caching für API unterdrücken, damit /api/auth/me nicht mit 304 beantwortet wird
+app.disable("etag");
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
+const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use((req, res, next) => {
   res.removeHeader("WWW-Authenticate");
@@ -29,7 +46,7 @@ app.use((req, res, next) => {
    🔧 MIDDLEWARES (MÜSSEN ZUERST!)
 -------------------------- */
 app.use(cors({
-  origin: "http://192.200.255.225",
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(helmet({
@@ -37,7 +54,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 app.use(morgan("dev"));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 /* -------------------------
@@ -54,6 +71,9 @@ app.use("/api/roles", roleRoutes);
 app.use("/api/invoices", authRequired, invoiceRoutes);
 app.use("/api/customers", authRequired, customerRoutes);
 app.use("/api/testdb", authRequired, testRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/version", versionRoutes);
 
 /* -------------------------
    🌐 FRONTEND ROUTE

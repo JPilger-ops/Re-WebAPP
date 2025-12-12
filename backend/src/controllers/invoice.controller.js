@@ -5,6 +5,18 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import { getBankSettings } from "../utils/bankSettings.js";
+import { getDatevSettings } from "../utils/datevSettings.js";
+import nodemailer from "nodemailer";
+import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
+import {
+  buildDatevMailBody,
+  buildDatevMailSubject,
+  buildDatevRecipients,
+  ensureDatevExportColumns,
+  updateDatevExportStatus,
+  DATEV_STATUS,
+} from "../utils/datevExport.js";
 
 dotenv.config();
 
@@ -26,25 +38,263 @@ function normalizeEpcText(text) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-//--- SEPA QR-Code ---
-const {
-  SEPA_CREDITOR_NAME,
-  SEPA_CREDITOR_IBAN,
-  SEPA_CREDITOR_BIC
-} = process.env;
+// 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
+const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
+const pdfDir = path.join(__dirname, "../../pdfs");
 
-// Richtiger Pfad zum Logo
-const logoPath = path.join(__dirname, "../../public/HK_LOGO.png");
-
-let logoBase64 = "";
+let defaultLogoBase64 = "";
 try {
-  logoBase64 = fs.readFileSync(logoPath, "base64");
-  console.log("Logo erfolgreich geladen:", logoPath);
+  defaultLogoBase64 = fs.readFileSync(defaultLogoPath, "base64");
+  console.log("Standard-Logo erfolgreich geladen:", defaultLogoPath);
 } catch (err) {
-  console.error("Logo konnte NICHT geladen werden:", logoPath, err);
+  console.error("Standard-Logo konnte NICHT geladen werden:", defaultLogoPath, err);
 }
 
 const n = (value) => Number(value) || 0;
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const stripHtmlToText = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "</p>\n")
+    .replace(/<\/div>/gi, "</div>\n")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+};
+
+const addDaysSafe = (value, days) => {
+  const date = new Date(value);
+  if (isNaN(date)) return null;
+  date.setDate(date.getDate() + days);
+  return date;
+};
+
+const formatDateDe = (value) => {
+  if (!value) return "–";
+  const d = new Date(value);
+  return isNaN(d) ? "–" : d.toLocaleDateString("de-DE");
+};
+
+const formatIban = (iban) => {
+  if (!iban) return "-";
+  return iban.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim();
+};
+
+const placeholderRegex = (ph) => new RegExp(ph.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+
+const buildPlaceholderMap = (row = {}, bankSettings = {}) => {
+  const amountValue = row.b2b ? n(row.net_19) + n(row.net_7) : n(row.gross_total);
+  const amountDisplay = amountValue.toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return {
+    "{{recipient_name}}": row.recipient_name || "",
+    "{{recipient_street}}": row.recipient_street || "",
+    "{{recipient_zip}}": row.recipient_zip || "",
+    "{{recipient_city}}": row.recipient_city || "",
+    "{{invoice_number}}": row.invoice_number || "",
+    "{{invoice_date}}": formatDateDe(row.date),
+    "{{due_date}}": formatDateDe(addDaysSafe(row.date, 14)),
+    "{{amount}}": amountDisplay ? `${amountDisplay} €` : "",
+    "{{bank_name}}": bankSettings.bank_name || "",
+    "{{iban}}": formatIban(bankSettings.iban),
+    "{{bic}}": (bankSettings.bic || "").toUpperCase(),
+  };
+};
+
+const replacePlaceholders = (template = "", replacements = {}, escapeValues = true) => {
+  let result = String(template ?? "");
+  Object.entries(replacements).forEach(([ph, val]) => {
+    const safeValue = escapeValues ? escapeHtml(val) : val;
+    result = result.replace(placeholderRegex(ph), safeValue);
+  });
+  return result;
+};
+
+const loadInvoiceWithCategory = async (id) => {
+  await ensureInvoiceCategoriesTable();
+  await ensureDatevExportColumns();
+  const result = await db.query(
+    `
+    SELECT
+      i.*,
+      r.name   AS recipient_name,
+      r.street AS recipient_street,
+      r.zip    AS recipient_zip,
+      r.city   AS recipient_city,
+      r.email  AS recipient_email,
+      r.phone  AS recipient_phone,
+      c.id     AS category_id,
+      c.key    AS category_key,
+      c.label  AS category_label,
+      ea.display_name AS email_display_name,
+      ea.email_address AS email_address,
+      ea.smtp_host AS email_smtp_host,
+      ea.smtp_port AS email_smtp_port,
+      ea.smtp_secure AS email_smtp_secure,
+      ea.smtp_user AS email_smtp_user,
+      ea.smtp_pass AS email_smtp_pass,
+      tpl.subject AS tpl_subject,
+      tpl.body_html AS tpl_body_html
+    FROM invoices i
+    LEFT JOIN recipients r ON i.recipient_id = r.id
+    LEFT JOIN invoice_categories c ON c.key = i.category
+    LEFT JOIN category_email_accounts ea ON ea.category_id = c.id
+    LEFT JOIN category_templates tpl ON tpl.category_id = c.id
+    WHERE i.id = $1
+  `,
+    [id]
+  );
+
+  if (result.rowCount === 0) {
+    const err = new Error("Rechnung nicht gefunden");
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+  return result.rows[0];
+};
+
+const resolveSmtpConfig = (row = {}) => {
+  const envHost = process.env.SMTP_HOST;
+  const envPort = Number(process.env.SMTP_PORT || 587);
+  const envUser = process.env.SMTP_USER;
+  const envPass = process.env.SMTP_PASS;
+  const envFrom = process.env.MAIL_FROM || envUser;
+  const envSecure = process.env.SMTP_SECURE === "true" || envPort === 465;
+
+  if (
+    row.email_address &&
+    row.email_smtp_host &&
+    row.email_smtp_port &&
+    row.email_smtp_user &&
+    row.email_smtp_pass
+  ) {
+    const from = row.email_display_name
+      ? `${row.email_display_name} <${row.email_address}>`
+      : row.email_address;
+    return {
+      host: row.email_smtp_host,
+      port: Number(row.email_smtp_port),
+      secure: row.email_smtp_secure === false ? false : true,
+      authUser: row.email_smtp_user,
+      authPass: row.email_smtp_pass,
+      from,
+      usingCategoryAccount: true,
+    };
+  }
+
+  if (envHost && envUser && envPass && envFrom) {
+    return {
+      host: envHost,
+      port: envPort,
+      secure: envSecure,
+      authUser: envUser,
+      authPass: envPass,
+      from: envFrom,
+      usingCategoryAccount: false,
+    };
+  }
+
+  return null;
+};
+
+const buildEmailContent = (row, bankSettings = {}) => {
+  const placeholders = buildPlaceholderMap(row, bankSettings);
+  const fallbackSubject = `Rechnung Nr. ${row.invoice_number}`;
+
+  const defaultBody = `Hallo ${row.recipient_name || "Kunde"},
+
+anbei erhältst du deine Rechnung Nr. ${row.invoice_number} vom ${formatDateDe(row.date)}.
+Der Betrag von ${placeholders["{{amount}}"] || ""} ist fällig bis ${placeholders["{{due_date}}"]}.
+
+Bankverbindung:
+${placeholders["{{bank_name}}"] || "-"}
+IBAN: ${placeholders["{{iban}}"] || "-"}
+BIC: ${placeholders["{{bic}}"] || "-"}
+
+Bei Fragen melde dich gerne jederzeit.
+
+Vielen Dank für deinen Auftrag!
+
+Beste Grüße
+Waldwirtschaft Heidekönig
+Thomas Pilger
+02241 76649`;
+
+  const subject = row.tpl_subject
+    ? replacePlaceholders(row.tpl_subject, placeholders, false) || fallbackSubject
+    : fallbackSubject;
+
+  const bodyHtml = row.tpl_body_html
+    ? replacePlaceholders(row.tpl_body_html, placeholders, true)
+    : null;
+
+  const bodyText = bodyHtml ? stripHtmlToText(bodyHtml) : defaultBody;
+
+  return {
+    subject,
+    bodyHtml,
+    bodyText,
+    templateUsed: Boolean(row.tpl_subject || row.tpl_body_html),
+    category: {
+      id: row.category_id,
+      key: row.category_key,
+      label: row.category_label,
+    },
+  };
+};
+
+// Setzt den PDF-Metadaten-Titel (Acrobat zeigt sonst file://invoice_temp.html)
+function setPdfTitle(buffer, title) {
+  try {
+    const escapePdfString = (text) =>
+      String(text || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/\(/g, "\\(")
+        .replace(/\)/g, "\\)");
+
+    const pdfText = buffer.toString("latin1");
+    const escapedTitle = escapePdfString(title);
+    const titleRegex = /\/Title\s*\(([^)]*)\)/;
+
+    if (titleRegex.test(pdfText)) {
+      const updated = pdfText.replace(titleRegex, `/Title (${escapedTitle})`);
+      return Buffer.from(updated, "latin1");
+    }
+
+    // Fallback: rohe Zeichenkette austauschen, falls Chromium "invoice_temp.html" reinschreibt
+    const needle = "invoice_temp.html";
+    const idx = pdfText.indexOf(needle);
+    if (idx !== -1) {
+      const target = escapedTitle;
+      const maxLen = needle.length;
+      let replacement = target.slice(0, maxLen);
+      if (replacement.length < maxLen) {
+        replacement = replacement.padEnd(maxLen, " ");
+      }
+      const updated = pdfText.slice(0, idx) + replacement + pdfText.slice(idx + maxLen);
+      return Buffer.from(updated, "latin1");
+    }
+
+    return buffer;
+  } catch (err) {
+    console.warn("Konnte PDF-Titel nicht setzen, nutze Original-PDF.", err);
+    return buffer;
+  }
+}
 
 function calculateTotals(items) {
   let net_19 = 0, vat_19 = 0, gross_19 = 0;
@@ -319,10 +569,18 @@ for (let i = 0; i < items.length; i++) {
  */
 export const getAllInvoices = async (req, res) => {
   try {
+    await ensureInvoiceCategoriesTable();
+    await ensureDatevExportColumns();
     const result = await db.query(`
-      SELECT invoices.*, recipients.name AS recipient_name
+      SELECT 
+        invoices.*, 
+        recipients.name AS recipient_name, 
+        recipients.email AS recipient_email,
+        c.id AS category_id,
+        c.label AS category_label
       FROM invoices
       LEFT JOIN recipients ON invoices.recipient_id = recipients.id
+      LEFT JOIN invoice_categories c ON c.key = invoices.category
       ORDER BY invoices.id DESC
     `);
 
@@ -342,26 +600,26 @@ export const getInvoiceById = async (req, res) => {
 
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
+  await ensureInvoiceCategoriesTable();
+  await ensureDatevExportColumns();
   const client = await db.connect();
 
   try {
-    const invoiceResult = await client.query(
-      `
+    const invoiceResult = await client.query(`
       SELECT 
         i.*,
-        r.id AS recipient_id,
-        r.name AS recipient_name,
+        r.name  AS recipient_name,
         r.street AS recipient_street,
-        r.zip AS recipient_zip,
-        r.city AS recipient_city,
+        r.zip   AS recipient_zip,
+        r.city  AS recipient_city,
         r.email AS recipient_email,
-        r.phone AS recipient_phone
+        r.phone AS recipient_phone,
+        c.logo_file AS category_logo_file
       FROM invoices i
       LEFT JOIN recipients r ON i.recipient_id = r.id
+      LEFT JOIN invoice_categories c ON c.key = i.category
       WHERE i.id = $1
-      `,
-      [id]
-    );
+    `, [id]);
 
     if (invoiceResult.rowCount === 0)
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
@@ -377,6 +635,9 @@ export const getInvoiceById = async (req, res) => {
       status_sent: row.status_sent,
       status_sent_at: row.status_sent_at,
       status_paid_at: row.status_paid_at,
+      datev_export_status: row.datev_export_status,
+      datev_exported_at: row.datev_exported_at,
+      datev_export_error: row.datev_export_error,
       net_19: row.net_19,
       vat_19: row.vat_19,
       gross_19: row.gross_19,
@@ -423,25 +684,60 @@ export const getInvoicePdf = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
+  try {
+    const { buffer, filename } = await ensureInvoicePdf(id);
+    const mode = req.query.mode;
+
+    res.setHeader("Content-Type", "application/pdf");
+    if (mode === "inline") {
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    } else {
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    }
+
+    return res.send(buffer);
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("Fehler bei der PDF-Erstellung:", err);
+    return res.status(500).json({ error: "Fehler bei der PDF-Erstellung" });
+  }
+};
+
+/**
+ * Erstellt bei Bedarf das PDF und liefert Buffer + Metadaten zurück
+ */
+async function ensureInvoicePdf(id) {
+  await ensureInvoiceCategoriesTable();
   const client = await db.connect();
 
   try {
     const invoiceResult = await client.query(`
       SELECT 
         i.*,
-        r.name AS recipient_name,
+        r.name   AS recipient_name,
         r.street AS recipient_street,
-        r.zip AS recipient_zip,
-        r.city AS recipient_city
+        r.zip    AS recipient_zip,
+        r.city   AS recipient_city,
+        r.email  AS recipient_email,
+        r.phone  AS recipient_phone,
+        c.logo_file AS category_logo_file
       FROM invoices i
       LEFT JOIN recipients r ON i.recipient_id = r.id
+      LEFT JOIN invoice_categories c ON c.key = i.category
       WHERE i.id = $1
     `, [id]);
 
-    if (invoiceResult.rowCount === 0)
-      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    if (invoiceResult.rowCount === 0) {
+      const error = new Error("Rechnung nicht gefunden");
+      error.code = "NOT_FOUND";
+      throw error;
+    }
 
     const row = invoiceResult.rows[0];
+    const filename = `RE-${row.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
 
     const invoice = {
       invoice_number: row.invoice_number,
@@ -462,9 +758,25 @@ export const getInvoicePdf = async (req, res) => {
       }
     };
 
-    // Hilfswerte für die Anzeige im PDF
-    const totalNet = invoice.net_19 + invoice.net_7;
-    const totalVat = invoice.vat_19 + invoice.vat_7;
+    let logoBase64ForInvoice = defaultLogoBase64;
+    if (row.category_logo_file) {
+      try {
+        const categoryLogoPath = path.join(
+          __dirname,
+          "../../public/logos",
+          row.category_logo_file
+        );
+
+        if (fs.existsSync(categoryLogoPath)) {
+          logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
+          console.log("Kategorie-Logo geladen:", categoryLogoPath);
+        } else {
+          console.warn("Kategorie-Logo nicht gefunden, nutze Default-Logo:", categoryLogoPath);
+        }
+      } catch (err) {
+        console.warn("Fehler beim Laden des Kategorie-Logos, nutze Default-Logo:", err);
+      }
+    }
 
     const itemsResult = await client.query(
       "SELECT description, quantity, unit_price_gross, line_total_gross FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
@@ -472,6 +784,7 @@ export const getInvoicePdf = async (req, res) => {
     );
 
     const items = itemsResult.rows;
+    const bankSettings = await getBankSettings();
 
     const formattedDate =
       invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
@@ -495,11 +808,13 @@ export const getInvoicePdf = async (req, res) => {
       })
       .join("");
 
-        // 🔹 SEPA QR-Daten im EPC-Format
-    // Werte aus .env laden – mit Fallback, falls etwas fehlt
-    const creditorName = SEPA_CREDITOR_NAME || "UNBEKANNT";
-    const creditorIban = SEPA_CREDITOR_IBAN || "DE00000000000000000000";
-    const creditorBic = SEPA_CREDITOR_BIC || "UNKNOWNBIC";
+    // 🔹 SEPA QR-Daten im EPC-Format
+    // Werte aus Settings (mit Fallback), Spaces entfernen
+    const creditorName = normalizeEpcText(
+      bankSettings.account_holder || bankSettings.bank_name || "UNBEKANNT"
+    );
+    const creditorIban = (bankSettings.iban || "DE00000000000000000000").replace(/\s+/g, "");
+    const creditorBic = (bankSettings.bic || "UNKNOWNBIC").replace(/\s+/g, "");
 
     const amount = invoice.gross_total || 0; // Number
     const sepaAmount = `EUR${amount.toFixed(2)}`; // z.B. "EUR123.45"
@@ -529,7 +844,15 @@ export const getInvoicePdf = async (req, res) => {
     });
 
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
-    const html = generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64);
+    const html = generateInvoiceHtml(
+      invoice,
+      formattedDate,
+      formattedReceiptDate,
+      itemsRowsHtml,
+      sepaQrBase64,
+      logoBase64ForInvoice,
+      bankSettings
+    );
 
     //
     // ⭐ PUPPETEER FIX – DAMIT LOGO & ASSETS LADEN ⭐
@@ -557,50 +880,46 @@ export const getInvoicePdf = async (req, res) => {
       waitUntil: "networkidle0"
     });
 
-    const pdfBuffer = await page.pdf({
+    let pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true
     });
 
+    // PDF-Metadaten-Titel auf Rechnungsdatei setzen
+    pdfBuffer = setPdfTitle(pdfBuffer, filename);
+
     await browser.close();
 
-    const pdfDir = path.join(__dirname, "../../pdfs");
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
-
-    const filename = `RE-${invoice.invoice_number}.pdf`;
-    const filepath = path.join(pdfDir, filename);
 
     fs.writeFileSync(filepath, pdfBuffer);
 
-        const mode = req.query.mode;
-
-    res.setHeader("Content-Type", "application/pdf");
-
-    if (mode === "inline") {
-      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-    } else if (mode === "download") {
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    } else {
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    }
-
-    return res.send(pdfBuffer);
-
-  } catch (err) {
-    console.error("Fehler bei der PDF-Erstellung:", err);
-    return res.status(500).json({ error: "Fehler bei der PDF-Erstellung" });
+    return { buffer: pdfBuffer, filename, filepath, invoiceRow: row };
   } finally {
     client.release();
   }
-};
+}
 
-function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64) {
+function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice, bankSettings) {
+  const formatIban = (iban) => {
+    if (!iban) return "-";
+    return iban.replace(/(.{4})/g, "$1 ").trim();
+  };
+
+  const bankDisplay = {
+    account_holder: bankSettings?.account_holder || "-",
+    bank_name: bankSettings?.bank_name || "-",
+    iban: formatIban(bankSettings?.iban),
+    bic: (bankSettings?.bic || "-").toUpperCase(),
+  };
+
   return `
 <!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8" />
+<title>RE-${invoice.invoice_number}</title>
 
 <style>
   @page { size: A4; margin: 0; }
@@ -784,7 +1103,7 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
   "></div>
 
   <div class="brand-box">
-  <img src="data:image/png;base64,${logoBase64}" />
+  <img src="data:image/png;base64,${logoBase64ForInvoice}" />
   <div class="brand-sub">
       Thomas Pilger<br>
       Mauspfad 3 · 53842 Troisdorf<br>
@@ -875,9 +1194,8 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
     <div class="footer">
       Steuernummer: 220/5060/2434 · USt-IdNr.: DE123224453<br>
-      Bankverbindung: VR-Bank Bonn Rhein-Sieg eG · 
-      IBAN: DE48 3706 9520 1104 1850 25 · 
-      BIC: GENODED1RST
+      Bank: ${bankDisplay.bank_name} · IBAN: ${bankDisplay.iban} · BIC: ${bankDisplay.bic}<br>
+      Kontoinhaber: ${bankDisplay.account_holder}
     </div>
 
 </div>
@@ -906,6 +1224,244 @@ export const markSent = async (req, res) => {
   } catch (err) {
     console.error("Fehler beim Markieren als versendet:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
+  }
+};
+
+/**
+ * GET /api/invoices/:id/email-preview
+ * Liefert Betreff/Body (mit Platzhaltern ersetzt) sowie Absender-Info
+ */
+export const getInvoiceEmailPreview = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  try {
+    const row = await loadInvoiceWithCategory(id);
+    const bankSettings = await getBankSettings();
+    const content = buildEmailContent(row, bankSettings);
+    const smtp = resolveSmtpConfig(row);
+    const datevSettings = await getDatevSettings();
+    const datevEmail = (datevSettings?.email || "").trim();
+
+    return res.json({
+      subject: content.subject,
+      body_html: content.bodyHtml,
+      body_text: content.bodyText,
+      template_used: content.templateUsed,
+      category: content.category,
+      from: smtp?.from || null,
+      using_category_account: smtp?.usingCategoryAccount || false,
+      smtp_ready: Boolean(smtp),
+      datev_email: datevEmail || null,
+      datev_configured: Boolean(datevEmail),
+    });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("Fehler beim E-Mail-Preview:", err);
+    return res.status(500).json({ message: "E-Mail-Vorschau konnte nicht geladen werden." });
+  }
+};
+
+/**
+ * POST /api/invoices/:id/send-email
+ * Rechnung per E-Mail mit PDF-Anhang versenden
+ */
+export const sendInvoiceEmail = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  const { to, subject, message, html, include_datev } = req.body || {};
+  const email = (to || "").trim();
+  const includeDatev = include_datev === true;
+
+  if (!email) {
+    return res.status(400).json({ message: "E-Mail-Adresse fehlt." });
+  }
+
+  const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ message: "E-Mail-Adresse ist ungültig." });
+  }
+
+  try {
+    await ensureDatevExportColumns();
+    const { filename, filepath } = await ensureInvoicePdf(id);
+    const row = await loadInvoiceWithCategory(id);
+    const bankSettings = await getBankSettings();
+    const content = buildEmailContent(row, bankSettings);
+    const smtpConfig = resolveSmtpConfig(row);
+    const datevSettings = includeDatev ? await getDatevSettings() : null;
+    const datevEmail = includeDatev ? (datevSettings?.email || "").trim() : "";
+
+    if (!smtpConfig) {
+      return res.status(400).json({
+        message:
+          "Kein SMTP-Konto hinterlegt. Bitte entweder in der Kategorie ein Konto speichern oder die globalen SMTP-ENV-Variablen setzen.",
+      });
+    }
+
+    if (includeDatev && !datevEmail) {
+      return res.status(400).json({
+        message: "Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.",
+      });
+    }
+
+    const emailSubject = (subject || "").trim() || content.subject;
+    const emailText = (message || "").trim() || content.bodyText;
+    const templateBody = content.bodyText?.trim() || "";
+    const incomingBody = (message || "").trim();
+
+    let emailHtml = (html || "").trim();
+    if (!emailHtml && content.bodyHtml && (!incomingBody || incomingBody === templateBody)) {
+      emailHtml = content.bodyHtml;
+    }
+    if (!emailHtml) {
+      emailHtml = escapeHtml(emailText).replace(/\n/g, "<br>");
+    }
+
+    const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
+
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.authUser,
+        pass: smtpConfig.authPass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: smtpConfig.from,
+      to: recipients.to,
+      // DATEV-Adresse als BCC, damit der Kunde die interne Export-Adresse nicht sieht.
+      ...(recipients.includeDatev ? { bcc: recipients.bcc } : {}),
+      subject: emailSubject,
+      text: emailText,
+      html: emailHtml,
+      attachments: [
+        {
+          filename,
+          path: filepath,
+          contentType: "application/pdf",
+          contentDisposition: "attachment",
+        },
+      ],
+    });
+
+    await db.query(
+      "UPDATE invoices SET status_sent = true, status_sent_at = NOW() WHERE id = $1",
+      [id]
+    );
+
+    if (includeDatev) {
+      await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
+    }
+
+    const successMessage = includeDatev
+      ? "E-Mail wurde verschickt (Kunde + DATEV)."
+      : "E-Mail wurde verschickt.";
+
+    return res.json({ message: successMessage });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    if (includeDatev) {
+      try {
+        await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV-Versand fehlgeschlagen.");
+      } catch (statusErr) {
+        console.error("DATEV-Status konnte nicht aktualisiert werden:", statusErr);
+      }
+    }
+    console.error("Fehler beim E-Mail-Versand:", err);
+    const msg =
+      err?.code === "EAUTH"
+        ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."
+        : err?.message || "E-Mail konnte nicht versendet werden.";
+    return res.status(500).json({ message: msg });
+  }
+};
+
+/**
+ * POST /api/invoices/:id/datev-export
+ * Rechnung direkt an DATEV-E-Mail senden
+ */
+export const exportInvoiceToDatev = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  try {
+    await ensureDatevExportColumns();
+    const datevSettings = await getDatevSettings();
+    const datevEmail = (datevSettings?.email || "").trim();
+
+    if (!datevEmail) {
+      return res.status(400).json({
+        message: "Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.",
+      });
+    }
+
+    const { filename, filepath } = await ensureInvoicePdf(id);
+    const row = await loadInvoiceWithCategory(id);
+    const bankSettings = await getBankSettings();
+    const smtpConfig = resolveSmtpConfig(row);
+
+    if (!smtpConfig) {
+      return res.status(400).json({
+        message: "Kein SMTP-Konto hinterlegt. Bitte Kategorie- oder Standard-SMTP konfigurieren.",
+      });
+    }
+
+    const subject = buildDatevMailSubject(row.invoice_number);
+    const bodyText = buildDatevMailBody(row, bankSettings);
+
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.authUser,
+        pass: smtpConfig.authPass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: smtpConfig.from,
+      to: datevEmail,
+      subject,
+      text: bodyText,
+      html: bodyText.replace(/\n/g, "<br>"),
+      attachments: [
+        {
+          filename,
+          path: filepath,
+          contentType: "application/pdf",
+          contentDisposition: "attachment",
+        },
+      ],
+    });
+
+    await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
+
+    return res.json({ message: "Rechnung wurde an DATEV gesendet." });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("DATEV Export fehlgeschlagen:", err);
+    try {
+      await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV Export fehlgeschlagen.");
+    } catch (statusErr) {
+      console.error("DATEV-Status konnte nicht aktualisiert werden:", statusErr);
+    }
+    const message =
+      err?.code === "EAUTH"
+        ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."
+        : err?.message || "DATEV Export fehlgeschlagen.";
+    return res.status(500).json({ message });
   }
 };
 
