@@ -22,6 +22,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use((req, res, next) => {
   res.removeHeader("WWW-Authenticate");
   next();
@@ -31,7 +36,7 @@ app.use((req, res, next) => {
    🔧 MIDDLEWARES (MÜSSEN ZUERST!)
 -------------------------- */
 app.use(cors({
-  origin: "http://192.200.255.225",
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(helmet({
