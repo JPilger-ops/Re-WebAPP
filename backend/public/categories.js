@@ -28,6 +28,21 @@
   const canDeleteCategories = hasPerm("categories.delete") || canEditBank;
   let categoriesCache = [];
   let logosCache = [];
+  let currentCategoryId = null;
+  let lastFocusedField = null;
+  const placeholders = [
+    "{{recipient_name}}",
+    "{{recipient_street}}",
+    "{{recipient_zip}}",
+    "{{recipient_city}}",
+    "{{invoice_number}}",
+    "{{invoice_date}}",
+    "{{due_date}}",
+    "{{amount}}",
+    "{{bank_name}}",
+    "{{iban}}",
+    "{{bic}}",
+  ];
 
   const elements = {
     catError: document.getElementById("error-box"),
@@ -45,11 +60,35 @@
     bankBic: document.getElementById("bank-bic"),
     bankSave: document.getElementById("bank-save"),
     bankReload: document.getElementById("bank-reload"),
-    catFilter: document.getElementById("cat-filter"),
     logoDropzone: document.getElementById("logo-dropzone"),
     logoInput: document.getElementById("logo-file"),
     logoButton: document.getElementById("logo-file-btn"),
     logoFileName: document.getElementById("logo-file-name"),
+    emailModal: document.getElementById("email-modal"),
+    emailModalClose: document.getElementById("email-modal-close"),
+    emailError: document.getElementById("email-error"),
+    emailSuccess: document.getElementById("email-success"),
+    emailTitle: document.getElementById("email-modal-title"),
+    emailDisplay: document.getElementById("email-display"),
+    emailAddress: document.getElementById("email-address"),
+    smtpHost: document.getElementById("smtp-host"),
+    smtpPort: document.getElementById("smtp-port"),
+    smtpSecure: document.getElementById("smtp-secure"),
+    smtpUser: document.getElementById("smtp-user"),
+    smtpPass: document.getElementById("smtp-pass"),
+    emailTestBtn: document.getElementById("email-test"),
+    emailSaveBtn: document.getElementById("email-save"),
+    emailTestResult: document.getElementById("email-test-result"),
+    templateModal: document.getElementById("template-modal"),
+    templateModalClose: document.getElementById("template-modal-close"),
+    templateError: document.getElementById("template-error"),
+    templateSuccess: document.getElementById("template-success"),
+    templateTitle: document.getElementById("template-modal-title"),
+    tplSubject: document.getElementById("tpl-subject"),
+    tplBody: document.getElementById("tpl-body"),
+    tplSaveBtn: document.getElementById("tpl-save"),
+    tplPreviewBtn: document.getElementById("tpl-preview"),
+    placeholderList: document.getElementById("placeholder-list"),
   };
 
   const escapeHtml = (value) =>
@@ -119,6 +158,28 @@
     box.classList.remove("hidden");
   };
 
+  const showModal = (modal) => {
+    if (!modal) return;
+    modal.classList.remove("hidden");
+  };
+
+  const hideModal = (modal) => {
+    if (!modal) return;
+    modal.classList.add("hidden");
+  };
+
+  const insertAtCursor = (input, text) => {
+    if (!input) return;
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    const before = input.value.slice(0, start);
+    const after = input.value.slice(end);
+    input.value = before + text + after;
+    const pos = start + text.length;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+  };
+
   const ensureLogoOption = (filename) => {
     if (!filename) return;
     if (!logosCache.includes(filename)) {
@@ -174,6 +235,39 @@
   const clearBankMessages = () => {
     hideBox(elements.bankError);
     hideBox(elements.bankSuccess);
+  };
+
+  const clearEmailMessages = () => {
+    hideBox(elements.emailError);
+    hideBox(elements.emailSuccess);
+    if (elements.emailTestResult) elements.emailTestResult.textContent = "";
+  };
+
+  const clearTemplateMessages = () => {
+    hideBox(elements.templateError);
+    hideBox(elements.templateSuccess);
+  };
+
+  const renderPlaceholders = () => {
+    if (!elements.placeholderList) return;
+    elements.placeholderList.innerHTML = "";
+    placeholders.forEach((ph) => {
+      const pill = document.createElement("div");
+      pill.className = "placeholder-pill";
+      pill.textContent = ph;
+      pill.draggable = true;
+      pill.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", ph);
+      });
+      pill.addEventListener("click", () => {
+        if (lastFocusedField) {
+          insertAtCursor(lastFocusedField, ph);
+        } else if (elements.tplBody) {
+          insertAtCursor(elements.tplBody, ph);
+        }
+      });
+      elements.placeholderList.appendChild(pill);
+    });
   };
 
   async function loadLogos(preselect) {
@@ -343,24 +437,11 @@
       categoriesCache = await res.json();
       categoriesCache.forEach((cat) => ensureLogoOption(cat.logo_file));
       renderLogoOptions(elements.newLogo?.value);
-      renderCategoryTable(getFilteredCategories());
+      renderCategoryTable(categoriesCache);
     } catch (err) {
       console.error("Kategorien laden fehlgeschlagen", err);
       showBox(elements.catError, "Kategorien konnten nicht geladen werden.");
     }
-  }
-
-  function getFilteredCategories() {
-    if (!elements.catFilter) return categoriesCache;
-    const term = elements.catFilter.value.trim().toLowerCase();
-    if (!term) return categoriesCache;
-
-    return categoriesCache.filter((cat) => {
-      return (
-        (cat.key || "").toLowerCase().includes(term) ||
-        (cat.label || "").toLowerCase().includes(term)
-      );
-    });
   }
 
   function renderCategoryTable(categories) {
@@ -428,10 +509,12 @@
       const key = escapeHtml(cat.key);
       const label = escapeHtml(cat.label);
       const rawLogo = (cat.logo_file || "").trim();
-      const logo = escapeHtml(rawLogo);
-      const logoSrc = rawLogo ? `/logos/${encodeURIComponent(rawLogo)}` : "";
+      const emailAddress = escapeHtml(cat.email_account?.email_address || "Kein Konto");
+      const hasTemplate = !!cat.template;
 
       const actions = [];
+      actions.push(`<button class="secondary-button small-btn" data-action="email" data-id="${cat.id}">E-Mail-Konto</button>`);
+      actions.push(`<button class="secondary-button small-btn" data-action="template" data-id="${cat.id}">Template</button>`);
       if (canWriteCategories) {
         actions.push(`<button class="secondary-button small-btn" data-action="save" data-id="${cat.id}">Speichern</button>`);
       }
@@ -457,6 +540,11 @@
         <td>
           ${buildLogoThumb(cat)}
         </td>
+        <td>
+          <div class="settings-note">Konto</div>
+          <div>${emailAddress}</div>
+          <div class="settings-note">${hasTemplate ? "Template vorhanden" : "Kein Template"}</div>
+        </td>
         <td class="table-actions">
           ${actionMarkup}
         </td>
@@ -474,6 +562,7 @@
 
     const id = btn.dataset.id;
     const action = btn.dataset.action;
+    const cat = categoriesCache.find((c) => c.id == id);
 
     if (action === "save") {
       if (!canWriteCategories) {
@@ -513,6 +602,16 @@
         console.error("Kategorie speichern fehlgeschlagen", err);
         showBox(elements.catError, "Fehler beim Speichern der Kategorie.");
       }
+    }
+
+    if (action === "email") {
+      if (!cat) return;
+      openEmailModal(cat);
+    }
+
+    if (action === "template") {
+      if (!cat) return;
+      openTemplateModal(cat);
     }
 
     if (action === "delete") {
@@ -602,6 +701,133 @@
     } catch (err) {
       console.error("Kategorie anlegen fehlgeschlagen", err);
       showBox(elements.catError, "Fehler beim Anlegen der Kategorie.");
+    }
+  }
+
+  function openEmailModal(cat) {
+    currentCategoryId = cat.id;
+    clearEmailMessages();
+    if (elements.emailTitle) elements.emailTitle.textContent = `${cat.label || cat.key || "Kategorie"} · E-Mail`;
+    const acct = cat.email_account || {};
+    if (elements.emailDisplay) elements.emailDisplay.value = acct.display_name || "";
+    if (elements.emailAddress) elements.emailAddress.value = acct.email_address || "";
+    if (elements.smtpHost) elements.smtpHost.value = acct.smtp_host || "smtp.ionos.de";
+    if (elements.smtpPort) elements.smtpPort.value = acct.smtp_port || 465;
+    if (elements.smtpSecure) elements.smtpSecure.checked = acct.smtp_secure !== false;
+    if (elements.smtpUser) elements.smtpUser.value = acct.smtp_user || (acct.email_address || "");
+    if (elements.smtpPass) elements.smtpPass.value = "";
+    showModal(elements.emailModal);
+  }
+
+  function collectEmailPayload() {
+    return {
+      display_name: elements.emailDisplay?.value || "",
+      email_address: elements.emailAddress?.value || "",
+      smtp_host: elements.smtpHost?.value || "",
+      smtp_port: elements.smtpPort?.value ? Number(elements.smtpPort.value) : null,
+      smtp_secure: elements.smtpSecure?.checked ?? true,
+      smtp_user: elements.smtpUser?.value || "",
+      smtp_pass: elements.smtpPass?.value || "",
+    };
+  }
+
+  async function saveEmailAccount() {
+    clearEmailMessages();
+    if (!currentCategoryId) return;
+    try {
+      const payload = collectEmailPayload();
+      const res = await fetch(`/api/categories/${currentCategoryId}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.emailError, body.message || "Speichern fehlgeschlagen.");
+        return;
+      }
+      showBox(elements.emailSuccess, "E-Mail-Konto gespeichert.");
+      await loadCategories();
+    } catch (err) {
+      console.error("E-Mail speichern fehlgeschlagen", err);
+      showBox(elements.emailError, "Speichern fehlgeschlagen.");
+    }
+  }
+
+  async function testEmailAccount() {
+    clearEmailMessages();
+    if (!currentCategoryId) return;
+    const payload = collectEmailPayload();
+    try {
+      const res = await fetch(`/api/categories/${currentCategoryId}/email/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (!res.ok || body.ok === false) {
+        showBox(elements.emailError, body.message || "Test fehlgeschlagen.");
+        return;
+      }
+      if (elements.emailTestResult) elements.emailTestResult.textContent = "Verbindung erfolgreich.";
+      showBox(elements.emailSuccess, "Test erfolgreich.");
+    } catch (err) {
+      console.error("E-Mail-Test fehlgeschlagen", err);
+      showBox(elements.emailError, "Test fehlgeschlagen.");
+    }
+  }
+
+  function openTemplateModal(cat) {
+    currentCategoryId = cat.id;
+    clearTemplateMessages();
+    if (elements.templateTitle) elements.templateTitle.textContent = `${cat.label || cat.key || "Kategorie"} · Template`;
+    const tpl = cat.template || {};
+    if (elements.tplSubject) elements.tplSubject.value = tpl.subject || "";
+    if (elements.tplBody) elements.tplBody.value = tpl.body_html || "";
+    showModal(elements.templateModal);
+    renderPlaceholders();
+  }
+
+  async function saveTemplate() {
+    clearTemplateMessages();
+    if (!currentCategoryId) return;
+    const subject = elements.tplSubject?.value || "";
+    const body_html = elements.tplBody?.value || "";
+    if (!subject || !body_html) {
+      showBox(elements.templateError, "Bitte Subject und Inhalt ausfüllen.");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/categories/${currentCategoryId}/template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ subject, body_html }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.templateError, body.message || "Speichern fehlgeschlagen.");
+        return;
+      }
+      showBox(elements.templateSuccess, "Template gespeichert.");
+      await loadCategories();
+    } catch (err) {
+      console.error("Template speichern fehlgeschlagen", err);
+      showBox(elements.templateError, "Speichern fehlgeschlagen.");
     }
   }
 
@@ -777,9 +1003,6 @@
   }
   if (elements.bankSave) elements.bankSave.addEventListener("click", saveBankData);
   if (elements.bankReload) elements.bankReload.addEventListener("click", loadBankData);
-  if (elements.catFilter) {
-    elements.catFilter.addEventListener("input", () => renderCategoryTable(getFilteredCategories()));
-  }
   if (elements.logoButton && canWriteCategories) {
     elements.logoButton.addEventListener("click", () => elements.logoInput?.click());
   }
@@ -807,6 +1030,36 @@
       processLogoFile(file);
     });
     elements.logoDropzone.addEventListener("click", () => elements.logoInput?.click());
+  }
+
+  if (elements.emailModalClose) elements.emailModalClose.addEventListener("click", () => hideModal(elements.emailModal));
+  if (elements.templateModalClose) elements.templateModalClose.addEventListener("click", () => hideModal(elements.templateModal));
+  if (elements.emailSaveBtn) elements.emailSaveBtn.addEventListener("click", saveEmailAccount);
+  if (elements.emailTestBtn) elements.emailTestBtn.addEventListener("click", testEmailAccount);
+  if (elements.tplSaveBtn) elements.tplSaveBtn.addEventListener("click", saveTemplate);
+  if (elements.tplPreviewBtn) {
+    elements.tplPreviewBtn.addEventListener("click", () => {
+      alert("Preview:\n\n" + (elements.tplBody?.value || ""));
+    });
+  }
+
+  if (elements.tplSubject) {
+    elements.tplSubject.addEventListener("focus", () => (lastFocusedField = elements.tplSubject));
+    elements.tplSubject.addEventListener("dragover", (e) => e.preventDefault());
+    elements.tplSubject.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const text = e.dataTransfer.getData("text/plain");
+      insertAtCursor(elements.tplSubject, text);
+    });
+  }
+  if (elements.tplBody) {
+    elements.tplBody.addEventListener("focus", () => (lastFocusedField = elements.tplBody));
+    elements.tplBody.addEventListener("dragover", (e) => e.preventDefault());
+    elements.tplBody.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const text = e.dataTransfer.getData("text/plain");
+      insertAtCursor(elements.tplBody, text);
+    });
   }
 
   updateKeyHint();

@@ -5,6 +5,7 @@ import {
   getInvoiceById, 
   getInvoicePdf,
   markSent,
+  getInvoiceEmailPreview,
   sendInvoiceEmail,
   getNextInvoiceNumber,
   markPaid,
@@ -17,6 +18,7 @@ const router = Router();
 // Status-Routen
 router.post("/:id/status/sent", markSent);
 router.post("/:id/status/paid", markPaid);
+router.get("/:id/email-preview", getInvoiceEmailPreview);
 router.post("/:id/send-email", sendInvoiceEmail);
 
 // Standard-Routen

@@ -1,7 +1,10 @@
 let allInvoices = [];
 let currentEmailInvoice = null;
+let currentEmailPreview = null;
 let bankDataCache = null;
 let bankDataRequest = null;
+let messageEdited = false;
+let suppressMessageChangeEvent = false;
 
 const numberOrZero = (value) => Number(value) || 0;
 
@@ -28,6 +31,72 @@ const formatAmount = (value) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const messageToHtml = (text) => escapeHtml(text || "").replace(/\n/g, "<br>");
+
+function buildFallbackEmail(invoice, bankData) {
+  const invoiceDate = formatDateDe(invoice.date);
+  const dueDate = formatDateDe(addDays(invoice.date, 14));
+  const bankName = bankData?.bank_name || "-";
+  const ibanDisplay = formatIban(bankData?.iban);
+  const bicDisplay = (bankData?.bic || "-").toUpperCase();
+
+  const amountValue = invoice.b2b
+    ? numberOrZero(invoice.net_19) + numberOrZero(invoice.net_7)
+    : numberOrZero(invoice.gross_total);
+
+  const amountDisplay = formatAmount(amountValue);
+  const defaultSubject = `Rechnung Nr. ${invoice.invoice_number}`;
+  const defaultMessage = `Hallo ${invoice.recipient_name || "Kunde"},
+
+anbei erhältst du deine Rechnung Nr. ${invoice.invoice_number} vom ${invoiceDate}.
+
+Der Betrag von ${amountDisplay} € ist fällig bis ${dueDate}.
+
+Bankverbindung:
+${bankName}
+IBAN: ${ibanDisplay}
+BIC: ${bicDisplay}
+
+Bei Fragen melde dich gerne jederzeit.
+
+Vielen Dank!
+
+Beste Grüße
+Waldwirtschaft Heidekönig
+Thomas Pilger
+02241 76649`;
+
+  return { subject: defaultSubject, body: defaultMessage };
+}
+
+async function loadEmailPreview(invoiceId) {
+  const res = await fetch(`/api/invoices/${invoiceId}/email-preview`, {
+    method: "GET",
+    credentials: "include",
+  });
+  const data = await res.json().catch(() => null);
+
+  if (res.status === 401) {
+    window.location.href = "/login.html";
+    return null;
+  }
+
+  if (!res.ok) {
+    const msg = data?.message || "E-Mail-Vorlage konnte nicht geladen werden.";
+    throw new Error(msg);
+  }
+
+  return data;
+}
 
 async function loadBankData() {
   if (bankDataCache) return bankDataCache;
@@ -376,6 +445,7 @@ async function openEmailModal(invoiceId) {
   }
 
   currentEmailInvoice = invoice;
+  currentEmailPreview = null;
 
   const toInput = document.getElementById("email-to");
   const subjectInput = document.getElementById("email-subject");
@@ -383,6 +453,10 @@ async function openEmailModal(invoiceId) {
   const title = document.getElementById("email-modal-title");
   const subtitle = document.getElementById("email-modal-subtitle");
   const sendBtn = document.getElementById("email-send");
+  const templateInfo = document.getElementById("email-template-info");
+  const fromInfo = document.getElementById("email-from-info");
+  const templateNote = document.getElementById("email-template-note");
+  messageEdited = false;
 
   if (sendBtn) {
     sendBtn.disabled = false;
@@ -392,37 +466,62 @@ async function openEmailModal(invoiceId) {
   if (title) title.textContent = "Rechnung per E-Mail versenden";
   if (subtitle) {
     const recipientLabel = invoice.recipient_name || "Empfänger";
-    subtitle.textContent = `Rechnung #${invoice.invoice_number} an ${recipientLabel}`;
+    const catLabel = invoice.category_label || invoice.category || "";
+    const suffix = catLabel ? ` · ${catLabel}` : "";
+    subtitle.textContent = `Rechnung #${invoice.invoice_number} an ${recipientLabel}${suffix}`;
   }
 
   const bankData = await loadBankData();
-  const invoiceDate = formatDateDe(invoice.date);
-  const serviceDate = formatDateDe(invoice.receipt_date || invoice.date);
-  const dueDate = formatDateDe(addDays(invoice.date, 14));
+  const fallback = buildFallbackEmail(invoice, bankData || {});
 
-  const bankName = bankData?.bank_name || "-";
-  const ibanDisplay = formatIban(bankData?.iban);
-  const bicDisplay = (bankData?.bic || "-").toUpperCase();
-
-  const amountValue = invoice.b2b
-    ? numberOrZero(invoice.net_19) + numberOrZero(invoice.net_7)
-    : numberOrZero(invoice.gross_total);
-
-  const amountDisplay = formatAmount(amountValue);
-
-  const senderName = "Thomas Pilger";
-  const senderCompany = "Waldwirtschaft Heidekönig";
-  const senderPhone = "02241 76649";
-  const senderEmail = "Rechnungen@der-heidekoenig.de";
-
-  const defaultSubject = `Rechnung Nr. ${invoice.invoice_number}`;
-  const defaultMessage = `Hallo ${invoice.recipient_name || "Kunde"},\n\nanbei erhältst du deine Rechnung Nr. ${invoice.invoice_number} vom ${invoiceDate}.\n\nDer Betrag von ${amountDisplay} € ist fällig bis ${dueDate}.\n\nBankverbindung:\n${bankName}\nIBAN: ${ibanDisplay}\nBIC: ${bicDisplay}\n\nBei Fragen melde dich gerne jederzeit.\n\nVielen Dank!\n\nBeste Grüße\n${senderName}\n${senderCompany}\n${senderPhone}\n${senderEmail}`;
-
+  suppressMessageChangeEvent = true;
   if (toInput) toInput.value = invoice.recipient_email || "";
-  if (subjectInput) subjectInput.value = defaultSubject;
-  if (messageInput) messageInput.value = defaultMessage;
+  if (subjectInput) subjectInput.value = fallback.subject;
+  if (messageInput) messageInput.value = fallback.body;
+  suppressMessageChangeEvent = false;
+  if (templateInfo) templateInfo.textContent = "Vorlage wird geladen…";
+  if (fromInfo) fromInfo.textContent = "Absender wird geladen…";
+  if (templateNote) templateNote.textContent = "Nachricht basiert auf der Kategorien-Vorlage und kann angepasst werden.";
 
-  setEmailStatus("");
+  setEmailStatus("Lade E-Mail-Vorlage…", "info");
+
+  try {
+    const preview = await loadEmailPreview(invoiceId);
+    if (preview) {
+      currentEmailPreview = preview;
+      suppressMessageChangeEvent = true;
+      if (subjectInput) subjectInput.value = preview.subject || fallback.subject;
+      if (messageInput) messageInput.value = preview.body_text || fallback.body;
+      suppressMessageChangeEvent = false;
+      messageEdited = false;
+      if (templateInfo) {
+        templateInfo.textContent = preview.template_used
+          ? `Vorlage: ${preview.category?.label || preview.category?.key || "Kategorie"}`
+          : "Standard-Text (keine Kategorie-Vorlage)";
+      }
+      if (fromInfo) {
+        fromInfo.textContent = preview.from
+          ? `Absender: ${preview.from}${preview.using_category_account ? " · Kategorie-Konto" : " · Standard"}`
+          : "Absender: Standard-SMTP";
+      }
+      if (templateNote) {
+        templateNote.textContent = preview.template_used
+          ? "Vorlage geladen. Du kannst Text und Empfänger noch anpassen."
+          : "Standard-Text geladen. Du kannst Text und Empfänger anpassen.";
+      }
+      setEmailStatus(preview.template_used ? "Kategorie-Vorlage angewendet." : "Standard-Text geladen.", "info");
+      if (!preview.smtp_ready) {
+        setEmailStatus("Hinweis: Es ist kein SMTP-Konto hinterlegt. Bitte Kategorie- oder Standard-SMTP prüfen.", "error");
+      }
+    }
+  } catch (err) {
+    console.error("E-Mail-Vorlage laden fehlgeschlagen:", err);
+    if (templateInfo) templateInfo.textContent = "Standard-Text (Fallback)";
+    if (fromInfo) fromInfo.textContent = "Absender: Standard-SMTP";
+    if (templateNote) templateNote.textContent = "Vorlage konnte nicht geladen werden. Standardtext verwendet.";
+    setEmailStatus(err.message || "Vorlage konnte nicht geladen werden.", "error");
+  }
+
   modal.classList.remove("hidden");
 }
 
@@ -430,6 +529,8 @@ function closeEmailModal() {
   const modal = document.getElementById("email-modal");
   if (modal) modal.classList.add("hidden");
   currentEmailInvoice = null;
+  currentEmailPreview = null;
+  messageEdited = false;
   setEmailStatus("");
 }
 
@@ -447,6 +548,8 @@ async function sendEmailForInvoice() {
   const email = (toInput?.value || "").trim();
   const subject = (subjectInput?.value || "").trim();
   const message = messageInput?.value || "";
+  const trimmedMessage = message.trim();
+  const previewBody = (currentEmailPreview?.body_text || "").trim();
 
   if (!email) {
     setEmailStatus("Bitte eine E-Mail-Adresse angeben.", "error");
@@ -460,13 +563,18 @@ async function sendEmailForInvoice() {
   setEmailStatus("Sende E-Mail…", "info");
 
   try {
+    const htmlPayload =
+      !messageEdited && currentEmailPreview?.body_html
+        ? currentEmailPreview.body_html
+        : messageToHtml(message);
+
     const res = await fetch(`/api/invoices/${currentEmailInvoice.id}/send-email`, {
       method: "POST",
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ to: email, subject, message })
+      body: JSON.stringify({ to: email, subject, message, html: htmlPayload })
     });
 
     const data = await res.json().catch(() => null);
@@ -521,6 +629,10 @@ document.getElementById("email-cancel")?.addEventListener("click", closeEmailMod
 document.getElementById("email-close")?.addEventListener("click", closeEmailModal);
 document.getElementById("email-modal")?.addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeEmailModal();
+});
+document.getElementById("email-message")?.addEventListener("input", () => {
+  if (suppressMessageChangeEvent) return;
+  messageEdited = true;
 });
 
 // Start

@@ -7,7 +7,14 @@
   <link rel="stylesheet" href="/style.css" />
   <style>
     /* Dezente, schlichte Seite nur für Bank/Kategorien */
-    .page-stack { display: grid; gap: 16px; max-width: 1200px; }
+    .page-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+    }
     .soft-card { border-radius: 16px; box-shadow: 0 10px 28px rgba(0,0,0,0.04); border: 1px solid #e5e7eb; background: #fff; padding: 16px; }
     .section-title { font-size: 22px; font-weight: 700; margin: 0; }
     .pill { background: #f2f2f7; color: #111; border-radius: 999px; padding: 6px 12px; font-size: 12px; }
@@ -19,6 +26,16 @@
     .dropzone-clean:hover { border-color: #a0aec0; background: #f1f5f9; }
     .spacer-8 { height: 8px; }
     .table-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    /* Modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .modal-card { background: #fff; border-radius: 16px; padding: 16px; width: min(640px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.12); }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .ghost-btn { background: #f5f5f7; border: 1px solid #e5e7eb; border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+    .hidden { display: none !important; }
+    .placeholder-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+    .placeholder-pill { border: 1px solid #e5e7eb; background: #f8fafc; border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: grab; }
+    .placeholder-pill:active { cursor: grabbing; }
+    .drop-hint { font-size: 12px; color: #6b7280; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -149,17 +166,18 @@
               </div>
             </div>
             <div class="table-wrapper">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th style="width: 18%;">Key</th>
-                    <th>Label</th>
-                    <th>Logo-Datei</th>
-                    <th style="width: 90px;">Vorschau</th>
-                    <th style="width: 180px;">Aktionen</th>
-                  </tr>
-                </thead>
-                <tbody id="cat-body"></tbody>
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th style="width: 18%;">Key</th>
+                      <th>Label</th>
+                      <th>Logo-Datei</th>
+                      <th>E-Mail</th>
+                      <th style="width: 90px;">Vorschau</th>
+                      <th style="width: 180px;">Aktionen</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cat-body"></tbody>
               </table>
             </div>
           </div>
@@ -169,6 +187,72 @@
   </div>
 
   <script src="/nav.js?v=3"></script>
-  <script src="/categories.js?v=3"></script>
+  <script src="/categories.js?v=4"></script>
+
+  <!-- Modals -->
+  <div id="email-modal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <div class="pill">E-Mail-Konto</div>
+            <h3 class="section-title" id="email-modal-title">Kategorie</h3>
+        </div>
+        <button class="ghost-btn" id="email-modal-close">Schließen</button>
+      </div>
+      <div id="email-error" class="error-box hidden"></div>
+      <div id="email-success" class="success-box hidden"></div>
+
+      <div class="input-stack">
+        <label class="input-label">Absendername</label>
+        <input id="email-display" class="input" type="text" />
+
+        <label class="input-label">E-Mail-Adresse</label>
+        <input id="email-address" class="input" type="email" />
+
+        <div class="pill" style="align-self:flex-start;">SMTP</div>
+        <div class="two-col">
+          <input id="smtp-host" class="input" placeholder="smtp.ionos.de" />
+          <input id="smtp-port" class="input" placeholder="465" type="number" />
+        </div>
+        <label><input id="smtp-secure" type="checkbox" checked /> SSL/TLS</label>
+        <input id="smtp-user" class="input" placeholder="user@domain.de" />
+        <input id="smtp-pass" class="input" type="password" placeholder="Passwort" />
+      </div>
+
+      <div class="inline-buttons" style="justify-content: flex-end; margin-top:12px;">
+        <button id="email-test" class="secondary-button small-btn">Testen</button>
+        <button id="email-save" class="primary-button small-btn">Speichern</button>
+      </div>
+      <div id="email-test-result" class="tiny-note" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <div id="template-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <div class="pill">E-Mail-Template</div>
+          <h3 class="section-title" id="template-modal-title">Kategorie</h3>
+        </div>
+        <button class="ghost-btn" id="template-modal-close">Schließen</button>
+      </div>
+      <div id="template-error" class="error-box hidden"></div>
+      <div id="template-success" class="success-box hidden"></div>
+
+      <label class="input-label">Betreff</label>
+      <input id="tpl-subject" class="input" type="text" />
+
+      <label class="input-label">Inhalt</label>
+      <textarea id="tpl-body" class="input" rows="10" placeholder="Hallo {{recipient_name}}, ..."></textarea>
+      <div class="tiny-note">Verfügbare Platzhalter:</div>
+      <div id="placeholder-list" class="placeholder-pills"></div>
+      <div class="drop-hint">Ziehe oder klicke einen Platzhalter in Betreff/Body.</div>
+
+      <div class="inline-buttons" style="justify-content: flex-end; margin-top:12px;">
+        <button id="tpl-preview" class="secondary-button small-btn">Preview</button>
+        <button id="tpl-save" class="primary-button small-btn">Speichern</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

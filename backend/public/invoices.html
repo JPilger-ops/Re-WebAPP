@@ -99,6 +99,12 @@
         <button id="email-close" class="secondary-button small-btn">Schließen</button>
       </div>
 
+      <div id="email-meta" style="display:flex; flex-wrap:wrap; gap:8px; margin: 6px 0 8px;">
+        <span id="email-template-info" style="padding:6px 10px; background:#f5f5f7; border-radius:10px; font-size:12px; color:#4a4a4a;">Vorlage wird geladen…</span>
+        <span id="email-from-info" style="padding:6px 10px; background:#f5f5f7; border-radius:10px; font-size:12px; color:#4a4a4a;">Absender wird geladen…</span>
+      </div>
+      <div id="email-template-note" style="font-size:12px; color:#6e6e73; margin-bottom:6px;">Nachricht basiert auf der Kategorien-Vorlage und kann angepasst werden.</div>
+
       <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
         <label style="font-weight:600; font-size:14px;">
           Empfänger E-Mail
@@ -126,7 +132,7 @@
   </div>
 
   <script src="/nav.js"></script>
-  <script src="/invoices.js"></script>
+  <script src="/invoices.js?v=2"></script>
 
   <!-- iOS Circle Loader Popup -->
 <div id="download-progress-popup"

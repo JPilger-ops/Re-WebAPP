@@ -9,6 +9,11 @@ import {
   deleteCategory,
   uploadLogo,
   listLogos,
+  getCategoryEmail,
+  saveCategoryEmail,
+  testCategoryEmail,
+  getCategoryTemplate,
+  saveCategoryTemplate,
 } from "../controllers/category.controller.js";
 
 const router = Router();
@@ -59,6 +64,38 @@ router.delete(
   "/:id",
   requireAnyPermission("categories.delete", "settings.general"),
   deleteCategory
+);
+
+// E-Mail Konto je Kategorie
+router.get(
+  "/:id/email",
+  requireAnyPermission("categories.read", "settings.general"),
+  getCategoryEmail
+);
+
+router.post(
+  "/:id/email",
+  requireAnyPermission("categories.write", "settings.general"),
+  saveCategoryEmail
+);
+
+router.post(
+  "/:id/email/test",
+  requireAnyPermission("categories.write", "settings.general"),
+  testCategoryEmail
+);
+
+// Template je Kategorie
+router.get(
+  "/:id/template",
+  requireAnyPermission("categories.read", "settings.general"),
+  getCategoryTemplate
+);
+
+router.post(
+  "/:id/template",
+  requireAnyPermission("categories.write", "settings.general"),
+  saveCategoryTemplate
 );
 
 export default router;

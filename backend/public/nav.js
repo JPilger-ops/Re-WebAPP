@@ -101,8 +101,34 @@ async function initNavigation() {
   bind("nav-categories", "/categories.html");
   bind("nav-logout", "#logout");
 
+  // Version-Badge in die Sidebar setzen
+  renderVersionBadge();
+
   // Signal: Benutzer + Permissions sind bereit
   window.userLoaded = true;
 }
 
 document.addEventListener("DOMContentLoaded", initNavigation);
+
+async function renderVersionBadge() {
+  try {
+    const res = await fetch("/api/version", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const label = data?.version ? `v${data.version}` : null;
+    if (!label) return;
+
+    const sidebar = document.querySelector(".sidebar");
+    if (!sidebar) return;
+    let badge = document.getElementById("sidebar-version");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = "sidebar-version";
+      badge.className = "sidebar-version";
+      sidebar.appendChild(badge);
+    }
+    badge.textContent = data?.build ? `${label} • ${data.build}` : label;
+  } catch (err) {
+    console.warn("Version laden fehlgeschlagen:", err);
+  }
+}
