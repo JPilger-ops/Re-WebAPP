@@ -6,6 +6,10 @@
   --text-muted: #6e6e73;
   --accent: #0a84ff;
   --accent-soft: rgba(10, 132, 255, 0.12);
+  --success: #16a34a;
+  --danger: #e54848;
+  --danger-soft: rgba(229, 72, 72, 0.12);
+  --button-shadow: 0 10px 24px rgba(10, 132, 255, 0.18);
   --radius-xl: 18px;
   --radius-md: 12px;
   --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.08);
@@ -102,46 +106,81 @@ body {
 
 /* Buttons */
 
+.primary-button,
+.success-button,
+.secondary-button,
+.table td button,
+.user-management-table-btn,
+#btn-multi-download,
+#btn-multi-delete,
+.small-btn {
+  font-family: inherit;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
 .primary-button {
-  border: none;
   background: var(--accent);
   color: #ffffff;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 10px 20px;
-  border-radius: 999px;
-  cursor: pointer;
-  box-shadow: 0 8px 16px rgba(10, 132, 255, 0.35);
+  box-shadow: var(--button-shadow);
 }
 
 .primary-button:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.04);
+  transform: translateY(-1px);
 }
 
 .success-button {
-  border: none;
-  background: linear-gradient(90deg, #16a34a, #22c55e);
+  background: var(--success);
+  border-color: #138a3f;
   color: #ffffff;
-  font-size: 15px;
-  font-weight: 700;
-  padding: 10px 20px;
-  border-radius: 999px;
-  cursor: pointer;
-  box-shadow: 0 8px 16px rgba(34, 197, 94, 0.35);
-  transition: filter 0.18s ease, transform 0.18s ease;
+  box-shadow: 0 10px 22px rgba(22, 163, 74, 0.24);
 }
 
 .success-button:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.04);
   transform: translateY(-1px);
 }
 
 .success-button:disabled {
-  background: #d1f2df;
-  color: #3f3f46;
+  background: #d1f2df !important;
+  color: #3f3f46 !important;
+  border-color: #d1f2df !important;
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
+}
+
+.secondary-button,
+.table td button,
+.user-management-table-btn {
+  background: #f7f8fa;
+  color: var(--text);
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+.secondary-button:hover,
+.table td button:hover,
+.user-management-table-btn:hover {
+  background: #eef1f5;
+  transform: translateY(-1px);
+}
+
+.table td button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.small-btn {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  border-radius: 10px !important;
 }
 
 /* KPI cards */
@@ -749,15 +788,16 @@ body {
 }
 
 .table td .success-button {
-  background: linear-gradient(90deg, #16a34a, #22c55e);
+  background: var(--success);
+  border-color: #138a3f;
   color: #fff;
-  border: none;
-  box-shadow: 0 6px 12px rgba(34, 197, 94, 0.25);
+  box-shadow: 0 8px 18px rgba(22, 163, 74, 0.22);
 }
 
 .table td .success-button:disabled {
   background: #d1f2df;
   color: #3f3f46;
+  border-color: #d1f2df;
   box-shadow: none;
 }
 
@@ -823,12 +863,6 @@ body {
     margin-top: 8px;
 }
 
-.small-btn {
-    padding: 6px 10px;
-    font-size: 12px;
-    border-radius: 10px;
-}
-
 /* -------------------------------
    Tag bei bestehendem Kunden
 --------------------------------*/
@@ -887,12 +921,6 @@ body {
     border-radius: 16px;
     box-shadow: 0 4px 14px rgba(0,0,0,0.08);
     margin-bottom: 20px;
-}
-
-/* Small buttons */
-.small-btn {
-    padding: 4px 10px;
-    font-size: 12px;
 }
 
 /* Modal */
@@ -1274,47 +1302,30 @@ body {
 
 /* DOWNLOAD BUTTON (PRIMARY) */
 #btn-multi-download {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 10px 20px;
-    border-radius: 999px;
-    cursor: pointer;
-    box-shadow: 0 8px 16px rgba(10,132,255,0.35);
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.18s ease;
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--button-shadow);
+  padding: 10px 18px;
 }
 
 #btn-multi-download:hover {
-    background: #0a7aff;
-    transform: translateY(-1px);
-    box-shadow: 0 12px 22px rgba(10,132,255,0.45);
+  filter: brightness(1.04);
+  transform: translateY(-1px);
 }
 
-/* DELETE BUTTON (DANGER, APPLE-STYLE) */
+/* DELETE BUTTON (DANGER) */
 #btn-multi-delete {
-    background: #f8f8f8;
-    color: #b20000;
-    border: 1px solid #e4c5c5;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 10px 20px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition: background 0.2s ease, transform 0.18s ease;
+  background: #fff6f6;
+  color: var(--danger);
+  border-color: var(--danger-soft);
+  box-shadow: none;
+  padding: 10px 18px;
 }
 
 #btn-multi-delete:hover {
-    background: #ffecec;
-    transform: translateY(-1px);
-}
-
-/* Kleine Variante beibehalten */
-.small-btn {
-    padding: 8px 14px !important;
-    font-size: 14px !important;
-    border-radius: 999px !important;
+  background: #ffecec;
+  transform: translateY(-1px);
 }
 
 .popup {
