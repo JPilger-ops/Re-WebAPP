@@ -6,8 +6,17 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { getBankSettings } from "../utils/bankSettings.js";
+import { getDatevSettings } from "../utils/datevSettings.js";
 import nodemailer from "nodemailer";
 import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
+import {
+  buildDatevMailBody,
+  buildDatevMailSubject,
+  buildDatevRecipients,
+  ensureDatevExportColumns,
+  updateDatevExportStatus,
+  DATEV_STATUS,
+} from "../utils/datevExport.js";
 
 dotenv.config();
 
@@ -117,6 +126,7 @@ const replacePlaceholders = (template = "", replacements = {}, escapeValues = tr
 
 const loadInvoiceWithCategory = async (id) => {
   await ensureInvoiceCategoriesTable();
+  await ensureDatevExportColumns();
   const result = await db.query(
     `
     SELECT
@@ -560,6 +570,7 @@ for (let i = 0; i < items.length; i++) {
 export const getAllInvoices = async (req, res) => {
   try {
     await ensureInvoiceCategoriesTable();
+    await ensureDatevExportColumns();
     const result = await db.query(`
       SELECT 
         invoices.*, 
@@ -590,6 +601,7 @@ export const getInvoiceById = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
   await ensureInvoiceCategoriesTable();
+  await ensureDatevExportColumns();
   const client = await db.connect();
 
   try {
@@ -623,6 +635,9 @@ export const getInvoiceById = async (req, res) => {
       status_sent: row.status_sent,
       status_sent_at: row.status_sent_at,
       status_paid_at: row.status_paid_at,
+      datev_export_status: row.datev_export_status,
+      datev_exported_at: row.datev_exported_at,
+      datev_export_error: row.datev_export_error,
       net_19: row.net_19,
       vat_19: row.vat_19,
       gross_19: row.gross_19,
@@ -1225,6 +1240,8 @@ export const getInvoiceEmailPreview = async (req, res) => {
     const bankSettings = await getBankSettings();
     const content = buildEmailContent(row, bankSettings);
     const smtp = resolveSmtpConfig(row);
+    const datevSettings = await getDatevSettings();
+    const datevEmail = (datevSettings?.email || "").trim();
 
     return res.json({
       subject: content.subject,
@@ -1235,6 +1252,8 @@ export const getInvoiceEmailPreview = async (req, res) => {
       from: smtp?.from || null,
       using_category_account: smtp?.usingCategoryAccount || false,
       smtp_ready: Boolean(smtp),
+      datev_email: datevEmail || null,
+      datev_configured: Boolean(datevEmail),
     });
   } catch (err) {
     if (err?.code === "NOT_FOUND") {
@@ -1253,8 +1272,9 @@ export const sendInvoiceEmail = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
-  const { to, subject, message, html } = req.body || {};
+  const { to, subject, message, html, include_datev } = req.body || {};
   const email = (to || "").trim();
+  const includeDatev = include_datev === true;
 
   if (!email) {
     return res.status(400).json({ message: "E-Mail-Adresse fehlt." });
@@ -1266,16 +1286,25 @@ export const sendInvoiceEmail = async (req, res) => {
   }
 
   try {
+    await ensureDatevExportColumns();
     const { filename, filepath } = await ensureInvoicePdf(id);
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
     const content = buildEmailContent(row, bankSettings);
     const smtpConfig = resolveSmtpConfig(row);
+    const datevSettings = includeDatev ? await getDatevSettings() : null;
+    const datevEmail = includeDatev ? (datevSettings?.email || "").trim() : "";
 
     if (!smtpConfig) {
       return res.status(400).json({
         message:
           "Kein SMTP-Konto hinterlegt. Bitte entweder in der Kategorie ein Konto speichern oder die globalen SMTP-ENV-Variablen setzen.",
+      });
+    }
+
+    if (includeDatev && !datevEmail) {
+      return res.status(400).json({
+        message: "Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.",
       });
     }
 
@@ -1292,6 +1321,8 @@ export const sendInvoiceEmail = async (req, res) => {
       emailHtml = escapeHtml(emailText).replace(/\n/g, "<br>");
     }
 
+    const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
+
     const transporter = nodemailer.createTransport({
       host: smtpConfig.host,
       port: smtpConfig.port,
@@ -1304,7 +1335,9 @@ export const sendInvoiceEmail = async (req, res) => {
 
     await transporter.sendMail({
       from: smtpConfig.from,
-      to: email,
+      to: recipients.to,
+      // DATEV-Adresse als BCC, damit der Kunde die interne Export-Adresse nicht sieht.
+      ...(recipients.includeDatev ? { bcc: recipients.bcc } : {}),
       subject: emailSubject,
       text: emailText,
       html: emailHtml,
@@ -1323,10 +1356,25 @@ export const sendInvoiceEmail = async (req, res) => {
       [id]
     );
 
-    return res.json({ message: "Rechnung per E-Mail verschickt." });
+    if (includeDatev) {
+      await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
+    }
+
+    const successMessage = includeDatev
+      ? "E-Mail wurde verschickt (Kunde + DATEV)."
+      : "E-Mail wurde verschickt.";
+
+    return res.json({ message: successMessage });
   } catch (err) {
     if (err?.code === "NOT_FOUND") {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    if (includeDatev) {
+      try {
+        await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV-Versand fehlgeschlagen.");
+      } catch (statusErr) {
+        console.error("DATEV-Status konnte nicht aktualisiert werden:", statusErr);
+      }
     }
     console.error("Fehler beim E-Mail-Versand:", err);
     const msg =
@@ -1334,6 +1382,86 @@ export const sendInvoiceEmail = async (req, res) => {
         ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."
         : err?.message || "E-Mail konnte nicht versendet werden.";
     return res.status(500).json({ message: msg });
+  }
+};
+
+/**
+ * POST /api/invoices/:id/datev-export
+ * Rechnung direkt an DATEV-E-Mail senden
+ */
+export const exportInvoiceToDatev = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  try {
+    await ensureDatevExportColumns();
+    const datevSettings = await getDatevSettings();
+    const datevEmail = (datevSettings?.email || "").trim();
+
+    if (!datevEmail) {
+      return res.status(400).json({
+        message: "Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.",
+      });
+    }
+
+    const { filename, filepath } = await ensureInvoicePdf(id);
+    const row = await loadInvoiceWithCategory(id);
+    const bankSettings = await getBankSettings();
+    const smtpConfig = resolveSmtpConfig(row);
+
+    if (!smtpConfig) {
+      return res.status(400).json({
+        message: "Kein SMTP-Konto hinterlegt. Bitte Kategorie- oder Standard-SMTP konfigurieren.",
+      });
+    }
+
+    const subject = buildDatevMailSubject(row.invoice_number);
+    const bodyText = buildDatevMailBody(row, bankSettings);
+
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.authUser,
+        pass: smtpConfig.authPass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: smtpConfig.from,
+      to: datevEmail,
+      subject,
+      text: bodyText,
+      html: bodyText.replace(/\n/g, "<br>"),
+      attachments: [
+        {
+          filename,
+          path: filepath,
+          contentType: "application/pdf",
+          contentDisposition: "attachment",
+        },
+      ],
+    });
+
+    await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
+
+    return res.json({ message: "Rechnung wurde an DATEV gesendet." });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("DATEV Export fehlgeschlagen:", err);
+    try {
+      await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV Export fehlgeschlagen.");
+    } catch (statusErr) {
+      console.error("DATEV-Status konnte nicht aktualisiert werden:", statusErr);
+    }
+    const message =
+      err?.code === "EAUTH"
+        ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."
+        : err?.message || "DATEV Export fehlgeschlagen.";
+    return res.status(500).json({ message });
   }
 };
 

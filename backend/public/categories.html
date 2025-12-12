@@ -15,6 +15,38 @@
       margin: 0 auto;
       width: 100%;
     }
+    .settings-tabs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 0 auto 6px;
+      max-width: 1100px;
+      padding: 0 2px;
+    }
+    .settings-tab {
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
+      color: #111;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.04);
+    }
+    .settings-tab:hover {
+      background: #eef2ff;
+      border-color: #d7def5;
+    }
+    .settings-tab.active {
+      background: linear-gradient(90deg, #0ea5e9, #22c55e);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 12px 24px rgba(14,165,233,0.22);
+    }
+    .tab-panel.hidden {
+      display: none !important;
+    }
     .soft-card { border-radius: 16px; box-shadow: 0 10px 28px rgba(0,0,0,0.04); border: 1px solid #e5e7eb; background: #fff; padding: 16px; }
     .section-title { font-size: 22px; font-weight: 700; margin: 0; }
     .pill { background: #f2f2f7; color: #111; border-radius: 999px; padding: 6px 12px; font-size: 12px; }
@@ -64,130 +96,164 @@
         </div>
       </header>
 
-      <div class="page-stack">
-        <section class="soft-card">
-          <div class="inline-buttons" style="justify-content: space-between; align-items: flex-start;">
-            <div>
-              <div class="pill">Bankdaten</div>
-              <h2 class="section-title">SEPA & Fußzeile</h2>
-              <div class="muted">Wird im PDF und SEPA-QR-Code genutzt.</div>
-            </div>
-            <div class="inline-buttons">
-              <button id="bank-reload" class="secondary-button small-btn">Zurücksetzen</button>
-              <button id="bank-save" class="primary-button small-btn">Speichern</button>
-            </div>
-          </div>
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="general">Bank & Kategorien</button>
+        <button class="settings-tab" data-tab="datev">DATEV</button>
+      </div>
 
-          <div id="bank-error" class="error-box hidden"></div>
-          <div id="bank-success" class="success-box hidden"></div>
-
-          <div class="input-stack">
-            <label class="input-label">Kontoinhaber</label>
-            <input id="bank-holder" class="input" type="text" placeholder="z. B. Waldwirtschaft Heidekönig" />
-
-            <label class="input-label">Bankname</label>
-            <input id="bank-name" class="input" type="text" placeholder="z. B. VR-Bank Bonn Rhein-Sieg eG" />
-
-            <div class="two-col">
+      <div class="tab-panel" data-tab-panel="general">
+        <div class="page-stack">
+          <section class="soft-card">
+            <div class="inline-buttons" style="justify-content: space-between; align-items: flex-start;">
               <div>
-                <label class="input-label">IBAN</label>
-                <input id="bank-iban" class="input" type="text" placeholder="DE00 0000 0000 0000 0000 00" />
+                <div class="pill">Bankdaten</div>
+                <h2 class="section-title">SEPA & Fußzeile</h2>
+                <div class="muted">Wird im PDF und SEPA-QR-Code genutzt.</div>
               </div>
-              <div>
-                <label class="input-label">BIC</label>
-                <input id="bank-bic" class="input" type="text" placeholder="GENODEXX" />
+              <div class="inline-buttons">
+                <button id="bank-reload" class="secondary-button small-btn">Zurücksetzen</button>
+                <button id="bank-save" class="primary-button small-btn">Speichern</button>
               </div>
             </div>
-            <div class="tiny-note">Die Angaben werden automatisch in neue Rechnungen und den SEPA-QR-Code übernommen.</div>
-          </div>
-        </section>
 
-        <section class="soft-card" style="display:flex; flex-direction:column; gap:16px;">
-          <div>
-            <div class="pill">Kategorien & Logos</div>
-            <h2 class="section-title">Logos pflegen, Labels vergeben</h2>
-          </div>
+            <div id="bank-error" class="error-box hidden"></div>
+            <div id="bank-success" class="success-box hidden"></div>
 
-          <div id="error-box" class="error-box hidden"></div>
-          <div id="cat-success" class="success-box hidden"></div>
-
-          <!-- Neu anlegen -->
-          <div class="cat-form">
             <div class="input-stack">
-              <div class="pill" style="align-self:flex-start;">Neu anlegen</div>
-              <div id="logo-dropzone" class="dropzone-clean">
-                <input type="file" id="logo-file" accept=".png,.jpg,.jpeg,.svg" hidden />
-                <div class="mini-title" style="margin-bottom:4px;">Logo hochladen</div>
-                <div class="tiny-note">PNG, JPG oder SVG · max. 1.5 MB</div>
-                <div class="spacer-8"></div>
-                <div class="settings-note" id="logo-file-name">Keine Datei ausgewählt</div>
-                <div class="spacer-8"></div>
-                <button id="logo-file-btn" class="secondary-button small-btn" type="button">Datei auswählen</button>
-                <div class="tiny-note" style="margin-top:6px;">Upload speichert sofort und taucht in der Liste auf.</div>
-              </div>
+              <label class="input-label">Kontoinhaber</label>
+              <input id="bank-holder" class="input" type="text" placeholder="z. B. Waldwirtschaft Heidekönig" />
+
+              <label class="input-label">Bankname</label>
+              <input id="bank-name" class="input" type="text" placeholder="z. B. VR-Bank Bonn Rhein-Sieg eG" />
 
               <div class="two-col">
                 <div>
-                  <label class="input-label">Key (z. B. GESELLSCHAFTEN)</label>
-                  <input id="cat-key" class="input" type="text" />
-                  <div class="tiny-note" id="cat-key-hint">Großbuchstaben/Unterstriche werden automatisch gesetzt.</div>
+                  <label class="input-label">IBAN</label>
+                  <input id="bank-iban" class="input" type="text" placeholder="DE00 0000 0000 0000 0000 00" />
                 </div>
                 <div>
-                  <label class="input-label">Label (Anzeige)</label>
-                  <input id="cat-label" class="input" type="text" />
-                  <div class="tiny-note">So erscheint die Kategorie in Rechnungen.</div>
+                  <label class="input-label">BIC</label>
+                  <input id="bank-bic" class="input" type="text" placeholder="GENODEXX" />
                 </div>
               </div>
+              <div class="tiny-note">Die Angaben werden automatisch in neue Rechnungen und den SEPA-QR-Code übernommen.</div>
+            </div>
+          </section>
 
-              <div>
-                <label class="input-label">Logo-Datei</label>
-                <select id="cat-logo" class="input select-input">
-                  <option value="" selected disabled>Logo auswählen...</option>
-                </select>
-                <div class="tiny-note">Dateiname aus <code>/public/logos/</code>. Upload fügt neue hinzu.</div>
-              </div>
+          <section class="soft-card" style="display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <div class="pill">Kategorien & Logos</div>
+              <h2 class="section-title">Logos pflegen, Labels vergeben</h2>
+            </div>
 
-              <div style="display:flex; gap:10px; align-items:center;">
-                <button id="cat-add" class="primary-button">Kategorie speichern</button>
-                <div class="tiny-note">Speichern fügt die Kategorie unten hinzu.</div>
+            <div id="error-box" class="error-box hidden"></div>
+            <div id="cat-success" class="success-box hidden"></div>
+
+            <!-- Neu anlegen -->
+            <div class="cat-form">
+              <div class="input-stack">
+                <div class="pill" style="align-self:flex-start;">Neu anlegen</div>
+                <div id="logo-dropzone" class="dropzone-clean">
+                  <input type="file" id="logo-file" accept=".png,.jpg,.jpeg,.svg" hidden />
+                  <div class="mini-title" style="margin-bottom:4px;">Logo hochladen</div>
+                  <div class="tiny-note">PNG, JPG oder SVG · max. 1.5 MB</div>
+                  <div class="spacer-8"></div>
+                  <div class="settings-note" id="logo-file-name">Keine Datei ausgewählt</div>
+                  <div class="spacer-8"></div>
+                  <button id="logo-file-btn" class="secondary-button small-btn" type="button">Datei auswählen</button>
+                  <div class="tiny-note" style="margin-top:6px;">Upload speichert sofort und taucht in der Liste auf.</div>
+                </div>
+
+                <div class="two-col">
+                  <div>
+                    <label class="input-label">Key (z. B. GESELLSCHAFTEN)</label>
+                    <input id="cat-key" class="input" type="text" />
+                    <div class="tiny-note" id="cat-key-hint">Großbuchstaben/Unterstriche werden automatisch gesetzt.</div>
+                  </div>
+                  <div>
+                    <label class="input-label">Label (Anzeige)</label>
+                    <input id="cat-label" class="input" type="text" />
+                    <div class="tiny-note">So erscheint die Kategorie in Rechnungen.</div>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="input-label">Logo-Datei</label>
+                  <select id="cat-logo" class="input select-input">
+                    <option value="" selected disabled>Logo auswählen...</option>
+                  </select>
+                  <div class="tiny-note">Dateiname aus <code>/public/logos/</code>. Upload fügt neue hinzu.</div>
+                </div>
+
+                <div style="display:flex; gap:10px; align-items:center;">
+                  <button id="cat-add" class="primary-button">Kategorie speichern</button>
+                  <div class="tiny-note">Speichern fügt die Kategorie unten hinzu.</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Bestehende Kategorien -->
-          <div class="cat-table-card">
-            <div class="table-top">
+            <!-- Bestehende Kategorien -->
+            <div class="cat-table-card">
+              <div class="table-top">
+                <div>
+                  <div class="pill">Bestehende Kategorien</div>
+                  <div class="tiny-note">Werte direkt anpassen und je Zeile speichern.</div>
+                </div>
+                <div class="inline-buttons">
+                  <button id="cat-refresh" class="secondary-button small-btn">Neu laden</button>
+                </div>
+              </div>
+              <div class="table-wrapper">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th style="width: 18%;">Key</th>
+                        <th>Label</th>
+                        <th>Logo-Datei</th>
+                        <th>E-Mail</th>
+                        <th style="width: 90px;">Vorschau</th>
+                        <th style="width: 180px;">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody id="cat-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="tab-panel hidden" data-tab-panel="datev">
+        <div class="page-stack">
+          <section class="soft-card">
+            <div class="inline-buttons" style="justify-content: space-between; align-items: flex-start;">
               <div>
-                <div class="pill">Bestehende Kategorien</div>
-                <div class="tiny-note">Werte direkt anpassen und je Zeile speichern.</div>
+                <div class="pill">DATEV</div>
+                <h2 class="section-title">Export-E-Mail</h2>
+                <div class="muted">Adresse, an die Rechnungen für DATEV gesendet werden.</div>
               </div>
               <div class="inline-buttons">
-                <button id="cat-refresh" class="secondary-button small-btn">Neu laden</button>
+                <button id="datev-reload" class="secondary-button small-btn">Neu laden</button>
+                <button id="datev-save" class="primary-button small-btn">Speichern</button>
               </div>
             </div>
-            <div class="table-wrapper">
-                <table class="table">
-                  <thead>
-                    <tr>
-                      <th style="width: 18%;">Key</th>
-                      <th>Label</th>
-                      <th>Logo-Datei</th>
-                      <th>E-Mail</th>
-                      <th style="width: 90px;">Vorschau</th>
-                      <th style="width: 180px;">Aktionen</th>
-                    </tr>
-                  </thead>
-                  <tbody id="cat-body"></tbody>
-              </table>
+
+            <div id="datev-error" class="error-box hidden"></div>
+            <div id="datev-success" class="success-box hidden"></div>
+
+            <div class="input-stack">
+              <label class="input-label">DATEV E-Mail</label>
+              <input id="datev-email" class="input" type="email" placeholder="buchhaltung@steuerkanzlei.de" />
+              <div class="tiny-note">Wird für den Button „DATEV EXPORT“ und „Senden + DATEV“ genutzt.</div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   </div>
 
   <script src="/nav.js?v=3"></script>
-  <script src="/categories.js?v=4"></script>
+  <script src="/categories.js?v=5"></script>
 
   <!-- Modals -->
   <div id="email-modal" class="modal-backdrop hidden">

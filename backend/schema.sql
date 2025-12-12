@@ -20,6 +20,9 @@ CREATE TABLE invoices (
     status_sent BOOLEAN DEFAULT FALSE,
     status_sent_at TIMESTAMP,
     status_paid_at TIMESTAMP,
+    datev_export_status VARCHAR(20) DEFAULT 'NOT_SENT',
+    datev_exported_at TIMESTAMP,
+    datev_export_error TEXT,
     receipt_date DATE,
 
     -- 19%
@@ -104,6 +107,17 @@ CREATE TABLE IF NOT EXISTS bank_settings (
 
 INSERT INTO bank_settings (id, account_holder, bank_name, iban, bic)
 VALUES (1, 'Waldwirtschaft Heidekönig', 'VR-Bank Bonn Rhein-Sieg eG', 'DE48 3706 9520 1104 1850 25', 'GENODED1RST')
+ON CONFLICT (id) DO NOTHING;
+
+-- DATEV-E-Mail Zieladresse
+CREATE TABLE IF NOT EXISTS datev_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    email TEXT,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO datev_settings (id, email)
+VALUES (1, NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- E-Mail Konten pro Kategorie

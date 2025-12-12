@@ -1,5 +1,27 @@
 // Sidebar Navigation + Rollen/Permissions-Steuerung
 window.userLoaded = false;
+const FAVICON_PATH = "/logos/RE-WebAPP.png";
+
+function ensureFavicon() {
+  if (!document) return;
+  const head = document.head || document.getElementsByTagName("head")[0];
+  if (!head) return;
+
+  const ensureLink = (selector, relValue) => {
+    let link = head.querySelector(selector);
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = relValue;
+      head.appendChild(link);
+    }
+    link.type = "image/png";
+    link.href = FAVICON_PATH;
+  };
+
+  // Standard-Favicon + Apple-Touch-Icon für iOS Homescreen
+  ensureLink('link[rel="icon"]', "icon");
+  ensureLink('link[rel="apple-touch-icon"]', "apple-touch-icon");
+}
 
 window.ensureAuthReady = async function () {
   if (!window.userLoaded) {
@@ -53,6 +75,7 @@ async function logout() {
 }
 
 async function initNavigation() {
+  ensureFavicon();
   // 1. Aktuellen User laden
   const user = await loadUser();
 

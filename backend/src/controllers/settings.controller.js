@@ -1,4 +1,5 @@
 import { getBankSettings, saveBankSettings } from "../utils/bankSettings.js";
+import { getDatevSettings, saveDatevSettings, isValidEmail } from "../utils/datevSettings.js";
 
 const isValidBic = (bic) => /^[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test((bic || "").toUpperCase());
 
@@ -63,6 +64,36 @@ export const updateBankData = async (req, res) => {
   } catch (err) {
     console.error("Bankdaten speichern fehlgeschlagen:", err);
     const message = err?.userMessage || "Bankdaten konnten nicht gespeichert werden.";
+    return res.status(500).json({ message });
+  }
+};
+
+export const getDatevData = async (_req, res) => {
+  try {
+    const settings = await getDatevSettings();
+    return res.json(settings);
+  } catch (err) {
+    console.error("DATEV-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "DATEV-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updateDatevData = async (req, res) => {
+  try {
+    const email = (req.body?.email || "").trim();
+
+    if (!email) {
+      return res.status(400).json({ message: "DATEV-E-Mail darf nicht leer sein." });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: "DATEV-E-Mail ist ungültig." });
+    }
+
+    const saved = await saveDatevSettings({ email });
+    return res.json(saved);
+  } catch (err) {
+    console.error("DATEV-Einstellungen speichern fehlgeschlagen:", err);
+    const message = err?.userMessage || "DATEV-Einstellungen konnten nicht gespeichert werden.";
     return res.status(500).json({ message });
   }
 };

@@ -3,6 +3,9 @@ let currentEmailInvoice = null;
 let currentEmailPreview = null;
 let bankDataCache = null;
 let bankDataRequest = null;
+let datevSettingsCache = null;
+let datevSettingsRequest = null;
+const datevExporting = new Set();
 let messageEdited = false;
 let suppressMessageChangeEvent = false;
 
@@ -41,6 +44,7 @@ const escapeHtml = (value) =>
     .replace(/'/g, "&#39;");
 
 const messageToHtml = (text) => escapeHtml(text || "").replace(/\n/g, "<br>");
+const getDatevEmailFromCache = () => (datevSettingsCache?.email || "").trim();
 
 function buildFallbackEmail(invoice, bankData) {
   const invoiceDate = formatDateDe(invoice.date);
@@ -110,6 +114,30 @@ async function loadBankData() {
   return bankDataCache;
 }
 
+async function loadDatevSettings(force = false) {
+  if (datevSettingsCache && !force) return datevSettingsCache;
+  if (!datevSettingsRequest || force) {
+    datevSettingsRequest = fetch("/api/settings/datev", { credentials: "include" })
+      .then(async (res) => {
+        if (res.status === 401) {
+          window.location.href = "/login.html";
+          return null;
+        }
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .catch(() => null);
+  }
+
+  const data = await datevSettingsRequest;
+  if (data) {
+    datevSettingsCache = data;
+  } else if (force) {
+    datevSettingsCache = null;
+  }
+  return datevSettingsCache;
+}
+
 async function waitForPermissions() {
   return new Promise(resolve => {
     const check = () => {
@@ -175,6 +203,24 @@ async function loadInvoices() {
   renderList();
 }
 
+function renderDatevBadge(invoice) {
+  const statusRaw = (invoice.datev_export_status || "NOT_SENT").toString().toUpperCase();
+  const exportedAt = invoice.datev_exported_at ? new Date(invoice.datev_exported_at) : null;
+  const error = invoice.datev_export_error;
+
+  if (statusRaw === "SENT") {
+    const suffix = exportedAt ? ` · ${exportedAt.toLocaleDateString("de-DE")} ${exportedAt.toLocaleTimeString("de-DE")}` : "";
+    return `<span class="status-badge status-datev-sent">DATEV: Gesendet${suffix}</span>`;
+  }
+
+  if (statusRaw === "FAILED") {
+    const title = error ? ` title="${escapeHtml(error)}"` : "";
+    return `<span class="status-badge status-datev-failed"${title}>DATEV: Fehlgeschlagen</span>`;
+  }
+
+  return `<span class="status-badge status-datev-open">DATEV: Offen</span>`;
+}
+
 // ---------------------------------------------------------
 // Liste rendern
 // ---------------------------------------------------------
@@ -222,7 +268,7 @@ function renderList() {
   if (list.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
+    td.colSpan = 8;
     td.textContent = "Keine Rechnungen gefunden.";
     tr.appendChild(td);
     body.appendChild(tr);
@@ -231,6 +277,15 @@ function renderList() {
 
   list.forEach(i => {
     const tr = document.createElement("tr");
+    const datevBadge = renderDatevBadge(i);
+    const datevEmailKnown = datevSettingsCache !== null;
+    const datevEmailSet = !!getDatevEmailFromCache();
+    const exportInProgress = datevExporting.has(Number(i.id));
+    const exportDisabled = exportInProgress || (datevEmailKnown && !datevEmailSet);
+    const exportLabel = exportInProgress ? "Senden..." : "DATEV EXPORT";
+    const exportTitle = datevEmailKnown && !datevEmailSet
+      ? "Keine DATEV-E-Mail hinterlegt. Bitte in den Einstellungen speichern."
+      : "Rechnung an DATEV senden.";
 
     let status = `<span class="status-badge status-open">Offen</span>`;
     if (i.status_paid_at) status = `<span class="status-badge status-paid">Bezahlt</span>`;
@@ -245,8 +300,10 @@ function renderList() {
       <td>${i.recipient_name || "-"}</td>
       <td>${Number(i.gross_total).toFixed(2)} €</td>
       <td>${status}</td>
+      <td>${datevBadge}</td>
       <td>
         <button onclick="openInvoice(${i.id})">Öffnen</button>
+        <button class="success-button small-btn" ${exportDisabled ? "disabled" : ""} title="${escapeHtml(exportTitle)}" onclick="exportInvoiceToDatev(${i.id})">${exportLabel}</button>
         <button class="secondary-button small-btn" onclick="openEmailModal(${i.id})">Verschicken per E-Mail</button>
 
         ${
@@ -421,6 +478,52 @@ async function deleteInvoice(id, number) {
   loadInvoices();
 }
 
+async function exportInvoiceToDatev(id) {
+  const invoiceId = Number(id);
+  const invoice = allInvoices.find((inv) => Number(inv.id) === invoiceId);
+  await loadDatevSettings();
+  const datevEmailKnown = datevSettingsCache !== null;
+  const datevEmailSet = !!getDatevEmailFromCache();
+
+  if (datevEmailKnown && !datevEmailSet) {
+    alert("Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.");
+    return;
+  }
+
+  datevExporting.add(invoiceId);
+  renderList();
+
+  try {
+    const res = await fetch(`/api/invoices/${invoiceId}/datev-export`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    const body = await res.json().catch(() => null);
+
+    if (res.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
+
+    if (!res.ok) {
+      const msg = body?.message || "DATEV Export fehlgeschlagen.";
+      alert(msg + "\n\nHinweis: DATEV-E-Mail unter Einstellungen hinterlegen.");
+      return;
+    }
+
+    const label = invoice ? `Rechnung #${invoice.invoice_number}` : "Rechnung";
+    alert(body?.message || `${label} wurde an DATEV gesendet.`);
+    await loadInvoices();
+  } catch (err) {
+    console.error("DATEV Export fehlgeschlagen", err);
+    alert("DATEV Export fehlgeschlagen. Bitte erneut versuchen.");
+  } finally {
+    datevExporting.delete(invoiceId);
+    renderList();
+  }
+}
+
 // ---------------------------------------------------------
 // Rechnung per E-Mail versenden
 // ---------------------------------------------------------
@@ -453,14 +556,20 @@ async function openEmailModal(invoiceId) {
   const title = document.getElementById("email-modal-title");
   const subtitle = document.getElementById("email-modal-subtitle");
   const sendBtn = document.getElementById("email-send");
+  const sendDatevBtn = document.getElementById("email-send-datev");
   const templateInfo = document.getElementById("email-template-info");
   const fromInfo = document.getElementById("email-from-info");
+  const datevInfo = document.getElementById("email-datev-info");
   const templateNote = document.getElementById("email-template-note");
   messageEdited = false;
 
   if (sendBtn) {
     sendBtn.disabled = false;
     sendBtn.textContent = "Senden";
+  }
+  if (sendDatevBtn) {
+    sendDatevBtn.disabled = true;
+    sendDatevBtn.textContent = "Senden + DATEV";
   }
 
   if (title) title.textContent = "Rechnung per E-Mail versenden";
@@ -481,11 +590,17 @@ async function openEmailModal(invoiceId) {
   suppressMessageChangeEvent = false;
   if (templateInfo) templateInfo.textContent = "Vorlage wird geladen…";
   if (fromInfo) fromInfo.textContent = "Absender wird geladen…";
+  if (datevInfo) {
+    datevInfo.textContent = "DATEV wird geladen…";
+    datevInfo.style.background = "#f5f5f7";
+    datevInfo.style.color = "#4a4a4a";
+  }
   if (templateNote) templateNote.textContent = "Nachricht basiert auf der Kategorien-Vorlage und kann angepasst werden.";
 
   setEmailStatus("Lade E-Mail-Vorlage…", "info");
 
   try {
+    await loadDatevSettings();
     const preview = await loadEmailPreview(invoiceId);
     if (preview) {
       currentEmailPreview = preview;
@@ -513,12 +628,38 @@ async function openEmailModal(invoiceId) {
       if (!preview.smtp_ready) {
         setEmailStatus("Hinweis: Es ist kein SMTP-Konto hinterlegt. Bitte Kategorie- oder Standard-SMTP prüfen.", "error");
       }
+      const datevEmail = (preview.datev_email || getDatevEmailFromCache() || "").trim();
+      const hasDatevEmail = Boolean(datevEmail);
+      if (datevInfo) {
+        datevInfo.textContent = hasDatevEmail ? `DATEV: ${datevEmail}` : "DATEV: nicht hinterlegt";
+        datevInfo.style.background = hasDatevEmail ? "#e7ffe5" : "#fff5e5";
+        datevInfo.style.color = hasDatevEmail ? "#0a7c2f" : "#b20000";
+      }
+      if (sendDatevBtn) {
+        sendDatevBtn.disabled = !hasDatevEmail;
+        sendDatevBtn.title = hasDatevEmail
+          ? "E-Mail zusätzlich an DATEV senden"
+          : "Bitte DATEV-E-Mail in den Einstellungen hinterlegen.";
+      }
     }
   } catch (err) {
     console.error("E-Mail-Vorlage laden fehlgeschlagen:", err);
     if (templateInfo) templateInfo.textContent = "Standard-Text (Fallback)";
     if (fromInfo) fromInfo.textContent = "Absender: Standard-SMTP";
     if (templateNote) templateNote.textContent = "Vorlage konnte nicht geladen werden. Standardtext verwendet.";
+    const cachedDatev = getDatevEmailFromCache();
+    const hasCachedDatev = Boolean(cachedDatev);
+    if (datevInfo) {
+      datevInfo.textContent = hasCachedDatev ? `DATEV: ${cachedDatev}` : "DATEV: unbekannt";
+      datevInfo.style.background = hasCachedDatev ? "#e7ffe5" : "#fff5e5";
+      datevInfo.style.color = hasCachedDatev ? "#0a7c2f" : "#b20000";
+    }
+    if (sendDatevBtn) {
+      sendDatevBtn.disabled = !hasCachedDatev;
+      sendDatevBtn.title = hasCachedDatev
+        ? "E-Mail zusätzlich an DATEV senden"
+        : "Bitte DATEV-E-Mail in den Einstellungen hinterlegen.";
+    }
     setEmailStatus(err.message || "Vorlage konnte nicht geladen werden.", "error");
   }
 
@@ -534,7 +675,7 @@ function closeEmailModal() {
   setEmailStatus("");
 }
 
-async function sendEmailForInvoice() {
+async function sendEmailForInvoice(includeDatev = false) {
   if (!currentEmailInvoice) {
     alert("Keine Rechnung ausgewählt.");
     return;
@@ -544,6 +685,7 @@ async function sendEmailForInvoice() {
   const subjectInput = document.getElementById("email-subject");
   const messageInput = document.getElementById("email-message");
   const sendBtn = document.getElementById("email-send");
+  const sendDatevBtn = document.getElementById("email-send-datev");
 
   const email = (toInput?.value || "").trim();
   const subject = (subjectInput?.value || "").trim();
@@ -556,11 +698,16 @@ async function sendEmailForInvoice() {
     return;
   }
 
-  if (sendBtn) {
-    sendBtn.disabled = true;
-    sendBtn.textContent = "Senden…";
+  const targetBtn = includeDatev ? sendDatevBtn : sendBtn;
+
+  if (targetBtn) {
+    targetBtn.disabled = true;
+    targetBtn.textContent = includeDatev ? "Senden + DATEV…" : "Senden…";
   }
-  setEmailStatus("Sende E-Mail…", "info");
+  if (!includeDatev && sendDatevBtn) {
+    sendDatevBtn.disabled = true;
+  }
+  setEmailStatus(includeDatev ? "Sende E-Mail + DATEV…" : "Sende E-Mail…", "info");
 
   try {
     const htmlPayload =
@@ -574,7 +721,7 @@ async function sendEmailForInvoice() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ to: email, subject, message, html: htmlPayload })
+      body: JSON.stringify({ to: email, subject, message, html: htmlPayload, include_datev: includeDatev })
     });
 
     const data = await res.json().catch(() => null);
@@ -585,7 +732,8 @@ async function sendEmailForInvoice() {
       return;
     }
 
-    setEmailStatus(data?.message || "E-Mail wurde verschickt.", "success");
+    const successMsg = includeDatev ? "E-Mail (inkl. DATEV) wurde verschickt." : "E-Mail wurde verschickt.";
+    setEmailStatus(data?.message || successMsg, "success");
     await loadInvoices();
     setTimeout(() => closeEmailModal(), 700);
   } catch (err) {
@@ -595,6 +743,10 @@ async function sendEmailForInvoice() {
     if (sendBtn) {
       sendBtn.disabled = false;
       sendBtn.textContent = "Senden";
+    }
+    if (sendDatevBtn) {
+      sendDatevBtn.disabled = false;
+      sendDatevBtn.textContent = "Senden + DATEV";
     }
   }
 }
@@ -624,7 +776,8 @@ document.getElementById("sort").addEventListener("change", renderList);
 // Buttons mit Funktionen verbinden
 document.getElementById("btn-multi-download")?.addEventListener("click", downloadSelectedInvoices);
 document.getElementById("btn-multi-delete")?.addEventListener("click", deleteSelectedInvoices);
-document.getElementById("email-send")?.addEventListener("click", sendEmailForInvoice);
+document.getElementById("email-send")?.addEventListener("click", () => sendEmailForInvoice(false));
+document.getElementById("email-send-datev")?.addEventListener("click", () => sendEmailForInvoice(true));
 document.getElementById("email-cancel")?.addEventListener("click", closeEmailModal);
 document.getElementById("email-close")?.addEventListener("click", closeEmailModal);
 document.getElementById("email-modal")?.addEventListener("click", (e) => {
@@ -638,6 +791,7 @@ document.getElementById("email-message")?.addEventListener("input", () => {
 // Start
 (async () => {
   await waitForPermissions();
-  await loadInvoices();
+  await Promise.all([loadDatevSettings().catch(() => null), loadInvoices()]);
+  renderList();
   applyPermissionVisibility();
 })();

@@ -23,6 +23,7 @@
   const perms = window.currentUserPermissions || [];
   const hasPerm = (p) => perms.includes(p);
   const canEditBank = hasPerm("settings.general");
+  const canEditDatev = hasPerm("settings.general");
   const canReadCategories = hasPerm("categories.read") || canEditBank;
   const canWriteCategories = hasPerm("categories.write") || canEditBank;
   const canDeleteCategories = hasPerm("categories.delete") || canEditBank;
@@ -30,6 +31,7 @@
   let logosCache = [];
   let currentCategoryId = null;
   let lastFocusedField = null;
+  let datevLoaded = false;
   const placeholders = [
     "{{recipient_name}}",
     "{{recipient_street}}",
@@ -60,6 +62,13 @@
     bankBic: document.getElementById("bank-bic"),
     bankSave: document.getElementById("bank-save"),
     bankReload: document.getElementById("bank-reload"),
+    datevError: document.getElementById("datev-error"),
+    datevSuccess: document.getElementById("datev-success"),
+    datevEmail: document.getElementById("datev-email"),
+    datevSave: document.getElementById("datev-save"),
+    datevReload: document.getElementById("datev-reload"),
+    tabButtons: document.querySelectorAll(".settings-tab"),
+    tabPanels: document.querySelectorAll(".tab-panel"),
     logoDropzone: document.getElementById("logo-dropzone"),
     logoInput: document.getElementById("logo-file"),
     logoButton: document.getElementById("logo-file-btn"),
@@ -141,6 +150,9 @@
 
     return remainder === 1;
   };
+
+  const isValidEmailAddress = (value) =>
+    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((value || "").trim());
 
   const MAX_LOGO_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
   const allowedLogoTypes = ["image/png", "image/jpeg", "image/svg+xml"];
@@ -406,6 +418,107 @@
     } catch (err) {
       console.error("Bankdaten speichern fehlgeschlagen", err);
       showBox(elements.bankError, "Fehler beim Speichern der Bankdaten.");
+    }
+  }
+
+  const clearDatevMessages = () => {
+    hideBox(elements.datevError);
+    hideBox(elements.datevSuccess);
+  };
+
+  const disableDatevForm = (message) => {
+    [elements.datevEmail, elements.datevSave, elements.datevReload].forEach((el) => {
+      if (el) el.disabled = true;
+    });
+    if (message) showBox(elements.datevError, message);
+  };
+
+  async function loadDatevSettings() {
+    clearDatevMessages();
+
+    if (!canEditDatev) {
+      disableDatevForm("Keine Berechtigung zum Ändern der DATEV-E-Mail.");
+      datevLoaded = true;
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/datev", { credentials: "include" });
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        disableDatevForm("Keine Berechtigung zum Ändern der DATEV-E-Mail.");
+        datevLoaded = true;
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.datevError, "DATEV-E-Mail konnte nicht geladen werden.");
+        return;
+      }
+
+      const data = await res.json();
+      if (elements.datevEmail) elements.datevEmail.value = data.email || "";
+      if (!data.email) {
+        showBox(elements.datevError, "Noch keine DATEV-E-Mail hinterlegt. Bitte speichern.");
+      }
+      datevLoaded = true;
+    } catch (err) {
+      console.error("DATEV-Einstellungen laden fehlgeschlagen", err);
+      showBox(elements.datevError, "DATEV-E-Mail konnte nicht geladen werden.");
+    }
+  }
+
+  async function saveDatevSettings() {
+    clearDatevMessages();
+
+    if (!canEditDatev) {
+      showBox(elements.datevError, "Keine Berechtigung zum Ändern der DATEV-E-Mail.");
+      return;
+    }
+
+    const email = (elements.datevEmail?.value || "").trim();
+
+    if (!email) {
+      showBox(elements.datevError, "Bitte eine DATEV-E-Mail-Adresse eintragen.");
+      return;
+    }
+
+    if (!isValidEmailAddress(email)) {
+      showBox(elements.datevError, "DATEV-E-Mail ist ungültig.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/datev", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        showBox(elements.datevError, "Keine Berechtigung zum Ändern der DATEV-E-Mail.");
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.datevError, body.message || "DATEV-E-Mail konnte nicht gespeichert werden.");
+        return;
+      }
+
+      if (elements.datevEmail) elements.datevEmail.value = body.email || email;
+      datevLoaded = true;
+      showBox(elements.datevSuccess, "DATEV-E-Mail gespeichert.");
+    } catch (err) {
+      console.error("DATEV-Einstellungen speichern fehlgeschlagen", err);
+      showBox(elements.datevError, "DATEV-E-Mail konnte nicht gespeichert werden.");
     }
   }
 
@@ -955,6 +1068,26 @@
   }
 
   // Initial states + event binding
+  const tabButtons = Array.from(elements.tabButtons || []);
+  const tabPanels = Array.from(elements.tabPanels || []);
+
+  const switchTab = (key) => {
+    tabButtons.forEach((btn) => {
+      const isActive = btn.dataset.tab === key;
+      btn.classList.toggle("active", isActive);
+    });
+    tabPanels.forEach((panel) => {
+      panel.classList.toggle("hidden", panel.dataset.tabPanel !== key);
+    });
+    if (key === "datev" && !datevLoaded) {
+      loadDatevSettings();
+    }
+  };
+
+  tabButtons.forEach((btn) =>
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab))
+  );
+
   if (!canWriteCategories) {
     [elements.newKey, elements.newLabel, elements.newLogo].forEach((el) => {
       if (el) el.disabled = true;
@@ -1003,6 +1136,8 @@
   }
   if (elements.bankSave) elements.bankSave.addEventListener("click", saveBankData);
   if (elements.bankReload) elements.bankReload.addEventListener("click", loadBankData);
+  if (elements.datevSave) elements.datevSave.addEventListener("click", saveDatevSettings);
+  if (elements.datevReload) elements.datevReload.addEventListener("click", loadDatevSettings);
   if (elements.logoButton && canWriteCategories) {
     elements.logoButton.addEventListener("click", () => elements.logoInput?.click());
   }
@@ -1062,8 +1197,10 @@
     });
   }
 
+  switchTab("general");
   updateKeyHint();
   loadBankData();
+  loadDatevSettings();
   loadLogos();
   loadCategories();
 })();
