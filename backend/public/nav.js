@@ -24,7 +24,11 @@ function hide(id) {
 // User-Daten vom Backend holen
 async function loadUser() {
   try {
-    const res = await fetch("/api/auth/me", { credentials: "include" });
+    const res = await fetch("/api/auth/me", {
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Cache-Control": "no-store" },
+    });
     if (!res.ok) {
       return null;
     }

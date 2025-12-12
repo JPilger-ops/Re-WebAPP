@@ -1,11 +1,31 @@
 (async () => {
-  await ensureAuthReady();
+  const dbg = (...args) => console.info("[categories]", ...args);
+
+  // Warte auf Auth-Init aus nav.js, aber mit Timeout-Fallback, damit die Seite nicht hängen bleibt
+  const waitAuth = async () => {
+    try {
+      await Promise.race([
+        ensureAuthReady(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    } catch (err) {
+      console.error("Auth-Wartefehler:", err);
+    }
+    if (!window.userLoaded) {
+      console.warn("Auth-Status unklar, fahre dennoch fort (Timeout).");
+      window.userLoaded = true;
+    }
+  };
+
+  await waitAuth();
+  dbg("Auth ready, currentUserPermissions:", window.currentUserPermissions);
 
   const perms = window.currentUserPermissions || [];
-  const canReadCategories = perms.includes("categories.read");
-  const canWriteCategories = perms.includes("categories.write");
-  const canDeleteCategories = perms.includes("categories.delete");
-  const canEditBank = perms.includes("settings.general");
+  const hasPerm = (p) => perms.includes(p);
+  const canEditBank = hasPerm("settings.general");
+  const canReadCategories = hasPerm("categories.read") || canEditBank;
+  const canWriteCategories = hasPerm("categories.write") || canEditBank;
+  const canDeleteCategories = hasPerm("categories.delete") || canEditBank;
   let categoriesCache = [];
   let logosCache = [];
 
@@ -171,6 +191,7 @@
         return;
       }
       if (!res.ok) {
+        console.warn("Logos laden HTTP-Fehler", res.status);
         renderLogoOptions(preselect);
         return;
       }
@@ -212,6 +233,7 @@
         return;
       }
       if (!res.ok) {
+        console.warn("Bank laden HTTP-Fehler", res.status);
         showBox(elements.bankError, "Bankdaten konnten nicht geladen werden.");
         return;
       }
@@ -276,6 +298,7 @@
         return;
       }
       if (!res.ok) {
+        console.warn("Bank speichern HTTP-Fehler", res.status, body);
         showBox(elements.bankError, body.message || "Fehler beim Speichern der Bankdaten.");
         return;
       }
@@ -312,6 +335,7 @@
         return;
       }
       if (!res.ok) {
+        console.warn("Kategorien laden HTTP-Fehler", res.status);
         showBox(elements.catError, "Kategorien konnten nicht geladen werden.");
         return;
       }
@@ -342,6 +366,12 @@
   function renderCategoryTable(categories) {
     if (!elements.catBody) return;
     elements.catBody.innerHTML = "";
+
+    if (!Array.isArray(categories)) {
+      showBox(elements.catError, "Kategorien konnten nicht geladen werden (ungültige Antwort).");
+      console.error("[categories] Ungültige Kategorien-Antwort", categories);
+      return;
+    }
 
     const buildLogoSelect = (value, id) => {
       const current = (value || "").trim();
@@ -557,6 +587,7 @@
         return;
       }
       if (!res.ok) {
+        console.warn("Kategorie anlegen HTTP-Fehler", res.status);
         showBox(elements.catError, "Fehler beim Anlegen der Kategorie.");
         return;
       }
@@ -582,7 +613,7 @@
     const placeholder = ((elements.catBody.querySelector(`input[data-id="${id}"][data-field="label"]`)?.value ||
       elements.catBody.querySelector(`input[data-id="${id}"][data-field="key"]`)?.value ||
       value ||
-      "?`).trim() || "?")
+      "?").trim() || "?")
       .slice(0, 2)
       .toUpperCase();
 

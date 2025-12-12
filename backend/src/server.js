@@ -22,6 +22,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Etags/Caching für API unterdrücken, damit /api/auth/me nicht mit 304 beantwortet wird
+app.disable("etag");
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
   .split(",")
   .map((origin) => origin.trim())

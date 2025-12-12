@@ -2,6 +2,7 @@ import { db } from "../utils/db.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,7 @@ const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 // Alle Kategorien holen
 export const getAllCategories = async (req, res) => {
   try {
+    await ensureInvoiceCategoriesTable();
     const result = await db.query(`
       SELECT id, key, label, logo_file
       FROM invoice_categories
@@ -28,18 +30,23 @@ export const getAllCategories = async (req, res) => {
 export const createCategory = async (req, res) => {
   const { key, label, logo_file } = req.body;
 
-  if (!key || !label || !logo_file) {
+  const cleanKey = (key ?? "").trim();
+  const cleanLabel = (label ?? "").trim();
+  const cleanLogo = (logo_file ?? "").trim();
+
+  if (!cleanKey || !cleanLabel || !cleanLogo) {
     return res.status(400).json({ message: "key, label und logo_file sind erforderlich." });
   }
 
   try {
+    await ensureInvoiceCategoriesTable();
     const result = await db.query(
       `
       INSERT INTO invoice_categories (key, label, logo_file)
       VALUES ($1, $2, $3)
       RETURNING id, key, label, logo_file
       `,
-      [key.trim(), label.trim(), logo_file.trim()]
+      [cleanKey, cleanLabel, cleanLogo]
     );
 
     res.status(201).json(result.rows[0]);
@@ -56,15 +63,24 @@ export const updateCategory = async (req, res) => {
 
   if (!id) return res.status(400).json({ message: "Ungültige Kategorien-ID." });
 
+  const cleanKey = (key ?? "").trim();
+  const cleanLabel = (label ?? "").trim();
+  const cleanLogo = (logo_file ?? "").trim();
+
+  if (!cleanKey || !cleanLabel) {
+    return res.status(400).json({ message: "key und label sind erforderlich." });
+  }
+
   try {
+    await ensureInvoiceCategoriesTable();
     const result = await db.query(
       `
       UPDATE invoice_categories
-      SET key = $1, label = $2, logo_file = $3
+      SET key = $1, label = $2, logo_file = $3, updated_at = NOW()
       WHERE id = $4
       RETURNING id, key, label, logo_file
       `,
-      [key.trim(), label.trim(), logo_file.trim(), id]
+      [cleanKey, cleanLabel, cleanLogo, id]
     );
 
     if (result.rowCount === 0) {
@@ -84,6 +100,7 @@ export const deleteCategory = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Kategorien-ID." });
 
   try {
+    await ensureInvoiceCategoriesTable();
     await db.query(
       "DELETE FROM invoice_categories WHERE id = $1",
       [id]

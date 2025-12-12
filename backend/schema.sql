@@ -47,6 +47,19 @@ CREATE TABLE invoice_items (
     line_total_gross NUMERIC(10,2)
 );
 
+-- Kategorien für Rechnungen
+CREATE TABLE IF NOT EXISTS invoice_categories (
+    id SERIAL PRIMARY KEY,
+    key VARCHAR(100) NOT NULL UNIQUE,
+    label VARCHAR(255) NOT NULL,
+    logo_file VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_categories_key
+ON invoice_categories (key);
+
 -- Verhindert Dubletten anhand Stammdaten
 CREATE UNIQUE INDEX IF NOT EXISTS idx_recipients_unique
 ON recipients (

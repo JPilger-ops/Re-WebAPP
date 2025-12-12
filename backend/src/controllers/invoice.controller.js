@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { getBankSettings } from "../utils/bankSettings.js";
 import nodemailer from "nodemailer";
+import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
 
 dotenv.config();
 
@@ -377,6 +378,7 @@ export const getInvoiceById = async (req, res) => {
 
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
+  await ensureInvoiceCategoriesTable();
   const client = await db.connect();
 
   try {
@@ -481,6 +483,7 @@ export const getInvoicePdf = async (req, res) => {
  * Erstellt bei Bedarf das PDF und liefert Buffer + Metadaten zurück
  */
 async function ensureInvoicePdf(id) {
+  await ensureInvoiceCategoriesTable();
   const client = await db.connect();
 
   try {
@@ -509,11 +512,6 @@ async function ensureInvoicePdf(id) {
     const row = invoiceResult.rows[0];
     const filename = `RE-${row.invoice_number}.pdf`;
     const filepath = path.join(pdfDir, filename);
-
-    if (fs.existsSync(filepath)) {
-      const buffer = fs.readFileSync(filepath);
-      return { buffer, filename, filepath, invoiceRow: row };
-    }
 
     const invoice = {
       invoice_number: row.invoice_number,
