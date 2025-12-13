@@ -16,6 +16,7 @@ import roleRoutes from "./routes/role.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
 import settingsRoutes from "./routes/settings.routes.js";
 import versionRoutes from "./routes/version.routes.js";
+import statsRoutes from "./routes/stats.routes.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,6 +71,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/invoices", authRequired, invoiceRoutes);
 app.use("/api/customers", authRequired, customerRoutes);
+app.use("/api/stats", authRequired, statsRoutes);
 app.use("/api/testdb", authRequired, testRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/settings", settingsRoutes);

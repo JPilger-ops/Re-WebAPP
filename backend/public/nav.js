@@ -97,6 +97,7 @@ async function initNavigation() {
   if (!perms.includes("users.read")) hide("nav-users");
   if (!perms.includes("roles.read")) hide("nav-roles");
   if (!perms.includes("customers.read")) hide("nav-customers");
+  if (!perms.includes("stats.view")) hide("nav-statistics");
   if (!perms.includes("categories.read") && !perms.includes("settings.general")) hide("nav-categories");
   // Rechnungsübersicht darf praktisch jeder, also lassen wir die sichtbar.
 
@@ -117,6 +118,7 @@ async function initNavigation() {
 
   bind("nav-dashboard", "/");
   bind("nav-invoices", "/invoices.html");
+  bind("nav-statistics", "/statistics.html");
   bind("nav-create", "/create.html");
   bind("nav-customers", "/customers.html");
   bind("nav-users", "/user-management.html");

@@ -95,7 +95,7 @@ SEPA_CREDITOR_BIC="ABCDEFGHXXX"
 BANK_NAME="Hausbank"
 
 APP_SSL_CERT_DIR=/path/zum/zertifikat  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
-APP_VERSION=0.7.0
+APP_VERSION=0.8.0
 ```
 
 ## API-Überblick (gekürzt)

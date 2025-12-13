@@ -283,6 +283,7 @@ body {
   padding: 10px 12px;
   border-bottom: 1px solid #f1f1f4;
   vertical-align: middle;
+  text-align: center;
 }
 
 .table th {
@@ -1430,6 +1431,90 @@ body {
   font-size: 20px;
   font-weight: 600;
   color: #1c1c1e;
+}
+
+/* Statistik-Seite */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.04);
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.stat-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.stats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stats-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stats-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.stats-filter select[multiple] {
+  min-width: 200px;
+  height: 120px;
+}
+
+.category-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.category-chip {
+  border: 1px solid var(--border-subtle);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.category-chip:hover {
+  background: #f5f5f7;
+}
+
+.category-chip.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(10, 132, 255, 0.14);
 }
 
 /* ===========================================

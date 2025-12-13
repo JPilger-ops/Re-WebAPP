@@ -331,7 +331,7 @@ function renderList() {
       <td>${(new Date(i.date)).toLocaleDateString("de-DE")}</td>
       <td>${i.recipient_name || "-"}</td>
       <td>${i.category_label || i.category || "-"}</td>
-      <td>${Number(i.gross_total).toFixed(2)} €</td>
+      <td>${formatAmount(i.gross_total)} €</td>
       <td>${status}</td>
       <td>${datevBadge}</td>
       <td>

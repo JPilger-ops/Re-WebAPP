@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Statistik</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-title">RechnungsAPP</div>
+      <nav class="sidebar-nav">
+        <button class="nav-item" id="nav-dashboard">Dashboard</button>
+        <button class="nav-item" id="nav-invoices">Rechnungsübersicht</button>
+        <button class="nav-item nav-item-active" id="nav-statistics">Statistik</button>
+        <button class="nav-item" id="nav-create">Neue Rechnung</button>
+        <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
+        <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
+        <button id="nav-account" class="nav-item">Account</button>
+        <button id="nav-roles" class="nav-item">Rollenverwaltung</button>
+        <button id="nav-categories" class="nav-item">Einstellungen</button>
+        <button id="nav-logout" class="nav-item" style="color:#b20000;">Logout</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 class="topbar-title" style="margin:0;">Statistik</h1>
+          <div class="muted">Gesamtwerte und Jahresübersicht auf Basis aller Rechnungen.</div>
+        </div>
+        <div class="stats-filter">
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label class="input-label" for="year-filter" style="margin:0;">Jahr</label>
+            <select id="year-filter" class="input">
+              <option value="">Alle Jahre</option>
+            </select>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label class="input-label" style="margin:0;">Kategorien</label>
+            <div id="category-list" class="category-chip-list">
+              <!-- Chips werden via JS gerendert -->
+            </div>
+            <div class="stats-hint">Mehrere Kategorien wählbar, „Alle“ hebt die Filterung auf.</div>
+          </div>
+        </div>
+      </header>
+
+      <div id="stats-error" class="error-box hidden"></div>
+      <div id="stats-forbidden" class="error-box hidden"></div>
+      <div id="stats-loading" class="stats-hint hidden">Lade Statistik…</div>
+      <div class="stats-hint">Gesamt bleibt über alle Jahre, der Filter wirkt auf die Jahres-Tabelle.</div>
+
+      <div id="stats-content" style="display:flex; flex-direction:column; gap:16px; margin-top:10px;">
+        <div class="card">
+          <div class="stats-header" style="margin-bottom:12px;">
+            <div>
+              <h2 class="section-h" style="margin:0;">Gesamt (alle Jahre)</h2>
+              <div class="muted">Brutto, Netto, Steuer und Zahlungsstatus.</div>
+            </div>
+            <div id="stats-selection" class="chip">Alle Jahre</div>
+          </div>
+          <div id="overall-grid" class="stats-grid"></div>
+        </div>
+
+        <div class="card">
+          <div class="stats-header" style="margin-bottom:12px;">
+            <div>
+              <h2 class="section-h" style="margin:0;">Nach Jahr</h2>
+              <div class="muted" id="year-hint">Aufgeschlüsselt nach Rechnungsjahr.</div>
+            </div>
+          </div>
+          <div id="stats-year-empty" class="muted" style="padding:6px 4px;">Keine Daten vorhanden.</div>
+          <div class="table-wrapper" id="stats-year-wrapper">
+            <table class="table" id="stats-year-table">
+              <thead>
+                <tr>
+                  <th>Jahr</th>
+                  <th>Anzahl</th>
+                  <th>Brutto gesamt</th>
+                  <th>Bezahlt</th>
+                  <th>Offen</th>
+                  <th>Ø Brutto</th>
+                </tr>
+              </thead>
+              <tbody id="stats-year-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/nav.js"></script>
+  <script src="/statistics.js"></script>
+</body>
+</html>

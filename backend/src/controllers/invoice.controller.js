@@ -91,6 +91,17 @@ const formatIban = (iban) => {
   return iban.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim();
 };
 
+const formatCurrencyDe = (val) =>
+  n(val).toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const formatNumberDe = (val) =>
+  n(val).toLocaleString("de-DE", {
+    maximumFractionDigits: 2,
+  });
+
 const placeholderRegex = (ph) => new RegExp(ph.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
 
 const buildPlaceholderMap = (row = {}, bankSettings = {}) => {
@@ -793,9 +804,9 @@ async function ensureInvoicePdf(id) {
 
     const itemsRowsHtml = items
       .map((item) => {
-        const q = n(item.quantity);
-        const up = n(item.unit_price_gross).toFixed(2);
-        const total = n(item.line_total_gross).toFixed(2);
+        const q = formatNumberDe(item.quantity);
+        const up = formatCurrencyDe(item.unit_price_gross);
+        const total = formatCurrencyDe(item.line_total_gross);
 
         return `
           <tr>
@@ -1151,9 +1162,9 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
     <div class="totals-wrapper">
       <table>
-        <tr><td>Zwischensumme</td><td><span class="amount">${(invoice.net_19 + invoice.net_7).toFixed(2)} €</span></td></tr>
-        <tr><td>MwSt 19%</td><td><span class="amount">${invoice.vat_19.toFixed(2)} €</span></td></tr>
-        <tr><td>MwSt 7%</td><td><span class="amount">${invoice.vat_7.toFixed(2)} €</span></td></tr>
+        <tr><td>Zwischensumme</td><td><span class="amount">${formatCurrencyDe(invoice.net_19 + invoice.net_7)} €</span></td></tr>
+        <tr><td>MwSt 19%</td><td><span class="amount">${formatCurrencyDe(invoice.vat_19)} €</span></td></tr>
+        <tr><td>MwSt 7%</td><td><span class="amount">${formatCurrencyDe(invoice.vat_7)} €</span></td></tr>
       </table>
 
       <div class="final-total-box">
@@ -1161,8 +1172,8 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
         <span class="amount">
           ${
             invoice.b2b
-              ? (invoice.net_19 + invoice.net_7).toFixed(2) + " € (Netto-Endbetrag)"
-              : invoice.gross_total.toFixed(2) + " €"
+              ? `${formatCurrencyDe(invoice.net_19 + invoice.net_7)} € (Netto-Endbetrag)`
+              : `${formatCurrencyDe(invoice.gross_total)} €`
           }
         </span>
       </div>

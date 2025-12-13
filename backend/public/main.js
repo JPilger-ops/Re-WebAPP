@@ -34,7 +34,10 @@ function formatDate(value) {
 
 function formatAmount(value) {
   const num = Number(value || 0);
-  return num.toFixed(2) + " €";
+  return num.toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) + " €";
 }
 
 // ---------------------------------------------------------
