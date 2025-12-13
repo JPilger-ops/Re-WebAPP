@@ -45,6 +45,23 @@ const escapeHtml = (value) =>
 
 const messageToHtml = (text) => escapeHtml(text || "").replace(/\n/g, "<br>");
 const getDatevEmailFromCache = () => (datevSettingsCache?.email || "").trim();
+const htmlToPlain = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<\s*ul[^>]*>/gi, "\n")
+    .replace(/<\s*ol[^>]*>/gi, "\n")
+    .replace(/<\/\s*ul>/gi, "\n")
+    .replace(/<\/\s*ol>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+};
 
 function buildFallbackEmail(invoice, bankData) {
   const invoiceDate = formatDateDe(invoice.date);
@@ -302,15 +319,16 @@ function renderList() {
       <td>${status}</td>
       <td>${datevBadge}</td>
       <td>
-        <button onclick="openInvoice(${i.id})">Öffnen</button>
-        <button class="success-button small-btn" ${exportDisabled ? "disabled" : ""} title="${escapeHtml(exportTitle)}" onclick="exportInvoiceToDatev(${i.id})">${exportLabel}</button>
-        <button class="secondary-button small-btn" onclick="openEmailModal(${i.id})">Verschicken per E-Mail</button>
-
-        ${
-          (window.currentUserPermissions || []).includes("invoices.delete")
-            ? `<button onclick="deleteInvoice(${i.id}, '${i.invoice_number}')">Löschen</button>`
-            : ""
-        }
+        <div class="action-buttons">
+          <button class="primary-button small-btn" onclick="openInvoice(${i.id})">Öffnen</button>
+          <button class="success-button small-btn" ${exportDisabled ? "disabled" : ""} title="${escapeHtml(exportTitle)}" onclick="exportInvoiceToDatev(${i.id})">${exportLabel}</button>
+          <button class="primary-button small-btn" onclick="openEmailModal(${i.id})">Verschicken per E-Mail</button>
+          ${
+            (window.currentUserPermissions || []).includes("invoices.delete")
+              ? `<button class="danger-button small-btn" onclick="deleteInvoice(${i.id}, '${i.invoice_number}')">Löschen</button>`
+              : ""
+          }
+        </div>
       </td>
     `;
 
@@ -606,7 +624,10 @@ async function openEmailModal(invoiceId) {
       currentEmailPreview = preview;
       suppressMessageChangeEvent = true;
       if (subjectInput) subjectInput.value = preview.subject || fallback.subject;
-      if (messageInput) messageInput.value = preview.body_text || fallback.body;
+      if (messageInput) {
+        const draftText = preview.body_html ? htmlToPlain(preview.body_html) : preview.body_text;
+        messageInput.value = draftText || fallback.body;
+      }
       suppressMessageChangeEvent = false;
       messageEdited = false;
       if (templateInfo) {
@@ -710,10 +731,12 @@ async function sendEmailForInvoice(includeDatev = false) {
   setEmailStatus(includeDatev ? "Sende E-Mail + DATEV…" : "Sende E-Mail…", "info");
 
   try {
+    const hasTemplateHtml = Boolean(currentEmailPreview?.body_html);
     const htmlPayload =
-      !messageEdited && currentEmailPreview?.body_html
+      !messageEdited && hasTemplateHtml
         ? currentEmailPreview.body_html
         : messageToHtml(message);
+    const textPayload = trimmedMessage || previewBody || message;
 
     const res = await fetch(`/api/invoices/${currentEmailInvoice.id}/send-email`, {
       method: "POST",
@@ -721,7 +744,7 @@ async function sendEmailForInvoice(includeDatev = false) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ to: email, subject, message, html: htmlPayload, include_datev: includeDatev })
+      body: JSON.stringify({ to: email, subject, message: textPayload, html: htmlPayload, include_datev: includeDatev })
     });
 
     const data = await res.json().catch(() => null);

@@ -138,7 +138,7 @@ async function renderVersionBadge() {
     const res = await fetch("/api/version", { cache: "no-store" });
     if (!res.ok) return;
     const data = await res.json();
-    const label = data?.version ? `v${data.version}` : null;
+    const label = data?.version ? `RechnungsWebAPP  v${data.version}` : null;
     if (!label) return;
 
     const sidebar = document.querySelector(".sidebar");

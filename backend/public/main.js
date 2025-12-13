@@ -40,18 +40,18 @@ function formatAmount(value) {
 // ---------------------------------------------------------
 // Rechnungsstatus bestimmen
 // ---------------------------------------------------------
-function getStatus(inv) {
-  const now = new Date();
+function isOverdue(inv) {
+  if (!inv || inv.status_paid_at) return false;
+  if (!inv.due_date) return false;
+  const due = new Date(inv.due_date);
+  due.setHours(23, 59, 59, 999); // Ende des Fälligkeits-Tages
+  return due < new Date();
+}
 
+function getStatus(inv) {
   if (inv.status_paid_at) return { key: "paid", label: "Bezahlt" };
 
-  const dueBase = inv.due_date || inv.date;
-  if (dueBase) {
-    const due = new Date(dueBase);
-    if (due < now && !inv.status_paid_at) {
-      return { key: "overdue", label: "Überfällig" };
-    }
-  }
+  if (isOverdue(inv)) return { key: "overdue", label: "Überfällig" };
 
   if (inv.status_sent) return { key: "sent", label: "Versendet" };
 
@@ -69,23 +69,23 @@ function updateKpis(invoices) {
 
   if (!Array.isArray(invoices)) invoices = [];
 
-  const now = new Date();
+  const stats = {
+    total: invoices.length,
+    sent: 0,
+    paid: 0,
+    overdue: 0,
+  };
 
-  const total = invoices.length;
-  const sent = invoices.filter(i => i.status_sent).length;
-  const paid = invoices.filter(i => i.status_paid_at).length;
+  invoices.forEach(inv => {
+    if (inv.status_sent) stats.sent += 1;
+    if (inv.status_paid_at) stats.paid += 1;
+    if (isOverdue(inv)) stats.overdue += 1;
+  });
 
-  const overdue = invoices.filter(i => {
-    const base = i.due_date || i.date;
-    if (!base || i.status_paid_at) return false;
-    const d = new Date(base);
-    return d < now;
-  }).length;
-
-  elCreated.textContent = total;
-  elSent.textContent = sent;
-  elPaid.textContent = paid;
-  elOverdue.textContent = overdue;
+  elCreated.textContent = stats.total;
+  elSent.textContent = stats.sent;
+  elPaid.textContent = stats.paid;
+  elOverdue.textContent = stats.overdue;
 }
 
 // ---------------------------------------------------------
