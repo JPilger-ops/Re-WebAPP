@@ -106,6 +106,9 @@ export const downloadCaCertificate = async (_req, res) => {
     await fs.promises.access(certPath, fs.constants.R_OK);
     return res.download(certPath, "ca.crt");
   } catch (err) {
+    if (err.code === "ENOENT") {
+      return res.status(404).json({ message: "CA-Zertifikat nicht gefunden. Bitte certificates/ca/ca.crt hinterlegen." });
+    }
     console.error("CA-Zertifikat kann nicht ausgeliefert werden:", err);
     return res.status(500).json({ message: "CA-Zertifikat nicht verfügbar." });
   }

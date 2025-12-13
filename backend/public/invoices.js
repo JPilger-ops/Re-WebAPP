@@ -160,9 +160,13 @@ async function waitForPermissions() {
     const check = () => {
       if (window.currentUserPermissions && window.currentUserPermissions.length > 0) {
         resolve();
-      } else {
-        setTimeout(check, 50);
+        return;
       }
+      if (window.userLoaded) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 50);
     };
     check();
   });
@@ -217,6 +221,7 @@ async function loadInvoices() {
 
   const data = await res.json();
   allInvoices = data;
+  updateCategoryFilterOptions();
   renderList();
 }
 
@@ -265,6 +270,16 @@ function renderList() {
     list = list.filter(i => i.status_paid_at);
   }
 
+  // Kategorie-Filter
+  const filterCat = document.getElementById("filter-category");
+  const catVal = filterCat ? filterCat.value : "all";
+  if (catVal && catVal !== "all") {
+    list = list.filter(i => {
+      const label = (i.category_label || i.category || "").toString().toLowerCase();
+      return label === catVal;
+    });
+  }
+
   // Sortierung
   const sort = document.getElementById("sort").value;
   list.sort((a, b) => {
@@ -285,7 +300,7 @@ function renderList() {
   if (list.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.textContent = "Keine Rechnungen gefunden.";
     tr.appendChild(td);
     body.appendChild(tr);
@@ -315,6 +330,7 @@ function renderList() {
       <td>${i.invoice_number}</td>
       <td>${(new Date(i.date)).toLocaleDateString("de-DE")}</td>
       <td>${i.recipient_name || "-"}</td>
+      <td>${i.category_label || i.category || "-"}</td>
       <td>${Number(i.gross_total).toFixed(2)} €</td>
       <td>${status}</td>
       <td>${datevBadge}</td>
@@ -336,6 +352,26 @@ function renderList() {
   });
 
   setupSelectAllHandler();
+}
+
+function updateCategoryFilterOptions() {
+  const select = document.getElementById("filter-category");
+  if (!select) return;
+  const current = select.value;
+  const options = new Set();
+  allInvoices.forEach((inv) => {
+    const label = (inv.category_label || inv.category || "").toString().trim();
+    if (label) options.add(label);
+  });
+  const sorted = Array.from(options).sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+  select.innerHTML = '<option value="all">Alle Kategorien</option>';
+  sorted.forEach((label) => {
+    const opt = document.createElement("option");
+    opt.value = label.toLowerCase();
+    opt.textContent = label;
+    if (current && current === opt.value) opt.selected = true;
+    select.appendChild(opt);
+  });
 }
 
 // ---------------------------------------------------------
@@ -794,6 +830,7 @@ function setupSelectAllHandler() {
 // ---------------------------------------------------------
 document.getElementById("search").addEventListener("input", renderList);
 document.getElementById("filter").addEventListener("change", renderList);
+document.getElementById("filter-category").addEventListener("change", renderList);
 document.getElementById("sort").addEventListener("change", renderList);
 
 // Buttons mit Funktionen verbinden

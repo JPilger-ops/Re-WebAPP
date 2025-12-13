@@ -1100,8 +1100,30 @@
   );
 
   if (isAdmin && elements.caDownload) {
-    elements.caDownload.addEventListener("click", () => {
-      window.location.href = "/api/settings/ca-cert";
+    elements.caDownload.addEventListener("click", async () => {
+      elements.catSuccess && hideBox(elements.catSuccess);
+      elements.catError && hideBox(elements.catError);
+      try {
+        const res = await fetch("/api/settings/ca-cert", { credentials: "include" });
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          const msg = errBody?.message || "Download fehlgeschlagen";
+          throw new Error(msg);
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "ca.crt";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showBox(elements.catSuccess, "CA-Zertifikat wurde heruntergeladen.");
+      } catch (err) {
+        console.error("CA-Download fehlgeschlagen", err);
+        showBox(elements.catError, err.message || "CA-Zertifikat konnte nicht geladen werden. Bitte prüfen, ob es vorhanden ist.");
+      }
     });
   }
 

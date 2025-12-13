@@ -52,6 +52,38 @@ permissions = [
   "categories.delete",
 ];
 
+const permissionDescriptions = {
+  "invoices.read": "Rechnungen einsehen und filtern.",
+  "invoices.create": "Neue Rechnungen anlegen.",
+  "invoices.update": "Bestehende Rechnungen bearbeiten.",
+  "invoices.export": "PDF/DATEV exportieren und Mehrfach-Download.",
+  "invoices.delete": "Rechnungen löschen.",
+  "customers.read": "Kundenliste ansehen.",
+  "customers.create": "Neue Kunden anlegen.",
+  "customers.update": "Kunden bearbeiten.",
+  "customers.delete": "Kunden löschen.",
+  "users.read": "Benutzerliste ansehen.",
+  "users.create": "Neue Benutzer anlegen.",
+  "users.update": "Benutzer bearbeiten und aktivieren/deaktivieren.",
+  "users.delete": "Benutzer löschen.",
+  "users.resetPassword": "Passwort-Reset für Benutzer auslösen.",
+  "roles.read": "Rollen ansehen.",
+  "roles.create": "Neue Rollen anlegen.",
+  "roles.update": "Rollen bearbeiten.",
+  "roles.delete": "Rollen löschen.",
+  "settings.general": "Bank-, DATEV- und Grundeinstellungen ändern.",
+  "categories.read": "Kategorien ansehen.",
+  "categories.write": "Kategorien anlegen/ändern.",
+  "categories.delete": "Kategorien löschen.",
+};
+
+const escapeAttr = (value) =>
+  String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
 // -----------------------------------------------
 // Rollen aus Backend laden
 // -----------------------------------------------
@@ -143,15 +175,41 @@ function renderPermissionList(selected) {
   permissions.forEach(p => {
     const row = document.createElement("div");
     row.style.marginBottom = "6px";
+    const desc = permissionDescriptions[p] || "Keine Beschreibung hinterlegt.";
 
     row.innerHTML = `
-      <label style="font-size:14px;display:flex;align-items:center;gap:8px;">
+      <label class="perm-row" style="font-size:14px;display:flex;gap:8px;">
         <input type="checkbox" class="permCheck" value="${p}" ${selected.includes(p) ? "checked" : ""}>
-        ${p}
+        <span style="flex:1 1 auto;">${p}</span>
+        <button type="button" class="perm-info-btn" data-desc="${escapeAttr(desc)}">i</button>
+        <div class="perm-popover hidden"></div>
       </label>
     `;
 
     list.appendChild(row);
+  });
+
+  // Popover-Handling (Click für Touch, Hover via title bleibt optional)
+  list.querySelectorAll(".perm-info-btn").forEach((btn) => {
+    const pop = btn.parentElement.querySelector(".perm-popover");
+    if (!pop) return;
+    const text = btn.dataset.desc || "";
+    pop.textContent = text;
+
+    const closeAll = () => {
+      list.querySelectorAll(".perm-popover").forEach((p) => p.classList.add("hidden"));
+    };
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = pop.classList.contains("hidden");
+      closeAll();
+      if (isHidden) pop.classList.remove("hidden");
+    });
+  });
+
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".perm-popover").forEach((p) => p.classList.add("hidden"));
   });
 }
 
