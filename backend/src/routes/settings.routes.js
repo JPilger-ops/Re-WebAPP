@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authRequired, requirePermission } from "../middleware/auth.middleware.js";
-import { getBankData, updateBankData, getDatevData, updateDatevData } from "../controllers/settings.controller.js";
+import { authRequired, requirePermission, requireRole } from "../middleware/auth.middleware.js";
+import { getBankData, updateBankData, getDatevData, updateDatevData, downloadCaCertificate } from "../controllers/settings.controller.js";
 
 const router = Router();
 
@@ -28,6 +28,12 @@ router.put(
   "/datev",
   requirePermission("settings.general"),
   updateDatevData
+);
+
+router.get(
+  "/ca-cert",
+  requireRole("admin"),
+  downloadCaCertificate
 );
 
 export default router;

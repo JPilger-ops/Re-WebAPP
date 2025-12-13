@@ -18,6 +18,7 @@ Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express lief
 - `pdfs/` – erzeugte Rechnungspdfs.
 - `schema.sql` – Datenbankschema (PostgreSQL).
 - `certificates/rechnung.intern/` – erwartete TLS-Dateien (`privkey.pem`, `fullchain.pem`), per Env übersteuerbar.
+- `certificates/ca/` – interne CA (`ca.crt`) für Client-SSL; Download nur für Admins unter Einstellungen.
 - `tests/` – Node.js Tests (Schwerpunkt DATEV).
 - `ecosystem.config.cjs` – PM2-Definition für den Produktivbetrieb.
 
@@ -94,7 +95,7 @@ SEPA_CREDITOR_BIC="ABCDEFGHXXX"
 BANK_NAME="Hausbank"
 
 APP_SSL_CERT_DIR=/path/zum/zertifikat  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
-APP_VERSION=0.4.5
+APP_VERSION=0.6.0
 ```
 
 ## API-Überblick (gekürzt)
@@ -104,7 +105,7 @@ APP_VERSION=0.4.5
 - Kunden: `GET/POST/PUT/DELETE /api/customers`.
 - Rechnungen: `GET /api/invoices` (Liste + Filter), `GET /api/invoices/:id`, `POST /api/invoices` (Neuanlage), `GET /api/invoices/:id/pdf`, `POST /api/invoices/:id/send-email` (optional `include_datev: true`), `POST /api/invoices/:id/datev-export`, Statusrouten für sent/paid, `DELETE /api/invoices/:id` nur Admin.
 - Kategorien (Permissions `categories.*` oder `settings.general`): CRUD, Logo-Upload (`POST /api/categories/logo`), Template/SMTP je Kategorie (`/api/categories/:id/email|template`), Mail-Test.
-- Einstellungen: `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/datev`.
+- Einstellungen: `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/datev`, `GET /api/settings/ca-cert` (admin).
 - Sonstiges: `GET /api/testdb` (DB-Ping), `GET /api/version`.
 
 ## Tests

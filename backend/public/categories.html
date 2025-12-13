@@ -73,7 +73,7 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="sidebar-title">Rechnungsapp</div>
+      <div class="sidebar-title">RechnungsAPP</div>
       <nav class="sidebar-nav">
         <button class="nav-item" id="nav-dashboard">Dashboard</button>
         <button class="nav-item" id="nav-invoices">Rechnungsübersicht</button>
@@ -97,11 +97,13 @@
       </header>
 
       <div class="settings-tabs">
-        <button class="settings-tab active" data-tab="general">Bank & Kategorien</button>
+        <button class="settings-tab active" data-tab="bank">Bank</button>
+        <button class="settings-tab" data-tab="categories">Kategorien</button>
         <button class="settings-tab" data-tab="datev">DATEV</button>
+        <button class="settings-tab" data-tab="cert">Zertifikate</button>
       </div>
 
-      <div class="tab-panel" data-tab-panel="general">
+      <div class="tab-panel" data-tab-panel="bank">
         <div class="page-stack">
           <section class="soft-card">
             <div class="inline-buttons" style="justify-content: space-between; align-items: flex-start;">
@@ -139,7 +141,11 @@
               <div class="tiny-note">Die Angaben werden automatisch in neue Rechnungen und den SEPA-QR-Code übernommen.</div>
             </div>
           </section>
+        </div>
+      </div>
 
+      <div class="tab-panel hidden" data-tab-panel="categories">
+        <div class="page-stack">
           <section class="soft-card" style="display:flex; flex-direction:column; gap:16px;">
             <div>
               <div class="pill">Kategorien & Logos</div>
@@ -218,7 +224,6 @@
                     <tbody id="cat-body"></tbody>
                 </table>
               </div>
-            </div>
           </section>
         </div>
       </div>
@@ -246,6 +251,18 @@
               <input id="datev-email" class="input" type="email" placeholder="buchhaltung@steuerkanzlei.de" />
               <div class="tiny-note">Wird für den Button „DATEV EXPORT“ und „Senden + DATEV“ genutzt.</div>
             </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="tab-panel hidden" data-tab-panel="cert">
+        <div class="page-stack">
+          <section class="soft-card" style="max-width: 560px;">
+            <div class="pill">TLS / Client</div>
+            <h2 class="section-title" style="margin:6px 0;">CA-Zertifikat herunterladen</h2>
+            <div class="muted" style="margin-bottom:12px;">Nur für Admins sichtbar. Zertifikat für Client-SSL (ca.crt).</div>
+            <button id="ca-download" class="primary-button small-btn">ca.crt herunterladen</button>
+            <div class="tiny-note" style="margin-top:10px;">Lege das Zertifikat auf Clients als vertrauenswürdige Stamm-CA ab.</div>
           </section>
         </div>
       </div>

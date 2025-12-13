@@ -22,6 +22,7 @@
 
   const perms = window.currentUserPermissions || [];
   const hasPerm = (p) => perms.includes(p);
+  const isAdmin = (window.currentUserRoleName || "").toLowerCase() === "admin";
   const canEditBank = hasPerm("settings.general");
   const canEditDatev = hasPerm("settings.general");
   const canReadCategories = hasPerm("categories.read") || canEditBank;
@@ -98,6 +99,9 @@
     tplSaveBtn: document.getElementById("tpl-save"),
     tplPreviewBtn: document.getElementById("tpl-preview"),
     placeholderList: document.getElementById("placeholder-list"),
+    caDownload: document.getElementById("ca-download"),
+    certTab: document.querySelector('[data-tab="cert"]'),
+    certPanel: document.querySelector('[data-tab-panel="cert"]'),
   };
 
   const escapeHtml = (value) =>
@@ -1072,6 +1076,7 @@
   const tabPanels = Array.from(elements.tabPanels || []);
 
   const switchTab = (key) => {
+    if (key === "cert" && !isAdmin) return;
     tabButtons.forEach((btn) => {
       const isActive = btn.dataset.tab === key;
       btn.classList.toggle("active", isActive);
@@ -1084,9 +1089,24 @@
     }
   };
 
+  // erst Tabs filtern, dann initial setzen
+  if (!isAdmin && elements.certTab && elements.certPanel) {
+    elements.certTab.remove();
+    elements.certPanel.remove();
+  }
+
   tabButtons.forEach((btn) =>
     btn.addEventListener("click", () => switchTab(btn.dataset.tab))
   );
+
+  if (isAdmin && elements.caDownload) {
+    elements.caDownload.addEventListener("click", () => {
+      window.location.href = "/api/settings/ca-cert";
+    });
+  }
+
+  // Default: Bank-Tab aktiv setzen
+  switchTab("bank");
 
   if (!canWriteCategories) {
     [elements.newKey, elements.newLabel, elements.newLogo].forEach((el) => {

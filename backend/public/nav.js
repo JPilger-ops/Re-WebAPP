@@ -88,6 +88,7 @@ async function initNavigation() {
 
   // 2. Rollen / Permissions auswerten
   const perms = user.permissions || [];
+  window.currentUserRoleName = user.role_name;
 
   // Global verfügbar für alle Skripte
   window.currentUserPermissions = perms;

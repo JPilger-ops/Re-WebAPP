@@ -1,0 +1,10 @@
+public/user-management.html:      <div class="sidebar-title">RechnungsAPP</div>
+public/create.html:      <div class="sidebar-title">Rechnungen</div>
+public/invoices.html:        <div class="sidebar-title">Rechnungen</div>
+public/role-management.html:      <div class="sidebar-title">RechnungsAPP</div>
+public/categories.html:      <div class="sidebar-title">RechnungsAPP</div>
+public/index.html:      <div class="sidebar-title">Rechnungen</div>
+public/customers.html:        <div class="sidebar-title">RechnungsAPP</div>
+public/account.html:      <div class="sidebar-title">RechnungsAPP</div>
+public/invoice.html:        <div class="sidebar-title">Rechnungen</div>
+public/style.css:.sidebar-title {
