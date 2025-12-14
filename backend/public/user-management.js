@@ -126,24 +126,24 @@ function renderTable() {
       <td>${user.username}</td>
       <td>${user.role_name || "-"}</td>
       <td>${user.created_at ? new Date(user.created_at).toLocaleDateString("de-DE") : "-"}</td>
-      <td class="actions-cell">
+      <td>
+        <div class="action-buttons">
+          <button class="secondary-button small-btn" onclick="openEditUser(${user.id})">
+            Bearbeiten
+          </button>
 
-        <button class="secondary-button small-btn" onclick="openEditUser(${user.id})">
-          Bearbeiten
-        </button>
+          <button class="secondary-button small-btn" onclick="resetPassword(${user.id})">
+            Passwort zurücksetzen
+          </button>
 
-        <button class="secondary-button small-btn" onclick="resetPassword(${user.id})">
-          Passwort zurücksetzen
-        </button>
+          <button class="secondary-button small-btn" onclick="toggleActive(${user.id}, ${user.is_active})">
+            ${user.is_active ? "Deaktivieren" : "Aktivieren"}
+          </button>
 
-        <button class="secondary-button small-btn" onclick="toggleActive(${user.id}, ${user.is_active})">
-          ${user.is_active ? "Deaktivieren" : "Aktivieren"}
-        </button>
-
-        <button class="danger-button small-btn" onclick="deleteUser(${user.id})">
-          Löschen
-        </button>
-
+          <button class="danger-button small-btn" onclick="deleteUser(${user.id})">
+            Löschen
+          </button>
+        </div>
       </td>
     `;
 

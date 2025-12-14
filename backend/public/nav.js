@@ -88,6 +88,7 @@ async function initNavigation() {
 
   // 2. Rollen / Permissions auswerten
   const perms = user.permissions || [];
+  window.currentUserRoleName = user.role_name;
 
   // Global verfügbar für alle Skripte
   window.currentUserPermissions = perms;
@@ -96,6 +97,7 @@ async function initNavigation() {
   if (!perms.includes("users.read")) hide("nav-users");
   if (!perms.includes("roles.read")) hide("nav-roles");
   if (!perms.includes("customers.read")) hide("nav-customers");
+  if (!perms.includes("stats.view")) hide("nav-statistics");
   if (!perms.includes("categories.read") && !perms.includes("settings.general")) hide("nav-categories");
   // Rechnungsübersicht darf praktisch jeder, also lassen wir die sichtbar.
 
@@ -116,6 +118,7 @@ async function initNavigation() {
 
   bind("nav-dashboard", "/");
   bind("nav-invoices", "/invoices.html");
+  bind("nav-statistics", "/statistics.html");
   bind("nav-create", "/create.html");
   bind("nav-customers", "/customers.html");
   bind("nav-users", "/user-management.html");
@@ -138,7 +141,7 @@ async function renderVersionBadge() {
     const res = await fetch("/api/version", { cache: "no-store" });
     if (!res.ok) return;
     const data = await res.json();
-    const label = data?.version ? `v${data.version}` : null;
+    const label = data?.version ? `RechnungsWebAPP  v${data.version}` : null;
     if (!label) return;
 
     const sidebar = document.querySelector(".sidebar");

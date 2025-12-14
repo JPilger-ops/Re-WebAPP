@@ -12,10 +12,11 @@
 
     <!-- Sidebar -->
     <aside class="sidebar">
-        <div class="sidebar-title">Rechnungen</div>
+        <div class="sidebar-title">RechnungsAPP</div>
         <nav class="sidebar-nav">
             <button class="nav-item" id="nav-dashboard">Dashboard</button>
             <button class="nav-item nav-item-active" id="nav-invoices">Rechnungsübersicht</button>
+            <button class="nav-item" id="nav-statistics">Statistik</button>
             <button class="nav-item" id="nav-create">Neue Rechnung</button>
             <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
             <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
@@ -33,39 +34,46 @@
 
       <div class="card" style="padding: 24px;">
 
-        <!-- Suche + Filter -->
-        <div class="invoice-controls">
-          <input id="search" class="input" placeholder="🔍 Suche nach Empfänger oder Nummer" />
+        <!-- Suche + Filter + Bulk-Aktionen -->
+        <div class="invoice-toolbar">
+          <div class="invoice-controls">
+            <input id="search" class="input" placeholder="🔍 Suche nach Empfänger oder Nummer" />
 
-          <select id="filter" class="input">
-            <option value="all">Alle</option>
-            <option value="open">Offen</option>
-            <option value="sent">Versendet</option>
-            <option value="paid">Bezahlt</option>
-          </select>
+            <select id="filter" class="input">
+              <option value="all">Alle</option>
+              <option value="open">Offen</option>
+              <option value="sent">Versendet</option>
+              <option value="paid">Bezahlt</option>
+            </select>
 
-          <select id="sort" class="input">
-            <option value="date_desc">Datum ↓</option>
-            <option value="date_asc">Datum ↑</option>
-            <option value="num_desc">Nummer ↓</option>
-            <option value="num_asc">Nummer ↑</option>
-            <option value="total_desc">Betrag ↓</option>
-            <option value="total_asc">Betrag ↑</option>
-          </select>
-        </div>
-        
-        <div style="display:flex; gap:12px; margin-bottom:14px;">
-          <div id="multi-download-status"
-              style="margin-bottom:14px; font-size:14px; color:#333; display:none;">
-            <!-- Status wird per JS aktualisiert -->
+            <select id="filter-category" class="input">
+              <option value="all">Alle Kategorien</option>
+            </select>
+
+            <select id="sort" class="input">
+              <option value="date_desc">Datum ↓</option>
+              <option value="date_asc">Datum ↑</option>
+              <option value="num_desc">Nummer ↓</option>
+              <option value="num_asc">Nummer ↑</option>
+              <option value="total_desc">Betrag ↓</option>
+              <option value="total_asc">Betrag ↑</option>
+            </select>
           </div>
-          <button id="btn-multi-download" class="primary-button small-btn">
-            Ausgewählte herunterladen
-          </button>
 
-          <button id="btn-multi-delete" class="danger-button small-btn">
-            Ausgewählte löschen
-          </button>
+          <div class="invoice-actions">
+            <div id="multi-download-status" class="action-status">
+              <!-- Status wird per JS aktualisiert -->
+            </div>
+            <div class="bulk-buttons">
+              <button id="btn-multi-download" class="primary-button small-btn">
+                Ausgewählte herunterladen
+              </button>
+
+              <button id="btn-multi-delete" class="danger-button small-btn">
+                Ausgewählte löschen
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Tabelle -->
@@ -76,6 +84,7 @@
             <th>Nr.</th>
             <th>Datum</th>
             <th>Empfänger</th>
+            <th>Kategorie</th>
             <th>Gesamt (€)</th>
             <th>Status</th>
             <th>DATEV</th>

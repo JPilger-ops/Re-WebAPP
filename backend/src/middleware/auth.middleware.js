@@ -2,6 +2,14 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
+if (JWT_SECRET === "dev-secret-change-me") {
+  if ((process.env.NODE_ENV || "").toLowerCase() === "production") {
+    throw new Error("JWT_SECRET ist nicht gesetzt. Bitte in der Umgebung konfigurieren.");
+  } else {
+    console.warn("[auth] WARN: JWT_SECRET fehlt, fallback 'dev-secret-change-me' wird genutzt (nur Dev geeignet).");
+  }
+}
+
 /**
  * authRequired
  *  - Liest JWT aus Cookie "token" oder Authorization: Bearer
@@ -44,7 +52,8 @@ export const requireRole = (roleName) => (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: "Nicht eingeloggt." });
   }
-  if (req.user.role_name !== roleName) {
+  const userRole = (req.user.role_name || "").toLowerCase();
+  if (userRole !== String(roleName || "").toLowerCase()) {
     return res.status(403).json({ message: "Keine Berechtigung." });
   }
   next();

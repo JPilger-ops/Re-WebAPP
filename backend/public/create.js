@@ -1,6 +1,12 @@
 let items = [];
 let autoNumberActive = true;
 
+const formatCurrency = (value) =>
+  Number(value || 0).toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) + " €";
+
 // Formular-Felder referenzieren
 const r_name   = document.getElementById("r_name");
 const r_street = document.getElementById("r_street");
@@ -302,10 +308,10 @@ function calculateTotals() {
   const total = gross19 + gross7;
 
   document.getElementById("sum-net").innerText =
-    (net19 + net7).toFixed(2) + " €";
+    formatCurrency(net19 + net7);
   document.getElementById("sum-vat").innerText =
-    (vat19 + vat7).toFixed(2) + " €";
-  document.getElementById("sum-total").innerText = total.toFixed(2) + " €";
+    formatCurrency(vat19 + vat7);
+  document.getElementById("sum-total").innerText = formatCurrency(total);
 }
 
 // -------------------------------------------------

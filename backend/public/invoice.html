@@ -11,10 +11,11 @@
   <div class="app-shell">
     <!-- Sidebar -->
     <aside class="sidebar">
-        <div class="sidebar-title">Rechnungen</div>
+        <div class="sidebar-title">RechnungsAPP</div>
         <nav class="sidebar-nav">
             <button class="nav-item" id="nav-dashboard">Dashboard</button>
             <button class="nav-item nav-item-active" id="nav-invoices">Rechnungsübersicht</button>
+            <button class="nav-item" id="nav-statistics">Statistik</button>
             <button class="nav-item" id="nav-create">Neue Rechnung</button>
             <button class="nav-item" id="nav-customers">Kundenverwaltung</button>
             <button id="nav-users" class="nav-item">Benutzerverwaltung</button>
@@ -29,11 +30,11 @@
       <header class="topbar">
         <h1 class="topbar-title" id="title">Rechnung</h1>
         <div>
-          <button class="secondary-button" id="btn-pdf-open">
+          <button class="primary-button small-btn" id="btn-pdf-open">
             PDF anzeigen
           </button>
 
-          <button class="primary-button" id="btn-pdf-download">
+          <button class="primary-button small-btn" id="btn-pdf-download">
             PDF herunterladen
            </button>
         </div>
@@ -82,8 +83,8 @@
         <h2 class="section-h" style="margin-top:24px;">Status ändern</h2>
 
         <div class="detail-status-buttons">
-          <button class="secondary-button" onclick="setStatus('sent')">Als versendet markieren</button>
-          <button class="secondary-button" onclick="setStatus('paid')">Als bezahlt markieren</button>
+          <button class="success-button small-btn" onclick="setStatus('sent')">Als versendet markieren</button>
+          <button class="success-button small-btn" onclick="setStatus('paid')">Als bezahlt markieren</button>
         </div>
 
       </div>

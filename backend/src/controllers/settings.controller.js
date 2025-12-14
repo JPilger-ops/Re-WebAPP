@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { getBankSettings, saveBankSettings } from "../utils/bankSettings.js";
 import { getDatevSettings, saveDatevSettings, isValidEmail } from "../utils/datevSettings.js";
 
@@ -95,5 +97,19 @@ export const updateDatevData = async (req, res) => {
     console.error("DATEV-Einstellungen speichern fehlgeschlagen:", err);
     const message = err?.userMessage || "DATEV-Einstellungen konnten nicht gespeichert werden.";
     return res.status(500).json({ message });
+  }
+};
+
+export const downloadCaCertificate = async (_req, res) => {
+  try {
+    const certPath = path.resolve("certificates/ca/ca.crt");
+    await fs.promises.access(certPath, fs.constants.R_OK);
+    return res.download(certPath, "ca.crt");
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      return res.status(404).json({ message: "CA-Zertifikat nicht gefunden. Bitte certificates/ca/ca.crt hinterlegen." });
+    }
+    console.error("CA-Zertifikat kann nicht ausgeliefert werden:", err);
+    return res.status(500).json({ message: "CA-Zertifikat nicht verfügbar." });
   }
 };

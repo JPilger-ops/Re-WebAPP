@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.4.1",
+  "version": "0.8.1",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -25,5 +25,8 @@
     "pg": "^8.16.3",
     "puppeteer": "^24.30.0",
     "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
   }
 }

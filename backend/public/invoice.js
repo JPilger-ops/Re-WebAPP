@@ -2,6 +2,17 @@
 const url = new URL(window.location.href);
 const id = url.searchParams.get("id");
 
+const formatNumber = (value) =>
+  Number(value || 0).toLocaleString("de-DE", {
+    maximumFractionDigits: 2,
+  });
+
+const formatCurrency = (value) =>
+  Number(value || 0).toLocaleString("de-DE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) + " €";
+
 // API laden
 async function loadInvoice() {
   const res = await fetch(`/api/invoices/${id}`);
@@ -46,9 +57,9 @@ async function loadInvoice() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${i.description}</td>
-      <td>${i.quantity}</td>
-      <td>${Number(i.unit_price_gross).toFixed(2)} €</td>
-      <td>${Number(i.line_total_gross).toFixed(2)} €</td>
+      <td>${formatNumber(i.quantity)}</td>
+      <td>${formatCurrency(i.unit_price_gross)}</td>
+      <td>${formatCurrency(i.line_total_gross)}</td>
     `;
     body.appendChild(tr);
   });
@@ -57,9 +68,9 @@ async function loadInvoice() {
   const net = Number(inv.net_19) + Number(inv.net_7);
   const vat = Number(inv.vat_19) + Number(inv.vat_7);
 
-  document.getElementById("sum-net").innerText = net.toFixed(2) + " €";
-  document.getElementById("sum-vat").innerText = vat.toFixed(2) + " €";
-  document.getElementById("sum-total").innerText = Number(inv.gross_total).toFixed(2) + " €";
+  document.getElementById("sum-net").innerText = formatCurrency(net);
+  document.getElementById("sum-vat").innerText = formatCurrency(vat);
+  document.getElementById("sum-total").innerText = formatCurrency(inv.gross_total);
 
   // PDF Öffnen im neuen Tab (optional)
   const btnOpen = document.getElementById("btn-pdf-open");

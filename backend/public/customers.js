@@ -34,8 +34,10 @@ function renderTable() {
             <td>${c.zip}</td>
             <td>${c.city}</td>
             <td>
-                <button class="secondary-button small-btn" onclick="editCustomer(${c.id})">Bearbeiten</button>
-                <button class="secondary-button small-btn" style="background:#ffe5e5;border-color:#ffb3b3;color:#b20000" onclick="deleteCustomer(${c.id})">Löschen</button>
+                <div class="action-buttons">
+                    <button class="secondary-button small-btn" onclick="editCustomer(${c.id})">Bearbeiten</button>
+                    <button class="danger-button small-btn" onclick="deleteCustomer(${c.id})">Löschen</button>
+                </div>
             </td>
         `;
 

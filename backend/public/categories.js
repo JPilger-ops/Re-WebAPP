@@ -22,6 +22,7 @@
 
   const perms = window.currentUserPermissions || [];
   const hasPerm = (p) => perms.includes(p);
+  const isAdmin = (window.currentUserRoleName || "").toLowerCase() === "admin";
   const canEditBank = hasPerm("settings.general");
   const canEditDatev = hasPerm("settings.general");
   const canReadCategories = hasPerm("categories.read") || canEditBank;
@@ -98,6 +99,9 @@
     tplSaveBtn: document.getElementById("tpl-save"),
     tplPreviewBtn: document.getElementById("tpl-preview"),
     placeholderList: document.getElementById("placeholder-list"),
+    caDownload: document.getElementById("ca-download"),
+    certTab: document.querySelector('[data-tab="cert"]'),
+    certPanel: document.querySelector('[data-tab-panel="cert"]'),
   };
 
   const escapeHtml = (value) =>
@@ -1072,6 +1076,7 @@
   const tabPanels = Array.from(elements.tabPanels || []);
 
   const switchTab = (key) => {
+    if (key === "cert" && !isAdmin) return;
     tabButtons.forEach((btn) => {
       const isActive = btn.dataset.tab === key;
       btn.classList.toggle("active", isActive);
@@ -1084,9 +1089,46 @@
     }
   };
 
+  // erst Tabs filtern, dann initial setzen
+  if (!isAdmin && elements.certTab && elements.certPanel) {
+    elements.certTab.remove();
+    elements.certPanel.remove();
+  }
+
   tabButtons.forEach((btn) =>
     btn.addEventListener("click", () => switchTab(btn.dataset.tab))
   );
+
+  if (isAdmin && elements.caDownload) {
+    elements.caDownload.addEventListener("click", async () => {
+      elements.catSuccess && hideBox(elements.catSuccess);
+      elements.catError && hideBox(elements.catError);
+      try {
+        const res = await fetch("/api/settings/ca-cert", { credentials: "include" });
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          const msg = errBody?.message || "Download fehlgeschlagen";
+          throw new Error(msg);
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "ca.crt";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showBox(elements.catSuccess, "CA-Zertifikat wurde heruntergeladen.");
+      } catch (err) {
+        console.error("CA-Download fehlgeschlagen", err);
+        showBox(elements.catError, err.message || "CA-Zertifikat konnte nicht geladen werden. Bitte prüfen, ob es vorhanden ist.");
+      }
+    });
+  }
+
+  // Default: Bank-Tab aktiv setzen
+  switchTab("bank");
 
   if (!canWriteCategories) {
     [elements.newKey, elements.newLabel, elements.newLogo].forEach((el) => {

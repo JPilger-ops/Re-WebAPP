@@ -95,6 +95,11 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     PRIMARY KEY (role_id, permission_key)
 );
 
+-- Permission-Seed: Statistik (wird nur gesetzt, falls Rolle 'admin' existiert)
+INSERT INTO role_permissions (role_id, permission_key)
+SELECT id, 'stats.view' FROM roles WHERE name = 'admin'
+ON CONFLICT (role_id, permission_key) DO NOTHING;
+
 -- Bankeinstellungen
 CREATE TABLE IF NOT EXISTS bank_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,

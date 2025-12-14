@@ -45,6 +45,23 @@ const escapeHtml = (value) =>
 
 const messageToHtml = (text) => escapeHtml(text || "").replace(/\n/g, "<br>");
 const getDatevEmailFromCache = () => (datevSettingsCache?.email || "").trim();
+const htmlToPlain = (html) => {
+  if (!html) return "";
+  return html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<\s*ul[^>]*>/gi, "\n")
+    .replace(/<\s*ol[^>]*>/gi, "\n")
+    .replace(/<\/\s*ul>/gi, "\n")
+    .replace(/<\/\s*ol>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+};
 
 function buildFallbackEmail(invoice, bankData) {
   const invoiceDate = formatDateDe(invoice.date);
@@ -143,9 +160,13 @@ async function waitForPermissions() {
     const check = () => {
       if (window.currentUserPermissions && window.currentUserPermissions.length > 0) {
         resolve();
-      } else {
-        setTimeout(check, 50);
+        return;
       }
+      if (window.userLoaded) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 50);
     };
     check();
   });
@@ -200,6 +221,7 @@ async function loadInvoices() {
 
   const data = await res.json();
   allInvoices = data;
+  updateCategoryFilterOptions();
   renderList();
 }
 
@@ -248,6 +270,16 @@ function renderList() {
     list = list.filter(i => i.status_paid_at);
   }
 
+  // Kategorie-Filter
+  const filterCat = document.getElementById("filter-category");
+  const catVal = filterCat ? filterCat.value : "all";
+  if (catVal && catVal !== "all") {
+    list = list.filter(i => {
+      const label = (i.category_label || i.category || "").toString().toLowerCase();
+      return label === catVal;
+    });
+  }
+
   // Sortierung
   const sort = document.getElementById("sort").value;
   list.sort((a, b) => {
@@ -268,7 +300,7 @@ function renderList() {
   if (list.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.textContent = "Keine Rechnungen gefunden.";
     tr.appendChild(td);
     body.appendChild(tr);
@@ -298,19 +330,21 @@ function renderList() {
       <td>${i.invoice_number}</td>
       <td>${(new Date(i.date)).toLocaleDateString("de-DE")}</td>
       <td>${i.recipient_name || "-"}</td>
-      <td>${Number(i.gross_total).toFixed(2)} €</td>
+      <td>${i.category_label || i.category || "-"}</td>
+      <td>${formatAmount(i.gross_total)} €</td>
       <td>${status}</td>
       <td>${datevBadge}</td>
       <td>
-        <button onclick="openInvoice(${i.id})">Öffnen</button>
-        <button class="success-button small-btn" ${exportDisabled ? "disabled" : ""} title="${escapeHtml(exportTitle)}" onclick="exportInvoiceToDatev(${i.id})">${exportLabel}</button>
-        <button class="secondary-button small-btn" onclick="openEmailModal(${i.id})">Verschicken per E-Mail</button>
-
-        ${
-          (window.currentUserPermissions || []).includes("invoices.delete")
-            ? `<button onclick="deleteInvoice(${i.id}, '${i.invoice_number}')">Löschen</button>`
-            : ""
-        }
+        <div class="action-buttons">
+          <button class="primary-button small-btn" onclick="openInvoice(${i.id})">Öffnen</button>
+          <button class="success-button small-btn" ${exportDisabled ? "disabled" : ""} title="${escapeHtml(exportTitle)}" onclick="exportInvoiceToDatev(${i.id})">${exportLabel}</button>
+          <button class="primary-button small-btn" onclick="openEmailModal(${i.id})">Verschicken per E-Mail</button>
+          ${
+            (window.currentUserPermissions || []).includes("invoices.delete")
+              ? `<button class="danger-button small-btn" onclick="deleteInvoice(${i.id}, '${i.invoice_number}')">Löschen</button>`
+              : ""
+          }
+        </div>
       </td>
     `;
 
@@ -318,6 +352,26 @@ function renderList() {
   });
 
   setupSelectAllHandler();
+}
+
+function updateCategoryFilterOptions() {
+  const select = document.getElementById("filter-category");
+  if (!select) return;
+  const current = select.value;
+  const options = new Set();
+  allInvoices.forEach((inv) => {
+    const label = (inv.category_label || inv.category || "").toString().trim();
+    if (label) options.add(label);
+  });
+  const sorted = Array.from(options).sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+  select.innerHTML = '<option value="all">Alle Kategorien</option>';
+  sorted.forEach((label) => {
+    const opt = document.createElement("option");
+    opt.value = label.toLowerCase();
+    opt.textContent = label;
+    if (current && current === opt.value) opt.selected = true;
+    select.appendChild(opt);
+  });
 }
 
 // ---------------------------------------------------------
@@ -606,7 +660,10 @@ async function openEmailModal(invoiceId) {
       currentEmailPreview = preview;
       suppressMessageChangeEvent = true;
       if (subjectInput) subjectInput.value = preview.subject || fallback.subject;
-      if (messageInput) messageInput.value = preview.body_text || fallback.body;
+      if (messageInput) {
+        const draftText = preview.body_html ? htmlToPlain(preview.body_html) : preview.body_text;
+        messageInput.value = draftText || fallback.body;
+      }
       suppressMessageChangeEvent = false;
       messageEdited = false;
       if (templateInfo) {
@@ -710,10 +767,12 @@ async function sendEmailForInvoice(includeDatev = false) {
   setEmailStatus(includeDatev ? "Sende E-Mail + DATEV…" : "Sende E-Mail…", "info");
 
   try {
+    const hasTemplateHtml = Boolean(currentEmailPreview?.body_html);
     const htmlPayload =
-      !messageEdited && currentEmailPreview?.body_html
+      !messageEdited && hasTemplateHtml
         ? currentEmailPreview.body_html
         : messageToHtml(message);
+    const textPayload = trimmedMessage || previewBody || message;
 
     const res = await fetch(`/api/invoices/${currentEmailInvoice.id}/send-email`, {
       method: "POST",
@@ -721,7 +780,7 @@ async function sendEmailForInvoice(includeDatev = false) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ to: email, subject, message, html: htmlPayload, include_datev: includeDatev })
+      body: JSON.stringify({ to: email, subject, message: textPayload, html: htmlPayload, include_datev: includeDatev })
     });
 
     const data = await res.json().catch(() => null);
@@ -771,6 +830,7 @@ function setupSelectAllHandler() {
 // ---------------------------------------------------------
 document.getElementById("search").addEventListener("input", renderList);
 document.getElementById("filter").addEventListener("change", renderList);
+document.getElementById("filter-category").addEventListener("change", renderList);
 document.getElementById("sort").addEventListener("change", renderList);
 
 // Buttons mit Funktionen verbinden
