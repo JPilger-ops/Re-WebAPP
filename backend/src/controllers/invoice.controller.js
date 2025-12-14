@@ -135,6 +135,19 @@ const replacePlaceholders = (template = "", replacements = {}, escapeValues = tr
   return result;
 };
 
+const ensureHtmlBody = (rawBody = "", fallbackText = "") => {
+  const body = String(rawBody || "").trim();
+  if (!body) {
+    return fallbackText
+      ? escapeHtml(fallbackText).replace(/\r?\n/g, "<br>")
+      : "";
+  }
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(body);
+  return looksLikeHtml
+    ? body
+    : escapeHtml(body).replace(/\r?\n/g, "<br>");
+};
+
 const loadInvoiceWithCategory = async (id) => {
   await ensureInvoiceCategoriesTable();
   await ensureDatevExportColumns();
@@ -1320,17 +1333,21 @@ export const sendInvoiceEmail = async (req, res) => {
     }
 
     const emailSubject = (subject || "").trim() || content.subject;
-    const emailText = (message || "").trim() || content.bodyText;
-    const templateBody = content.bodyText?.trim() || "";
-    const incomingBody = (message || "").trim();
+    const htmlFromRequest = (html || "").trim();
+    const htmlFromTemplate = content.bodyHtml || "";
+    const rawHtml = ensureHtmlBody(
+      htmlFromRequest || htmlFromTemplate,
+      (message || "").trim() || content.bodyText
+    );
 
-    let emailHtml = (html || "").trim();
-    if (!emailHtml && content.bodyHtml && (!incomingBody || incomingBody === templateBody)) {
-      emailHtml = content.bodyHtml;
-    }
-    if (!emailHtml) {
-      emailHtml = escapeHtml(emailText).replace(/\n/g, "<br>");
-    }
+    // Einheitliche Basis-Styles + White-Space, damit Zeilenumbrüche erhalten bleiben
+    const emailHtml = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; line-height:1.5; white-space:pre-line; color:#111;">
+        ${rawHtml}
+      </div>
+    `;
+
+    const emailText = stripHtmlToText(rawHtml) || content.bodyText || (message || "").trim();
 
     const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
 

@@ -1,6 +1,6 @@
 # Rechnungsapp (Express + PostgreSQL)
 
-Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express liefert sowohl die REST-API als auch das statische Frontend (HTML/JS/CSS). Rechnungen werden als PDF erzeugt, per E-Mail versendet und optional direkt an DATEV weitergeleitet.
+ Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express liefert sowohl die REST-API als auch das statische Frontend (HTML/JS/CSS). Rechnungen werden als PDF erzeugt, per E-Mail versendet und optional direkt an DATEV weitergeleitet.
 
 ## Features
 - JWT-Login per Secure-Cookie, Rollen- und Berechtigungssystem (Admin/User + Permissions für Kategorien/Settings).
@@ -10,7 +10,8 @@ Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express lief
 - E-Mail-Versand über globales SMTP oder kategoriespezifische Mailkonten + HTML-Templates; Vorschau verfügbar.
 - DATEV-Export: dedizierte Zieladresse, Statusspalten in `invoices`, Export-Button und BCC-Option im Versand.
 - Kategorien mit Logos, Templates sowie SMTP-/IMAP-Konfiguration; Logo-Uploads landen in `public/logos`.
-- Statische Frontend-Seiten in `public/` (Login, Rechnungen, Kunden, Kategorien, Rollen- und Benutzerverwaltung).
+- Statistikseite mit KPIs (gesamt + pro Jahr) und Filtern nach Jahr/Kategorie; Zugriff via Permission `stats.view`.
+- Statische Frontend-Seiten in `public/` (Login, Rechnungen, Kunden, Kategorien, Rollen-/Benutzerverwaltung, Statistik).
 
 ## Projektaufbau
 - `src/` – Express-Server, Routen und Controller.
@@ -28,17 +29,52 @@ Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express lief
 - TLS-Zertifikat (PEM). Standardpfad siehe `certificates/rechnung.intern/`; alternativ per `APP_SSL_*`-Variablen setzen. Ohne gültiges Zertifikat startet `src/index.js` nicht.
 - SMTP-Zugang für den Versand (global oder je Kategorie) und optional IMAP-Zugang zum Testen der Kategorie-Konten.
 
-## Einrichtung
-1) Abhängigkeiten installieren  
-`npm install`
+## Schritt-für-Schritt Einrichtung (Beispiel Debian/Ubuntu)
+1) Repository holen und ins Backend wechseln  
+```bash
+git clone <repo-url> rechnungsapp
+cd rechnungsapp/backend
+```
 
-2) `.env` im Projektwurzel-Ordner `backend/` anlegen (Beispiel unten).
+2) Systemabhängigkeiten installieren (Root/Sudo)  
+```bash
+sudo apt update
+sudo apt install -y curl git postgresql postgresql-contrib
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v && npm -v  # Versionen prüfen (Node 20+)
+```
+Optional: PM2 für Production  
+```bash
+sudo npm install -g pm2
+```
 
-3) Datenbank anlegen & Schema importieren  
-`psql -h <host> -U <user> -d <db> -f schema.sql`
+3) NPM-Abhängigkeiten laden  
+```bash
+npm ci
+```
 
-4) Basisrollen/Berechtigungen füllen (Minimalbeispiel)  
-```sql
+4) Datenbank-User und -DB anlegen (Postgres Shell)  
+```bash
+sudo -u postgres psql -c "CREATE USER rechnung_app WITH PASSWORD '<db-pass>';"
+sudo -u postgres psql -c "CREATE DATABASE rechnung_prod OWNER rechnung_app;"
+psql -h localhost -U rechnung_app -d rechnung_prod -f schema.sql
+```
+
+5) `.env` erstellen  
+- Inhalt aus dem Beispiel unten übernehmen und anpassen.  
+- Mindestens setzen: `APP_DOMAIN`, `APP_HTTPS_PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `APP_CREATE_PIN`, DB-Zugang, SMTP-Zugang, TLS-Pfade (`APP_SSL_CERT_DIR` oder `APP_SSL_KEY_PATH/APP_SSL_CERT_PATH`).  
+```bash
+cp .env.example .env  # falls vorhanden; sonst mit Editor anlegen
+```
+
+6) TLS-Zertifikat hinterlegen  
+- Standardpfad: `certificates/rechnung.intern/privkey.pem` und `certificates/rechnung.intern/fullchain.pem`.  
+- Alternativ eigene Pfade per Env (siehe `.env`). Ohne Zertifikat startet `npm run dev` nicht.
+
+7) Basisrollen/-rechte eintragen  
+```bash
+psql -h localhost -U rechnung_app -d rechnung_prod <<'SQL'
 INSERT INTO roles (name, description) VALUES 
   ('admin','Voller Zugriff'),
   ('user','Standardnutzer')
@@ -48,23 +84,38 @@ INSERT INTO role_permissions (role_id, permission_key) VALUES
   ((SELECT id FROM roles WHERE name='admin'), 'settings.general'),
   ((SELECT id FROM roles WHERE name='admin'), 'categories.read'),
   ((SELECT id FROM roles WHERE name='admin'), 'categories.write'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.delete')
+  ((SELECT id FROM roles WHERE name='admin'), 'categories.delete'),
+  ((SELECT id FROM roles WHERE name='admin'), 'stats.view')
 ON CONFLICT DO NOTHING;
+SQL
 ```
 
-5) Ersten Benutzer registrieren (rollt Rolle `admin` zu, geschützt durch `APP_CREATE_PIN`)  
+8) Admin-User registrieren (`APP_CREATE_PIN` wird abgefragt)  
 ```bash
-curl -k -X POST "https://<domain>/api/auth/register" \
+curl -k -X POST "https://<APP_DOMAIN>/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<pw>","role":"admin","createPin":"<APP_CREATE_PIN>"}'
 ```
 
-6) Entwicklung/Prod starten  
-- Lokal: `npm run dev` (nutzt HTTPS-Port `APP_HTTPS_PORT`, Standard 443)  
-- Prod per PM2: `pm2 start ecosystem.config.cjs`
+9) Entwicklung starten und prüfen  
+```bash
+npm run dev
+curl -k https://localhost:<APP_HTTPS_PORT>/api/version
+```
+Frontend unter `https://localhost:<APP_HTTPS_PORT>` aufrufen (CORS-Origin muss passen).
 
-7) Frontend aufrufen  
-`https://<APP_DOMAIN>` bzw. `https://localhost:<APP_HTTPS_PORT>` wenn die CORS-Origin passt.
+10) Produktion mit PM2 starten (Beispiel)  
+```bash
+pm2 start ecosystem.config.cjs --name rechnungsapp
+pm2 save
+pm2 status
+```
+
+11) Tests und Checks  
+```bash
+npm test
+curl -k https://<APP_DOMAIN>/api/testdb
+```
 
 ## Beispiel `.env`
 ```
@@ -95,7 +146,7 @@ SEPA_CREDITOR_BIC="ABCDEFGHXXX"
 BANK_NAME="Hausbank"
 
 APP_SSL_CERT_DIR=/path/zum/zertifikat  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
-APP_VERSION=0.8.0
+APP_VERSION=0.9.0
 ```
 
 ## API-Überblick (gekürzt)
@@ -104,6 +155,7 @@ APP_VERSION=0.8.0
 - Rollen (Admin): `GET /api/roles`, `GET /api/roles/:id/permissions`, `POST/PUT/DELETE /api/roles`.
 - Kunden: `GET/POST/PUT/DELETE /api/customers`.
 - Rechnungen: `GET /api/invoices` (Liste + Filter), `GET /api/invoices/:id`, `POST /api/invoices` (Neuanlage), `GET /api/invoices/:id/pdf`, `POST /api/invoices/:id/send-email` (optional `include_datev: true`), `POST /api/invoices/:id/datev-export`, Statusrouten für sent/paid, `DELETE /api/invoices/:id` nur Admin.
+- Statistik (Permission `stats.view`): `GET /api/stats/invoices?year=YYYY&category=cat1,cat2` liefert `overall` + `byYear` + verfügbare Kategorien.
 - Kategorien (Permissions `categories.*` oder `settings.general`): CRUD, Logo-Upload (`POST /api/categories/logo`), Template/SMTP je Kategorie (`/api/categories/:id/email|template`), Mail-Test.
 - Einstellungen: `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/datev`, `GET /api/settings/ca-cert` (admin).
 - Sonstiges: `GET /api/testdb` (DB-Ping), `GET /api/version`.
