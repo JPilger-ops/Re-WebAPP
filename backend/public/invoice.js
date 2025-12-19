@@ -34,6 +34,8 @@ async function loadInvoice() {
   document.getElementById("d-date").innerText = formatDate(inv.date);
   document.getElementById("d-receipt").innerText = formatDate(inv.receipt_date);
   document.getElementById("d-cat").innerText = inv.category;
+  document.getElementById("d-reservation").innerText = inv.reservation_request_id || "–";
+  document.getElementById("d-reference").innerText = inv.external_reference || "–";
 
   const status = inv.status_paid_at
     ? "Bezahlt"
