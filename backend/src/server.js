@@ -5,6 +5,7 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
+import { startOverdueJob } from "./jobs/overdueJob.js";
 
 import authRoutes from "./routes/auth.routes.js";
 import invoiceRoutes from "./routes/invoice.routes.js";
@@ -83,4 +84,7 @@ app.use("/api/version", versionRoutes);
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "../public/index.html"));
 });
+
+// Hintergrundjob: Überfällig-Markierung + HKForms Sync
+startOverdueJob();
 export default app;

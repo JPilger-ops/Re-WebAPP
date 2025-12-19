@@ -19,6 +19,21 @@ import {
 } from "../utils/datevExport.js";
 import { sendHkformsStatus } from "../utils/hkformsSync.js";
 
+const fetchFirstItemDescription = async (invoiceId) => {
+  if (!invoiceId) return null;
+  const itemRes = await db.query(
+    `
+      SELECT description
+      FROM invoice_items
+      WHERE invoice_id = $1
+      ORDER BY id ASC
+      LIMIT 1
+    `,
+    [invoiceId]
+  );
+  return itemRes.rows?.[0]?.description || null;
+};
+
 dotenv.config();
 
 function normalizeEpcText(text) {
@@ -585,6 +600,12 @@ for (let i = 0; i < items.length; i++) {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Fehler bei der Rechnungserstellung:", err);
+
+    if (err?.code === "23505" && (err?.constraint || "").includes("reservation_request_id")) {
+      return res.status(400).json({
+        message: "Diese HKForms-Anfrage-ID ist bereits einer anderen Rechnung zugeordnet."
+      });
+    }
 
     return res.status(500).json({
       error: "Es ist ein Fehler beim Erstellen der Rechnung aufgetreten."
@@ -1264,6 +1285,7 @@ export const markSent = async (req, res) => {
     }
 
     const row = updateResult.rows[0];
+    const firstItem = await fetchFirstItemDescription(id);
 
     // HKForms Sync (best effort, nicht blocking)
     sendHkformsStatus({
@@ -1272,7 +1294,9 @@ export const markSent = async (req, res) => {
         status: "SENT",
         reference: row.invoice_number,
         sentAt: row.status_sent_at || new Date(),
+        firstItem,
       },
+      endpoint: "invoices",
     });
 
     return res.json({ message: "Rechnung als versendet markiert" });
@@ -1421,6 +1445,7 @@ export const sendInvoiceEmail = async (req, res) => {
     );
 
     const updatedRow = updateResult.rows[0];
+    const firstItem = await fetchFirstItemDescription(id);
 
     if (includeDatev) {
       await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
@@ -1437,7 +1462,9 @@ export const sendInvoiceEmail = async (req, res) => {
         status: "SENT",
         reference: updatedRow?.invoice_number || row.invoice_number,
         sentAt: updatedRow?.status_sent_at || new Date(),
+        firstItem,
       },
+      endpoint: "invoices",
     });
 
     return res.json({ message: successMessage });
@@ -1566,6 +1593,7 @@ export const markPaid = async (req, res) => {
     }
 
     const row = updateResult.rows[0];
+    const firstItem = await fetchFirstItemDescription(id);
 
     // HKForms Sync (best effort)
     sendHkformsStatus({
@@ -1575,7 +1603,9 @@ export const markPaid = async (req, res) => {
         reference: row.invoice_number,
         sentAt: row.status_sent_at || null,
         paidAt: row.status_paid_at || new Date(),
+        firstItem,
       },
+      endpoint: "invoices",
     });
 
     return res.json({ message: "Rechnung als bezahlt markiert" });
@@ -1765,9 +1795,12 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
     }
 
     if (syncPayload) {
+      const firstItem = await fetchFirstItemDescription(row.id);
+      syncPayload.firstItem = firstItem || null;
       sendHkformsStatus({
         reservationId: row.reservation_request_id,
         payload: syncPayload,
+        endpoint: "invoices",
       });
     }
 

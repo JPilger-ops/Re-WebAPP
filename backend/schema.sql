@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS invoice_categories (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_categories_key
 ON invoice_categories (key);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_reservation_request_id
+CREATE INDEX IF NOT EXISTS idx_invoices_reservation_request_id
 ON invoices (reservation_request_id)
 WHERE reservation_request_id IS NOT NULL;
 

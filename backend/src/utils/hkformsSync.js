@@ -4,7 +4,7 @@ const HKFORMS_BASE = "https://app.bistrottelegraph.de/api";
  * Sendet Status-Updates an HKForms, wenn Reservation-ID + Token vorliegen.
  * Fehler werden nur geloggt und blockieren den lokalen Status nicht.
  */
-export async function sendHkformsStatus({ reservationId, payload }) {
+export async function sendHkformsStatus({ reservationId, payload, endpoint = "invoice-status" }) {
   const token = (process.env.HKFORMS_SYNC_TOKEN || "").trim();
 
   if (!reservationId) {
@@ -17,7 +17,7 @@ export async function sendHkformsStatus({ reservationId, payload }) {
     return;
   }
 
-  const url = `${HKFORMS_BASE}/reservations/${encodeURIComponent(reservationId)}/invoice-status`;
+  const url = `${HKFORMS_BASE}/reservations/${encodeURIComponent(reservationId)}/${endpoint}`;
 
   try {
     const res = await fetch(url, {
