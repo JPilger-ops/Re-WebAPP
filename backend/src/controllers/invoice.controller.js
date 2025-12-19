@@ -633,7 +633,7 @@ export const getAllInvoices = async (req, res) => {
       FROM invoices
       LEFT JOIN recipients ON invoices.recipient_id = recipients.id
       LEFT JOIN invoice_categories c ON c.key = invoices.category
-      ORDER BY invoices.id DESC
+      ORDER BY invoices.invoice_number DESC
     `);
 
     res.json(result.rows);

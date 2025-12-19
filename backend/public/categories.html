@@ -101,6 +101,8 @@
         <button class="settings-tab active" data-tab="bank">Bank</button>
         <button class="settings-tab" data-tab="categories">Kategorien</button>
         <button class="settings-tab" data-tab="datev">DATEV</button>
+        <button class="settings-tab" data-tab="hkforms">Forms Verbindungen</button>
+        <button class="settings-tab" data-tab="tax">Steuern</button>
         <button class="settings-tab" data-tab="cert">Zertifikate</button>
       </div>
 
@@ -256,6 +258,70 @@
         </div>
       </div>
 
+      <div class="tab-panel hidden" data-tab-panel="hkforms">
+        <div class="page-stack">
+          <section class="soft-card">
+            <div class="inline-buttons" style="justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div class="pill">HK Forms</div>
+                <h2 class="section-title">Forms Verbindungen</h2>
+                <div class="muted">Basis-URL, Mandant und API-Schlüssel für HK_FORMS.</div>
+              </div>
+              <div class="inline-buttons">
+                <button id="hkforms-reload" class="secondary-button small-btn">Neu laden</button>
+                <button id="hkforms-save" class="primary-button small-btn">Speichern</button>
+              </div>
+            </div>
+
+            <div id="hkforms-error" class="error-box hidden"></div>
+            <div id="hkforms-success" class="success-box hidden"></div>
+
+            <div class="input-stack">
+              <label class="input-label">API Basis-URL</label>
+              <input id="hkforms-base-url" class="input" type="url" placeholder="https://app.bistrottelegraph.de/api" />
+
+              <label class="input-label">Organisation / Mandant</label>
+              <input id="hkforms-organization" class="input" type="text" placeholder="z. B. HK-ORG-01" />
+
+              <label class="input-label">API-Schlüssel</label>
+              <input id="hkforms-api-key" class="input" type="password" placeholder="API-Key / Token" autocomplete="off" />
+              <div class="tiny-note">Wird für eingehende und ausgehende HK_FORMS Requests genutzt.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="tab-panel hidden" data-tab-panel="tax">
+        <div class="page-stack">
+          <section class="soft-card">
+            <div class="inline-buttons" style="justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div class="pill">Steuern</div>
+                <h2 class="section-title">Steuer-Nr. & USt-IdNr.</h2>
+                <div class="muted">Wird auf Rechnungen und Dokumenten angezeigt.</div>
+              </div>
+              <div class="inline-buttons">
+                <button id="tax-reload" class="secondary-button small-btn">Neu laden</button>
+                <button id="tax-save" class="primary-button small-btn">Speichern</button>
+              </div>
+            </div>
+
+            <div id="tax-error" class="error-box hidden"></div>
+            <div id="tax-success" class="success-box hidden"></div>
+
+            <div class="input-stack">
+              <label class="input-label">Steuer-Nr.</label>
+              <input id="tax-number" class="input" type="text" placeholder="z. B. 12/345/67890" />
+
+              <label class="input-label">USt-IdNr.</label>
+              <input id="vat-id" class="input" type="text" placeholder="z. B. DE123456789" />
+
+              <div class="tiny-note">Mindestens eines der beiden Felder ausfüllen.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
       <div class="tab-panel hidden" data-tab-panel="cert">
         <div class="page-stack">
           <section class="soft-card" style="max-width: 560px;">
@@ -271,7 +337,7 @@
   </div>
 
   <script src="/nav.js?v=3"></script>
-  <script src="/categories.js?v=5"></script>
+  <script src="/categories.js?v=7"></script>
 
   <!-- Modals -->
   <div id="email-modal" class="modal-backdrop hidden">

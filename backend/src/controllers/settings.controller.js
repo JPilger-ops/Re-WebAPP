@@ -2,6 +2,8 @@ import fs from "fs";
 import path from "path";
 import { getBankSettings, saveBankSettings } from "../utils/bankSettings.js";
 import { getDatevSettings, saveDatevSettings, isValidEmail } from "../utils/datevSettings.js";
+import { getHkformsSettings, saveHkformsSettings } from "../utils/hkformsSettings.js";
+import { getTaxSettings, saveTaxSettings } from "../utils/taxSettings.js";
 
 const isValidBic = (bic) => /^[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test((bic || "").toUpperCase());
 
@@ -111,5 +113,51 @@ export const downloadCaCertificate = async (_req, res) => {
     }
     console.error("CA-Zertifikat kann nicht ausgeliefert werden:", err);
     return res.status(500).json({ message: "CA-Zertifikat nicht verfügbar." });
+  }
+};
+
+export const getHkformsData = async (_req, res) => {
+  try {
+    const settings = await getHkformsSettings();
+    return res.json(settings);
+  } catch (err) {
+    console.error("HKForms-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "HKForms-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updateHkformsData = async (req, res) => {
+  try {
+    const { base_url, organization, api_key } = req.body || {};
+    const saved = await saveHkformsSettings({ base_url, organization, api_key });
+    return res.json(saved);
+  } catch (err) {
+    console.error("HKForms-Einstellungen speichern fehlgeschlagen:", err);
+    const message = err?.userMessage || "HKForms-Einstellungen konnten nicht gespeichert werden.";
+    const status = err?.statusCode || 500;
+    return res.status(status).json({ message });
+  }
+};
+
+export const getTaxData = async (_req, res) => {
+  try {
+    const settings = await getTaxSettings();
+    return res.json(settings);
+  } catch (err) {
+    console.error("Steuer-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Steuer-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updateTaxData = async (req, res) => {
+  try {
+    const { tax_number, vat_id } = req.body || {};
+    const saved = await saveTaxSettings({ tax_number, vat_id });
+    return res.json(saved);
+  } catch (err) {
+    console.error("Steuer-Einstellungen speichern fehlgeschlagen:", err);
+    const message = err?.userMessage || "Steuer-Einstellungen konnten nicht gespeichert werden.";
+    const status = err?.statusCode || 500;
+    return res.status(status).json({ message });
   }
 };

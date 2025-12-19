@@ -140,7 +140,11 @@ SMTP_USER=rechnungen@example.com
 SMTP_PASS=<<secret>>
 MAIL_FROM="Waldwirtschaft Heidekönig <rechnungen@example.com>"
 DATEV_EMAIL=datev@example.com
+HKFORMS_BASE_URL=https://app.bistrottelegraph.de/api
+HKFORMS_ORGANIZATION=hk-mandant-01
 HKFORMS_SYNC_TOKEN=<<secret>>
+TAX_NUMBER=12/345/67890
+VAT_ID=DE123456789
 
 # Überfällig-Job (optional)
 OVERDUE_DAYS=14
@@ -489,4 +493,3 @@ JWT_SECRET=supersecret
 SEPA_CREDITOR=Heidekönig
 SEPA_IBAN=DE...
 SEPA_BIC=GENODE...
-
