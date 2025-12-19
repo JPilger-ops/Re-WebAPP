@@ -69,7 +69,7 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/roles", roleRoutes);
-app.use("/api/invoices", authRequired, invoiceRoutes);
+app.use("/api/invoices", invoiceRoutes);
 app.use("/api/customers", authRequired, customerRoutes);
 app.use("/api/stats", authRequired, statsRoutes);
 app.use("/api/testdb", authRequired, testRoutes);

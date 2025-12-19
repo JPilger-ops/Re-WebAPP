@@ -17,6 +17,7 @@ import {
   updateDatevExportStatus,
   DATEV_STATUS,
 } from "../utils/datevExport.js";
+import { sendHkformsStatus } from "../utils/hkformsSync.js";
 
 dotenv.config();
 
@@ -495,6 +496,8 @@ for (let i = 0; i < items.length; i++) {
     const invoiceDate = invoice.date && invoice.date.trim() !== "" ? invoice.date : null;
     const receiptDate = invoice.receipt_date && invoice.receipt_date.trim() !== "" ? invoice.receipt_date : null;
     const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category : null;
+    const reservationRequestId = invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
+    const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
 
     // B2B + USt-ID aus dem Payload
     const isB2B  = invoice.b2b === true;              // kommt als boolean aus dem Frontend
@@ -508,6 +511,8 @@ for (let i = 0; i < items.length; i++) {
       date,
       recipient_id,
       category,
+      reservation_request_id,
+      external_reference,
       receipt_date,
       b2b,
       ust_id,
@@ -517,10 +522,10 @@ for (let i = 0; i < items.length; i++) {
     )
     VALUES (
       $1, $2, $3, $4, $5,
-      $6, $7,
-      $8, $9, $10,
-      $11, $12, $13,
-      $14
+      $6, $7, $8,
+      $9, $10, $11,
+      $12, $13, $14,
+      $15, $16
     )
     RETURNING id
     `,
@@ -529,6 +534,8 @@ for (let i = 0; i < items.length; i++) {
       invoiceDate,
       recipientId,
       category,
+      reservationRequestId,
+      externalReference,
       receiptDate,
       isB2B,
       ustId,
@@ -655,10 +662,13 @@ export const getInvoiceById = async (req, res) => {
       invoice_number: row.invoice_number,
       date: row.date,
       category: row.category,
+      reservation_request_id: row.reservation_request_id,
+      external_reference: row.external_reference,
       receipt_date: row.receipt_date,
       status_sent: row.status_sent,
       status_sent_at: row.status_sent_at,
       status_paid_at: row.status_paid_at,
+      overdue_since: row.overdue_since,
       datev_export_status: row.datev_export_status,
       datev_exported_at: row.datev_exported_at,
       datev_export_error: row.datev_export_error,
@@ -1239,10 +1249,31 @@ export const markSent = async (req, res) => {
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
   try {
-    await db.query(
-      "UPDATE invoices SET status_sent = true, status_sent_at = NOW() WHERE id = $1",
+    const updateResult = await db.query(
+      `
+        UPDATE invoices
+        SET status_sent = true, status_sent_at = NOW()
+        WHERE id = $1
+        RETURNING id, invoice_number, reservation_request_id, status_sent_at, status_paid_at
+      `,
       [id]
     );
+
+    if (updateResult.rowCount === 0) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const row = updateResult.rows[0];
+
+    // HKForms Sync (best effort, nicht blocking)
+    sendHkformsStatus({
+      reservationId: row.reservation_request_id,
+      payload: {
+        status: "SENT",
+        reference: row.invoice_number,
+        sentAt: row.status_sent_at || new Date(),
+      },
+    });
 
     return res.json({ message: "Rechnung als versendet markiert" });
   } catch (err) {
@@ -1379,10 +1410,17 @@ export const sendInvoiceEmail = async (req, res) => {
       ],
     });
 
-    await db.query(
-      "UPDATE invoices SET status_sent = true, status_sent_at = NOW() WHERE id = $1",
+    const updateResult = await db.query(
+      `
+        UPDATE invoices
+        SET status_sent = true, status_sent_at = NOW()
+        WHERE id = $1
+        RETURNING id, invoice_number, reservation_request_id, status_sent_at
+      `,
       [id]
     );
+
+    const updatedRow = updateResult.rows[0];
 
     if (includeDatev) {
       await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
@@ -1391,6 +1429,16 @@ export const sendInvoiceEmail = async (req, res) => {
     const successMessage = includeDatev
       ? "E-Mail wurde verschickt (Kunde + DATEV)."
       : "E-Mail wurde verschickt.";
+
+    // HKForms Sync (best effort)
+    sendHkformsStatus({
+      reservationId: updatedRow?.reservation_request_id,
+      payload: {
+        status: "SENT",
+        reference: updatedRow?.invoice_number || row.invoice_number,
+        sentAt: updatedRow?.status_sent_at || new Date(),
+      },
+    });
 
     return res.json({ message: successMessage });
   } catch (err) {
@@ -1503,15 +1551,239 @@ export const markPaid = async (req, res) => {
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
   try {
-    await db.query(
-      "UPDATE invoices SET status_paid_at = NOW() WHERE id = $1",
+    const updateResult = await db.query(
+      `
+        UPDATE invoices
+        SET status_paid_at = NOW()
+        WHERE id = $1
+        RETURNING id, invoice_number, reservation_request_id, status_sent_at, status_paid_at
+      `,
       [id]
     );
+
+    if (updateResult.rowCount === 0) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const row = updateResult.rows[0];
+
+    // HKForms Sync (best effort)
+    sendHkformsStatus({
+      reservationId: row.reservation_request_id,
+      payload: {
+        status: "PAID",
+        reference: row.invoice_number,
+        sentAt: row.status_sent_at || null,
+        paidAt: row.status_paid_at || new Date(),
+      },
+    });
 
     return res.json({ message: "Rechnung als bezahlt markiert" });
   } catch (err) {
     console.error("Fehler beim Markieren als bezahlt:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
+  }
+};
+
+const parseDateInput = (value, fieldName) => {
+  if (value == null) return null;
+  const date = new Date(value);
+  if (isNaN(date)) {
+    const error = new Error(`Ungültiges Datum für ${fieldName}`);
+    error.code = "BAD_DATE";
+    throw error;
+  }
+  return date;
+};
+
+export const getInvoiceStatusByReservation = async (req, res) => {
+  const reservationId = (req.params.reservationId || "").trim();
+  if (!reservationId) {
+    return res.status(400).json({ message: "Reservation-ID fehlt." });
+  }
+
+  try {
+    const result = await db.query(
+      `
+        SELECT id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
+        FROM invoices
+        WHERE reservation_request_id = $1
+        LIMIT 1
+      `,
+      [reservationId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const row = result.rows[0];
+
+    return res.json({
+      invoiceId: row.id,
+      invoiceNumber: row.invoice_number,
+      reservationRequestId: row.reservation_request_id,
+      statusSent: row.status_sent,
+      statusSentAt: row.status_sent_at,
+      statusPaidAt: row.status_paid_at,
+      overdueSince: row.overdue_since,
+      reference: row.external_reference || null,
+    });
+  } catch (err) {
+    console.error("Fehler beim Laden des Reservation-Status:", err);
+    return res.status(500).json({ message: "Status konnte nicht geladen werden." });
+  }
+};
+
+export const updateInvoiceStatusByReservation = async (req, res) => {
+  const reservationId = (req.params.reservationId || "").trim();
+  if (!reservationId) {
+    return res.status(400).json({ message: "Reservation-ID fehlt." });
+  }
+
+  const { status, reference, sentAt, paidAt, overdueSince } = req.body || {};
+  const normalizedStatus = (status || "").toUpperCase();
+  const allowedStatuses = ["NONE", "SENT", "PAID", "OVERDUE"];
+
+  if (!allowedStatuses.includes(normalizedStatus)) {
+    return res.status(400).json({ message: "Ungültiger Status. Erlaubt: NONE, SENT, PAID, OVERDUE." });
+  }
+
+  let parsedSentAt = null;
+  let parsedPaidAt = null;
+  let parsedOverdueSince = null;
+  const nowIso = new Date().toISOString();
+
+  try {
+    parsedSentAt = parseDateInput(sentAt, "sentAt");
+    parsedPaidAt = parseDateInput(paidAt, "paidAt");
+    parsedOverdueSince = parseDateInput(overdueSince, "overdueSince");
+  } catch (err) {
+    if (err?.code === "BAD_DATE") {
+      return res.status(400).json({ message: err.message });
+    }
+    throw err;
+  }
+
+  try {
+    const existing = await db.query(
+      `
+        SELECT id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
+        FROM invoices
+        WHERE reservation_request_id = $1
+        LIMIT 1
+      `,
+      [reservationId]
+    );
+
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const current = existing.rows[0];
+
+    let nextStatusSent = false;
+    let nextStatusSentAt = null;
+    let nextStatusPaidAt = null;
+    let nextOverdueSince = null;
+
+    switch (normalizedStatus) {
+      case "SENT":
+        nextStatusSent = true;
+        nextStatusSentAt = parsedSentAt || current.status_sent_at || nowIso;
+        nextStatusPaidAt = null;
+        nextOverdueSince = null;
+        break;
+      case "PAID":
+        nextStatusSent = true;
+        nextStatusSentAt = parsedSentAt || current.status_sent_at || nowIso;
+        nextStatusPaidAt = parsedPaidAt || current.status_paid_at || nowIso;
+        nextOverdueSince = null;
+        break;
+      case "OVERDUE":
+        nextStatusSent = true;
+        nextStatusSentAt = parsedSentAt || current.status_sent_at || null;
+        nextStatusPaidAt = null;
+        nextOverdueSince = parsedOverdueSince || current.overdue_since || nowIso;
+        break;
+      default:
+        // NONE
+        nextStatusSent = false;
+        nextStatusSentAt = null;
+        nextStatusPaidAt = null;
+        nextOverdueSince = null;
+        break;
+    }
+
+    const nextReference = (reference || "").trim() || current.external_reference || null;
+
+    const updated = await db.query(
+      `
+        UPDATE invoices
+        SET
+          status_sent = $2,
+          status_sent_at = $3,
+          status_paid_at = $4,
+          overdue_since = $5,
+          external_reference = $6
+        WHERE reservation_request_id = $1
+        RETURNING id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
+      `,
+      [
+        reservationId,
+        nextStatusSent,
+        nextStatusSentAt,
+        nextStatusPaidAt,
+        nextOverdueSince,
+        nextReference
+      ]
+    );
+
+    const row = updated.rows[0];
+
+    // HKForms Sync (best effort, nur wenn Reservation-ID vorhanden)
+    let syncPayload = null;
+    if (normalizedStatus === "SENT") {
+      syncPayload = {
+        status: "SENT",
+        reference: row.invoice_number,
+        sentAt: row.status_sent_at || new Date(),
+      };
+    } else if (normalizedStatus === "PAID") {
+      syncPayload = {
+        status: "PAID",
+        reference: row.invoice_number,
+        sentAt: row.status_sent_at || null,
+        paidAt: row.status_paid_at || new Date(),
+      };
+    } else if (normalizedStatus === "OVERDUE") {
+      syncPayload = {
+        status: "OVERDUE",
+        reference: row.invoice_number,
+        overdueSince: row.overdue_since || new Date(),
+      };
+    }
+
+    if (syncPayload) {
+      sendHkformsStatus({
+        reservationId: row.reservation_request_id,
+        payload: syncPayload,
+      });
+    }
+
+    return res.json({
+      invoiceId: row.id,
+      invoiceNumber: row.invoice_number,
+      reservationRequestId: row.reservation_request_id,
+      statusSent: row.status_sent,
+      statusSentAt: row.status_sent_at,
+      statusPaidAt: row.status_paid_at,
+      overdueSince: row.overdue_since,
+      reference: row.external_reference || null,
+    });
+  } catch (err) {
+    console.error("Fehler beim Aktualisieren des Reservation-Status:", err);
+    return res.status(500).json({ message: "Status konnte nicht aktualisiert werden." });
   }
 };
 

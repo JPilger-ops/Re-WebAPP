@@ -73,3 +73,23 @@ export const requirePermission = (perm) => (req, res, next) => {
   }
   next();
 };
+
+/**
+ * requireHkformsToken
+ *  - prüft Integrations-Token im Header X-HKFORMS-CRM-TOKEN
+ *  - vergleicht gegen HKFORMS_SYNC_TOKEN aus der Umgebung
+ */
+export const requireHkformsToken = (req, res, next) => {
+  const expected = (process.env.HKFORMS_SYNC_TOKEN || "").trim();
+  const provided = (req.get("X-HKFORMS-CRM-TOKEN") || "").trim();
+
+  if (!expected) {
+    return res.status(401).json({ message: "Integration-Token fehlt." });
+  }
+
+  if (!provided || provided !== expected) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  next();
+};

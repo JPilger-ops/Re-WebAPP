@@ -17,9 +17,12 @@ CREATE TABLE invoices (
     date DATE NOT NULL,
     recipient_id INTEGER REFERENCES recipients(id),
     category VARCHAR(50),
+    reservation_request_id VARCHAR(100),
+    external_reference TEXT,
     status_sent BOOLEAN DEFAULT FALSE,
     status_sent_at TIMESTAMP,
     status_paid_at TIMESTAMP,
+    overdue_since TIMESTAMP,
     datev_export_status VARCHAR(20) DEFAULT 'NOT_SENT',
     datev_exported_at TIMESTAMP,
     datev_export_error TEXT,
@@ -62,6 +65,10 @@ CREATE TABLE IF NOT EXISTS invoice_categories (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_categories_key
 ON invoice_categories (key);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_reservation_request_id
+ON invoices (reservation_request_id)
+WHERE reservation_request_id IS NOT NULL;
 
 -- Verhindert Dubletten anhand Stammdaten
 CREATE UNIQUE INDEX IF NOT EXISTS idx_recipients_unique

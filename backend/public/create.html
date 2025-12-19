@@ -96,6 +96,15 @@
 
             <label class="input-label">Belegdatum</label>
             <input id="i_receipt" class="input" type="date" />
+
+            <label class="input-label" style="margin-top:14px;">Formular-ID</label>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+              <input id="reservation_toggle" type="checkbox" style="width:20px; height:20px;">
+              <span>HKForms-Anfrage-ID hinterlegen</span>
+            </div>
+            <div id="reservation_wrapper" class="hidden">
+              <input id="reservation_id" class="input" type="text" placeholder="ReservationRequest-ID" />
+            </div>
           </div>
 
         </div>
