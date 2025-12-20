@@ -118,6 +118,25 @@ npm test
 curl -k https://<APP_DOMAIN>/api/testdb
 ```
 
+## Docker Compose Betrieb
+- `.env` aus `backend/.env.example` kopieren und anpassen (DB-Host `db`, Port `3030`, `CORS_ORIGINS` auf die Proxy-URL z. B. `https://192.169.50.100:3030` setzen, `APP_VERSION=0.9.5`). DB-Creds in `backend/.env` müssen zu den `POSTGRES_*` Werten im Compose passen (Standard: User `rechnung_app`, Passwort `change_me`, DB `rechnung_prod`).  
+- Build & Start:  
+  ```bash
+  docker compose build
+  docker compose up -d
+  ```  
+  Die App lauscht intern auf 3030 und wird auf dem Host unter `https://localhost:3030` bzw. über den NPM-Proxy `https://192.169.50.100:3030` bereitgestellt.
+- Prüfung:  
+  ```bash
+  curl -k https://localhost:3030/api/version
+  # oder via Proxy
+  curl -k https://192.169.50.100:3030/api/version
+  ```
+- Volumes: Datenbank unter `./data/db`, erzeugte PDFs unter `./backend/pdfs` (Bind-Mount).  
+- Beim Start führt `npm run start:docker` automatisch `scripts/init-db.js` aus (legt das Schema an und spielt SQL-Migrationen ein).  
+- Optional: In `docker-compose.yml` sind kommentierte Services für pgAdmin/Adminer hinterlegt.
+- TLS nur im Proxy terminieren: setze `APP_HTTPS_DISABLE=true` und nutze `APP_DOMAIN`/`CORS_ORIGINS` mit `http://…`. Healthcheck in Compose ist bereits auf HTTP gestellt.
+
 ## Beispiel `.env`
 ```
 APP_DOMAIN=https://rechnung.intern

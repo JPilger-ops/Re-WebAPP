@@ -5,6 +5,7 @@ backend/yarn-error.log*
 
 # Env / Secrets
 backend/.env
+.env
 
 # Build / Cache / Temp
 backend/pdfs/
@@ -13,6 +14,8 @@ backend/.cache/
 backend/.tmp/
 .tmp/
 backend/core/
+.env.local
+data/
 .DS_Store
 
 # SSL Certificates

@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:15
+    network_mode: host
+    environment:
+      POSTGRES_DB: rechnung_prod
+      POSTGRES_USER: rechnung_app
+      POSTGRES_PASSWORD: change_me
+      PGPORT: 55432
+    command: ["postgres", "-p", "55432"]
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rechnung_app -d rechnung_prod -h localhost -p 55432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: "rechnungsapp:${APP_VERSION:-0.9.8}"
+    build: ./backend
+    network_mode: host
+    env_file:
+      - .env
+      - backend/.env
+    environment:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 55432
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/pdfs:/app/pdfs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -k https://127.0.0.1:3030/api/version || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@example.com
+  #     PGADMIN_DEFAULT_PASSWORD: supersecret
+  #   ports:
+  #     - "8081:80"
+  #   depends_on:
+  #     - db
+
+  # adminer:
+  #   image: adminer
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     ADMINER_DEFAULT_SERVER: db
+  #   depends_on:
+  #     - db

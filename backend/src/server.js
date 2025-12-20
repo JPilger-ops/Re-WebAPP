@@ -34,6 +34,8 @@ app.use((req, res, next) => {
   next();
 });
 
+const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
+
 const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
   .split(",")
   .map((origin) => origin.trim())
@@ -54,6 +56,7 @@ app.use(cors({
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
+  hsts: httpsDisabled ? false : undefined, // disable HSTS when running HTTP behind proxy
 }));
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10mb" }));
