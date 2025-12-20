@@ -25,6 +25,8 @@
   const isAdmin = (window.currentUserRoleName || "").toLowerCase() === "admin";
   const canEditBank = hasPerm("settings.general");
   const canEditDatev = hasPerm("settings.general");
+  const canEditHkforms = hasPerm("settings.general");
+  const canEditTax = hasPerm("settings.general");
   const canReadCategories = hasPerm("categories.read") || canEditBank;
   const canWriteCategories = hasPerm("categories.write") || canEditBank;
   const canDeleteCategories = hasPerm("categories.delete") || canEditBank;
@@ -33,6 +35,8 @@
   let currentCategoryId = null;
   let lastFocusedField = null;
   let datevLoaded = false;
+  let hkformsLoaded = false;
+  let taxLoaded = false;
   const placeholders = [
     "{{recipient_name}}",
     "{{recipient_street}}",
@@ -68,6 +72,20 @@
     datevEmail: document.getElementById("datev-email"),
     datevSave: document.getElementById("datev-save"),
     datevReload: document.getElementById("datev-reload"),
+    hkformsError: document.getElementById("hkforms-error"),
+    hkformsSuccess: document.getElementById("hkforms-success"),
+    hkformsBaseUrl: document.getElementById("hkforms-base-url"),
+    hkformsOrganization: document.getElementById("hkforms-organization"),
+    hkformsApiKey: document.getElementById("hkforms-api-key"),
+    hkformsSave: document.getElementById("hkforms-save"),
+    hkformsReload: document.getElementById("hkforms-reload"),
+    hkformsTest: document.getElementById("hkforms-test"),
+    taxError: document.getElementById("tax-error"),
+    taxSuccess: document.getElementById("tax-success"),
+    taxNumber: document.getElementById("tax-number"),
+    vatId: document.getElementById("vat-id"),
+    taxSave: document.getElementById("tax-save"),
+    taxReload: document.getElementById("tax-reload"),
     tabButtons: document.querySelectorAll(".settings-tab"),
     tabPanels: document.querySelectorAll(".tab-panel"),
     logoDropzone: document.getElementById("logo-dropzone"),
@@ -523,6 +541,261 @@
     } catch (err) {
       console.error("DATEV-Einstellungen speichern fehlgeschlagen", err);
       showBox(elements.datevError, "DATEV-E-Mail konnte nicht gespeichert werden.");
+    }
+  }
+
+  const clearHkformsMessages = () => {
+    hideBox(elements.hkformsError);
+    hideBox(elements.hkformsSuccess);
+  };
+
+  const disableHkformsForm = (message) => {
+    [elements.hkformsBaseUrl, elements.hkformsOrganization, elements.hkformsApiKey, elements.hkformsSave, elements.hkformsReload].forEach((el) => {
+      if (el) el.disabled = true;
+    });
+    if (message) showBox(elements.hkformsError, message);
+  };
+
+  async function loadHkformsSettings() {
+    clearHkformsMessages();
+
+    if (!canEditHkforms) {
+      disableHkformsForm("Keine Berechtigung zum Ändern der HKForms-Verbindung.");
+      hkformsLoaded = true;
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/hkforms", { credentials: "include" });
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        disableHkformsForm("Keine Berechtigung zum Ändern der HKForms-Verbindung.");
+        hkformsLoaded = true;
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.hkformsError, "HKForms-Einstellungen konnten nicht geladen werden.");
+        return;
+      }
+
+      const data = await res.json();
+      if (elements.hkformsBaseUrl) elements.hkformsBaseUrl.value = data.base_url || "";
+      if (elements.hkformsOrganization) elements.hkformsOrganization.value = data.organization || "";
+      if (elements.hkformsApiKey) elements.hkformsApiKey.value = data.api_key || "";
+      hkformsLoaded = true;
+      if (!data.api_key) {
+        showBox(elements.hkformsError, "Kein API-Schlüssel hinterlegt. Bitte speichern.");
+      }
+    } catch (err) {
+      console.error("HKForms-Einstellungen laden fehlgeschlagen", err);
+      showBox(elements.hkformsError, "HKForms-Einstellungen konnten nicht geladen werden.");
+    }
+  }
+
+  async function saveHkformsSettings() {
+    clearHkformsMessages();
+
+    if (!canEditHkforms) {
+      showBox(elements.hkformsError, "Keine Berechtigung zum Ändern der HKForms-Verbindung.");
+      return;
+    }
+
+    const payload = {
+      base_url: elements.hkformsBaseUrl?.value.trim() || "",
+      organization: elements.hkformsOrganization?.value.trim() || "",
+      api_key: elements.hkformsApiKey?.value.trim() || "",
+    };
+
+    if (!payload.base_url || !payload.api_key) {
+      showBox(elements.hkformsError, "Bitte Basis-URL und API-Schlüssel ausfüllen.");
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(payload.base_url)) {
+      showBox(elements.hkformsError, "Basis-URL muss mit http:// oder https:// beginnen.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/hkforms", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        showBox(elements.hkformsError, "Keine Berechtigung zum Ändern der HKForms-Verbindung.");
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.hkformsError, body.message || "HKForms-Einstellungen konnten nicht gespeichert werden.");
+        return;
+      }
+
+      if (elements.hkformsBaseUrl) elements.hkformsBaseUrl.value = body.base_url || payload.base_url;
+      if (elements.hkformsOrganization) elements.hkformsOrganization.value = body.organization ?? payload.organization;
+      if (elements.hkformsApiKey) elements.hkformsApiKey.value = body.api_key || payload.api_key;
+      hkformsLoaded = true;
+      showBox(elements.hkformsSuccess, "HKForms-Einstellungen gespeichert.");
+    } catch (err) {
+      console.error("HKForms-Einstellungen speichern fehlgeschlagen", err);
+      showBox(elements.hkformsError, "HKForms-Einstellungen konnten nicht gespeichert werden.");
+    }
+  }
+
+  async function testHkformsSettings() {
+    clearHkformsMessages();
+
+    if (!canEditHkforms) {
+      showBox(elements.hkformsError, "Keine Berechtigung zum Testen der HKForms-Verbindung.");
+      return;
+    }
+
+    const payload = {
+      base_url: elements.hkformsBaseUrl?.value.trim() || "",
+      organization: elements.hkformsOrganization?.value.trim() || "",
+      api_key: elements.hkformsApiKey?.value.trim() || "",
+    };
+
+    if (!payload.base_url || !payload.api_key) {
+      showBox(elements.hkformsError, "Bitte Basis-URL und API-Schlüssel für den Test ausfüllen.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/hkforms/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+
+      if (!res.ok || body.ok === false) {
+        const msg = body?.message || "Verbindung fehlgeschlagen.";
+        const detail = body?.details ? ` (${JSON.stringify(body.details).slice(0, 200)})` : "";
+        showBox(elements.hkformsError, msg + detail);
+        return;
+      }
+
+      const statusText = body.status ? `Status ${body.status}` : "OK";
+      showBox(elements.hkformsSuccess, `Verbindung erfolgreich. ${statusText}${body.url ? ` · ${body.url}` : ""}`);
+    } catch (err) {
+      console.error("HKForms-Test fehlgeschlagen", err);
+      showBox(elements.hkformsError, "HKForms-Test fehlgeschlagen.");
+    }
+  }
+
+  const clearTaxMessages = () => {
+    hideBox(elements.taxError);
+    hideBox(elements.taxSuccess);
+  };
+
+  const disableTaxForm = (message) => {
+    [elements.taxNumber, elements.vatId, elements.taxSave, elements.taxReload].forEach((el) => {
+      if (el) el.disabled = true;
+    });
+    if (message) showBox(elements.taxError, message);
+  };
+
+  async function loadTaxSettings() {
+    clearTaxMessages();
+
+    if (!canEditTax) {
+      disableTaxForm("Keine Berechtigung zum Ändern der Steuerdaten.");
+      taxLoaded = true;
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/tax", { credentials: "include" });
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        disableTaxForm("Keine Berechtigung zum Ändern der Steuerdaten.");
+        taxLoaded = true;
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.taxError, "Steuer-Einstellungen konnten nicht geladen werden.");
+        return;
+      }
+
+      const data = await res.json();
+      if (elements.taxNumber) elements.taxNumber.value = data.tax_number || "";
+      if (elements.vatId) elements.vatId.value = data.vat_id || "";
+      taxLoaded = true;
+    } catch (err) {
+      console.error("Steuer-Einstellungen laden fehlgeschlagen", err);
+      showBox(elements.taxError, "Steuer-Einstellungen konnten nicht geladen werden.");
+    }
+  }
+
+  async function saveTaxSettings() {
+    clearTaxMessages();
+
+    if (!canEditTax) {
+      showBox(elements.taxError, "Keine Berechtigung zum Ändern der Steuerdaten.");
+      return;
+    }
+
+    const payload = {
+      tax_number: elements.taxNumber?.value.trim() || "",
+      vat_id: elements.vatId?.value.trim() || "",
+    };
+
+    if (!payload.tax_number && !payload.vat_id) {
+      showBox(elements.taxError, "Bitte Steuer-Nr. oder USt-IdNr. ausfüllen.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/tax", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+      if (res.status === 403) {
+        showBox(elements.taxError, "Keine Berechtigung zum Ändern der Steuerdaten.");
+        return;
+      }
+      if (!res.ok) {
+        showBox(elements.taxError, body.message || "Steuer-Einstellungen konnten nicht gespeichert werden.");
+        return;
+      }
+
+      if (elements.taxNumber) elements.taxNumber.value = body.tax_number || payload.tax_number;
+      if (elements.vatId) elements.vatId.value = body.vat_id || payload.vat_id;
+      taxLoaded = true;
+      showBox(elements.taxSuccess, "Steuer-Einstellungen gespeichert.");
+    } catch (err) {
+      console.error("Steuer-Einstellungen speichern fehlgeschlagen", err);
+      showBox(elements.taxError, "Steuer-Einstellungen konnten nicht gespeichert werden.");
     }
   }
 
@@ -1087,6 +1360,12 @@
     if (key === "datev" && !datevLoaded) {
       loadDatevSettings();
     }
+    if (key === "hkforms" && !hkformsLoaded) {
+      loadHkformsSettings();
+    }
+    if (key === "tax" && !taxLoaded) {
+      loadTaxSettings();
+    }
   };
 
   // erst Tabs filtern, dann initial setzen
@@ -1180,6 +1459,21 @@
   if (elements.bankReload) elements.bankReload.addEventListener("click", loadBankData);
   if (elements.datevSave) elements.datevSave.addEventListener("click", saveDatevSettings);
   if (elements.datevReload) elements.datevReload.addEventListener("click", loadDatevSettings);
+  if (elements.hkformsSave) elements.hkformsSave.addEventListener("click", saveHkformsSettings);
+  if (elements.hkformsReload) {
+    elements.hkformsReload.addEventListener("click", () => {
+      hkformsLoaded = false;
+      loadHkformsSettings();
+    });
+  }
+  if (elements.hkformsTest) elements.hkformsTest.addEventListener("click", testHkformsSettings);
+  if (elements.taxSave) elements.taxSave.addEventListener("click", saveTaxSettings);
+  if (elements.taxReload) {
+    elements.taxReload.addEventListener("click", () => {
+      taxLoaded = false;
+      loadTaxSettings();
+    });
+  }
   if (elements.logoButton && canWriteCategories) {
     elements.logoButton.addEventListener("click", () => elements.logoInput?.click());
   }
@@ -1239,10 +1533,12 @@
     });
   }
 
-  switchTab("general");
+  switchTab("bank");
   updateKeyHint();
   loadBankData();
   loadDatevSettings();
+  loadHkformsSettings();
+  loadTaxSettings();
   loadLogos();
   loadCategories();
 })();

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { getHkformsSettings } from "../utils/hkformsSettings.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
@@ -72,4 +73,38 @@ export const requirePermission = (perm) => (req, res, next) => {
     return res.status(403).json({ message: "Keine Berechtigung." });
   }
   next();
+};
+
+/**
+ * requireHkformsToken
+ *  - prüft Integrations-Token im Header X-HKFORMS-CRM-TOKEN
+ *  - vergleicht gegen HKFORMS_SYNC_TOKEN aus der Umgebung
+ */
+export const requireHkformsToken = async (req, res, next) => {
+  try {
+    const settings = await getHkformsSettings().catch((err) => {
+      console.warn("[hkforms] Token-Check ohne gespeicherte Settings, nutze Fallback.", err?.message || err);
+      return null;
+    });
+
+    const expected = (settings?.api_key || process.env.HKFORMS_SYNC_TOKEN || "").trim();
+    const provided = (req.get("X-HKFORMS-CRM-TOKEN") || "").trim();
+
+    if (!expected) {
+      return res.status(401).json({ message: "Integration-Token fehlt." });
+    }
+
+    if (!provided || provided !== expected) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (settings?.organization) {
+      req.hkformsOrganization = settings.organization;
+    }
+
+    next();
+  } catch (err) {
+    console.error("HKForms Token-Prüfung fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Token-Prüfung fehlgeschlagen." });
+  }
 };

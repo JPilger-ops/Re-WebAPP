@@ -10,11 +10,20 @@ import {
   getNextInvoiceNumber,
   markPaid,
   exportInvoiceToDatev,
-  deleteInvoice         // ⬅️ NEU
+  deleteInvoice,         // ⬅️ NEU
+  getInvoiceStatusByReservation,
+  updateInvoiceStatusByReservation
 } from "../controllers/invoice.controller.js";
-import { requireRole } from "../middleware/auth.middleware.js";
+import { authRequired, requireRole, requireHkformsToken } from "../middleware/auth.middleware.js";
 
 const router = Router();
+
+// Integrations-Routen via ReservationRequest
+router.get("/by-reservation/:reservationId/status", requireHkformsToken, getInvoiceStatusByReservation);
+router.post("/by-reservation/:reservationId/status", requireHkformsToken, updateInvoiceStatusByReservation);
+
+// Ab hier: reguläre App-API mit JWT
+router.use(authRequired);
 
 // Status-Routen
 router.post("/:id/status/sent", markSent);

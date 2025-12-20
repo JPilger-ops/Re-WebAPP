@@ -6,6 +6,7 @@
 - JWT-Login per Secure-Cookie, Rollen- und Berechtigungssystem (Admin/User + Permissions für Kategorien/Settings).
 - Kundenverwaltung auf Basis der Tabelle `recipients`.
 - Rechnungen anlegen, Positionen mit 19%/7% MwSt., Status sent/paid, Löschung nur für Admins.
+- HKForms-Integration: optionale ReservationRequest-ID auf der Rechnung, Status-Sync (sent/paid/overdue) und automatische Überfällig-Markierung nach Versand.
 - PDF-Generierung via Puppeteer (inkl. Kategorie-Logo, EPC-QR-Code/SEPA-Daten) und Ablage in `pdfs/`.
 - E-Mail-Versand über globales SMTP oder kategoriespezifische Mailkonten + HTML-Templates; Vorschau verfügbar.
 - DATEV-Export: dedizierte Zieladresse, Statusspalten in `invoices`, Export-Button und BCC-Option im Versand.
@@ -139,6 +140,17 @@ SMTP_USER=rechnungen@example.com
 SMTP_PASS=<<secret>>
 MAIL_FROM="Waldwirtschaft Heidekönig <rechnungen@example.com>"
 DATEV_EMAIL=datev@example.com
+HKFORMS_BASE_URL=https://app.bistrottelegraph.de/api
+HKFORMS_ORGANIZATION=hk-mandant-01
+HKFORMS_SYNC_TOKEN=<<secret>>
+TAX_NUMBER=12/345/67890
+VAT_ID=DE123456789
+
+# Überfällig-Job (optional)
+OVERDUE_DAYS=14
+OVERDUE_JOB_ENABLED=true
+# Millisekunden; Default 900000 (15 Minuten)
+OVERDUE_JOB_INTERVAL_MS=900000
 
 SEPA_CREDITOR_NAME="Waldwirtschaft Heidekönig"
 SEPA_CREDITOR_IBAN="DE00123456780000000000"
@@ -155,6 +167,7 @@ APP_VERSION=0.9.0
 - Rollen (Admin): `GET /api/roles`, `GET /api/roles/:id/permissions`, `POST/PUT/DELETE /api/roles`.
 - Kunden: `GET/POST/PUT/DELETE /api/customers`.
 - Rechnungen: `GET /api/invoices` (Liste + Filter), `GET /api/invoices/:id`, `POST /api/invoices` (Neuanlage), `GET /api/invoices/:id/pdf`, `POST /api/invoices/:id/send-email` (optional `include_datev: true`), `POST /api/invoices/:id/datev-export`, Statusrouten für sent/paid, `DELETE /api/invoices/:id` nur Admin.
+- HKForms/Reservation: `GET/POST /api/invoices/by-reservation/:reservationId/status` (Header `X-HKFORMS-CRM-TOKEN`), sendet/liest Rechnungsstatus; Reservation-ID ist optional, mehrfach nutzbar.
 - Statistik (Permission `stats.view`): `GET /api/stats/invoices?year=YYYY&category=cat1,cat2` liefert `overall` + `byYear` + verfügbare Kategorien.
 - Kategorien (Permissions `categories.*` oder `settings.general`): CRUD, Logo-Upload (`POST /api/categories/logo`), Template/SMTP je Kategorie (`/api/categories/:id/email|template`), Mail-Test.
 - Einstellungen: `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/datev`, `GET /api/settings/ca-cert` (admin).
@@ -170,33 +183,6 @@ Schwerpunkt sind die DATEV-Helfer (`tests/datev.test.js`). Puppeteer/SMTP werden
 - HTTPS ist Pflicht, weil Cookies `secure` gesetzt werden. Hinter einem Reverse Proxy entweder Zertifikatpfade via `APP_SSL_*` setzen oder den HTTPS-Teil dort terminieren und die App intern per Port weiterreichen.
 - Generierte PDFs liegen unter `pdfs/` und werden beim Versand als Anhang genutzt.
 - Kategorie-spezifische SMTP-Zugänge haben Vorrang vor den globalen SMTP-Env-Variablen.
-
-⸻
-
-📄 README.md
-
-🌲 Re-WebAPP
-
-Rechnungs- und Verwaltungs-System für den Heidekönig
-Version: 0.2.3 (2025)
-
-⸻
-
-⭐ Über das Projekt
-
-Die Re-WebAPP ist ein vollwertiges, browserbasiertes Rechnungs- & Verwaltungs-System bestehend aus:
-	•	Benutzer- & Rollenverwaltung
-	•	Kundenmanagement
-	•	Rechnungsgenerator
-	•	PDF-Export über Puppeteer
-	•	SEPA-QR-Code Unterstützung
-	•	Reverse-Charge / B2B-Funktion
-	•	Automatische Rechnungsnummern nach Schema YYYYMM001
-	•	Apple-like UI, Lade-Popups, Animationen
-
-Ziel ist eine moderne, robuste und erweiterbare Plattform für Rechnungen, Nutzerverwaltung und interne Prozesse.
-
-⸻
 
 🧰 Technologien
 
@@ -507,5 +493,3 @@ JWT_SECRET=supersecret
 SEPA_CREDITOR=Heidekönig
 SEPA_IBAN=DE...
 SEPA_BIC=GENODE...
-
-
