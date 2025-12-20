@@ -3,7 +3,7 @@
  Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express liefert sowohl die REST-API als auch das statische Frontend (HTML/JS/CSS). Rechnungen werden als PDF erzeugt, per E-Mail versendet und optional direkt an DATEV weitergeleitet.
 
 ## Features
-- JWT-Login per Secure-Cookie, Rollen- und Berechtigungssystem (Admin/User + Permissions für Kategorien/Settings).
+- JWT-Login per Secure-Cookie, Rollen- und Berechtigungssystem (Admin/User + feingranulare Permissions für Rechnungen, Kunden, Benutzer, Rollen, Kategorien, Settings, Statistik).
 - Kundenverwaltung auf Basis der Tabelle `recipients`.
 - Rechnungen anlegen, Positionen mit 19%/7% MwSt., Status sent/paid, Löschung nur für Admins.
 - HKForms-Integration: optionale ReservationRequest-ID auf der Rechnung, Status-Sync (sent/paid/overdue) und automatische Überfällig-Markierung nach Versand.
@@ -73,32 +73,9 @@ cp .env.example .env  # falls vorhanden; sonst mit Editor anlegen
 - Standardpfad: `certificates/rechnung.intern/privkey.pem` und `certificates/rechnung.intern/fullchain.pem`.  
 - Alternativ eigene Pfade per Env (siehe `.env`). Ohne Zertifikat startet `npm run dev` nicht.
 
-7) Basisrollen/-rechte eintragen  
-```bash
-psql -h localhost -U rechnung_app -d rechnung_prod <<'SQL'
-INSERT INTO roles (name, description) VALUES 
-  ('admin','Voller Zugriff'),
-  ('user','Standardnutzer')
-ON CONFLICT (name) DO NOTHING;
+7) Basisrollen/-rechte + Admin werden automatisch per `scripts/init-db.js` angelegt (Admin-User `admin`, Passwort per `DEFAULT_ADMIN_PASSWORD` oder Default `admin`, volle Permissions).  
 
-INSERT INTO role_permissions (role_id, permission_key) VALUES
-  ((SELECT id FROM roles WHERE name='admin'), 'settings.general'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.read'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.write'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.delete'),
-  ((SELECT id FROM roles WHERE name='admin'), 'stats.view')
-ON CONFLICT DO NOTHING;
-SQL
-```
-
-8) Admin-User registrieren (`APP_CREATE_PIN` wird abgefragt)  
-```bash
-curl -k -X POST "https://<APP_DOMAIN>/api/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"<pw>","role":"admin","createPin":"<APP_CREATE_PIN>"}'
-```
-
-9) Entwicklung starten und prüfen  
+8) Entwicklung starten und prüfen  
 ```bash
 npm run dev
 curl -k https://localhost:<APP_HTTPS_PORT>/api/version
@@ -112,14 +89,14 @@ pm2 save
 pm2 status
 ```
 
-11) Tests und Checks  
+9) Tests und Checks  
 ```bash
 npm test
 curl -k https://<APP_DOMAIN>/api/testdb
 ```
 
 ## Docker Compose Betrieb
-- `.env` aus `backend/.env.example` kopieren und anpassen (DB-Host `db`, Port `3030`, `CORS_ORIGINS` auf die Proxy-URL z. B. `https://192.169.50.100:3030` setzen, `APP_VERSION=0.9.5`). DB-Creds in `backend/.env` müssen zu den `POSTGRES_*` Werten im Compose passen (Standard: User `rechnung_app`, Passwort `change_me`, DB `rechnung_prod`).  
+- `.env` aus `backend/.env.example` kopieren und anpassen (DB-Host `db`, Port `3030`, `CORS_ORIGINS` auf die Proxy-URL z. B. `https://192.169.50.100:3030` setzen, `APP_VERSION` nach Bedarf). DB-Creds in `backend/.env` müssen zu den `POSTGRES_*` Werten im Compose passen (Standard: User `rechnung_app`, Passwort `change_me`, DB `rechnung_prod`).  
 - Build & Start:  
   ```bash
   docker compose build
@@ -133,7 +110,7 @@ curl -k https://<APP_DOMAIN>/api/testdb
   curl -k https://192.169.50.100:3030/api/version
   ```
 - Volumes: Datenbank unter `./data/db`, erzeugte PDFs unter `./backend/pdfs` (Bind-Mount).  
-- Beim Start führt `npm run start:docker` automatisch `scripts/init-db.js` aus (legt das Schema an und spielt SQL-Migrationen ein).  
+- Beim Start führt `npm run start:docker` automatisch `scripts/init-db.js` aus (legt Schema an, spielt SQL-Migrationen ein und legt Admin + Permissions an).  
 - Optional: In `docker-compose.yml` sind kommentierte Services für pgAdmin/Adminer hinterlegt.
 - TLS nur im Proxy terminieren: setze `APP_HTTPS_DISABLE=true` und nutze `APP_DOMAIN`/`CORS_ORIGINS` mit `http://…`. Healthcheck in Compose ist bereits auf HTTP gestellt.
 
