@@ -11,6 +11,31 @@ const schemaPath = path.join(__dirname, "../schema.sql");
 const migrationsDir = path.join(__dirname, "../migrations");
 const MIGRATIONS_TABLE = "schema_migrations";
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || "admin";
+const DEFAULT_PERMISSIONS = [
+  "invoices.read",
+  "invoices.create",
+  "invoices.update",
+  "invoices.export",
+  "invoices.delete",
+  "stats.view",
+  "customers.read",
+  "customers.create",
+  "customers.update",
+  "customers.delete",
+  "users.read",
+  "users.create",
+  "users.update",
+  "users.delete",
+  "users.resetPassword",
+  "roles.read",
+  "roles.create",
+  "roles.update",
+  "roles.delete",
+  "settings.general",
+  "categories.read",
+  "categories.write",
+  "categories.delete",
+];
 
 const tableExists = async (tableName) => {
   const result = await db.query("SELECT to_regclass($1) AS oid", [`public.${tableName}`]);
@@ -108,18 +133,12 @@ const seedAdmin = async () => {
   }
 
   // Permissions für Admin
-  await db.query(`
-    INSERT INTO role_permissions (role_id, permission_key)
-    SELECT $1, p.perm
-    FROM (VALUES
-      ('categories.read'),
-      ('categories.write'),
-      ('categories.delete'),
-      ('settings.general'),
-      ('stats.view')
-    ) AS p(perm)
-    ON CONFLICT (role_id, permission_key) DO NOTHING
-  `, [adminRoleId]);
+  await db.query(
+    `INSERT INTO role_permissions (role_id, permission_key)
+     SELECT $1, unnest($2::text[])
+     ON CONFLICT (role_id, permission_key) DO NOTHING`,
+    [adminRoleId, DEFAULT_PERMISSIONS]
+  );
 
   // Admin-User nur anlegen, wenn nicht vorhanden
   const existingAdmin = await db.query("SELECT id FROM users WHERE username = 'admin'");
