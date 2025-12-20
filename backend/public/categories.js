@@ -79,6 +79,7 @@
     hkformsApiKey: document.getElementById("hkforms-api-key"),
     hkformsSave: document.getElementById("hkforms-save"),
     hkformsReload: document.getElementById("hkforms-reload"),
+    hkformsTest: document.getElementById("hkforms-test"),
     taxError: document.getElementById("tax-error"),
     taxSuccess: document.getElementById("tax-success"),
     taxNumber: document.getElementById("tax-number"),
@@ -649,6 +650,54 @@
     } catch (err) {
       console.error("HKForms-Einstellungen speichern fehlgeschlagen", err);
       showBox(elements.hkformsError, "HKForms-Einstellungen konnten nicht gespeichert werden.");
+    }
+  }
+
+  async function testHkformsSettings() {
+    clearHkformsMessages();
+
+    if (!canEditHkforms) {
+      showBox(elements.hkformsError, "Keine Berechtigung zum Testen der HKForms-Verbindung.");
+      return;
+    }
+
+    const payload = {
+      base_url: elements.hkformsBaseUrl?.value.trim() || "",
+      organization: elements.hkformsOrganization?.value.trim() || "",
+      api_key: elements.hkformsApiKey?.value.trim() || "",
+    };
+
+    if (!payload.base_url || !payload.api_key) {
+      showBox(elements.hkformsError, "Bitte Basis-URL und API-Schlüssel für den Test ausfüllen.");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/hkforms/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+
+      if (res.status === 401) {
+        window.location.href = "/login.html";
+        return;
+      }
+
+      if (!res.ok || body.ok === false) {
+        const msg = body?.message || "Verbindung fehlgeschlagen.";
+        const detail = body?.details ? ` (${JSON.stringify(body.details).slice(0, 200)})` : "";
+        showBox(elements.hkformsError, msg + detail);
+        return;
+      }
+
+      const statusText = body.status ? `Status ${body.status}` : "OK";
+      showBox(elements.hkformsSuccess, `Verbindung erfolgreich. ${statusText}${body.url ? ` · ${body.url}` : ""}`);
+    } catch (err) {
+      console.error("HKForms-Test fehlgeschlagen", err);
+      showBox(elements.hkformsError, "HKForms-Test fehlgeschlagen.");
     }
   }
 
@@ -1417,6 +1466,7 @@
       loadHkformsSettings();
     });
   }
+  if (elements.hkformsTest) elements.hkformsTest.addEventListener("click", testHkformsSettings);
   if (elements.taxSave) elements.taxSave.addEventListener("click", saveTaxSettings);
   if (elements.taxReload) {
     elements.taxReload.addEventListener("click", () => {

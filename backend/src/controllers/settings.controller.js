@@ -139,6 +139,68 @@ export const updateHkformsData = async (req, res) => {
   }
 };
 
+export const testHkformsConnection = async (req, res) => {
+  try {
+    const incoming = req.body || {};
+    const stored = await getHkformsSettings();
+
+    const base_url = (incoming.base_url || stored.base_url || "").trim();
+    const organization = (incoming.organization || stored.organization || "").trim();
+    const api_key = (incoming.api_key || stored.api_key || "").trim();
+
+    if (!base_url || !/^https?:\/\//i.test(base_url)) {
+      return res.status(400).json({ message: "Bitte eine gültige Basis-URL angeben (http/https)." });
+    }
+    if (!api_key) {
+      return res.status(400).json({ message: "Bitte einen API-Schlüssel angeben." });
+    }
+
+    const headers = {
+      "X-HKFORMS-CRM-TOKEN": api_key,
+      "Content-Type": "application/json",
+    };
+    if (organization) headers["X-HKFORMS-ORG"] = organization;
+
+    const candidates = [`${base_url}/ping`, `${base_url}/health`, base_url];
+    let lastError = null;
+
+    for (const url of candidates) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const resp = await fetch(url, { method: "GET", headers, signal: controller.signal }).catch((err) => {
+          throw err;
+        });
+        clearTimeout(timeout);
+        const text = await resp.text().catch(() => "");
+
+        // Erfolg bei 2xx oder "erreichbar" bei gängigen 4xx (Auth/NotFound/Method)
+        if (resp.ok || [401, 403, 404, 405].includes(resp.status)) {
+          return res.json({
+            ok: true,
+            status: resp.status,
+            url,
+            message: resp.ok ? "Verbindung erfolgreich." : "Server erreichbar.",
+            response: text?.slice(0, 300) || null,
+          });
+        }
+
+        lastError = { status: resp.status, url, body: text?.slice(0, 300) || "" };
+      } catch (err) {
+        lastError = { message: err?.message || "Verbindungsfehler" };
+      }
+    }
+
+    return res.status(502).json({
+      message: "HKForms-Verbindung fehlgeschlagen.",
+      details: lastError,
+    });
+  } catch (err) {
+    console.error("HKForms-Test fehlgeschlagen:", err);
+    return res.status(500).json({ message: "HKForms-Test fehlgeschlagen." });
+  }
+};
+
 export const getTaxData = async (_req, res) => {
   try {
     const settings = await getTaxSettings();

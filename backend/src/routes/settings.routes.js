@@ -8,6 +8,7 @@ import {
   downloadCaCertificate,
   getHkformsData,
   updateHkformsData,
+  testHkformsConnection,
   getTaxData,
   updateTaxData,
 } from "../controllers/settings.controller.js";
@@ -50,6 +51,12 @@ router.put(
   "/hkforms",
   requirePermission("settings.general"),
   updateHkformsData
+);
+
+router.post(
+  "/hkforms/test",
+  requirePermission("settings.general"),
+  testHkformsConnection
 );
 
 router.get(
