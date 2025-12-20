@@ -27,6 +27,8 @@ CREATE TABLE invoices (
     datev_exported_at TIMESTAMP,
     datev_export_error TEXT,
     receipt_date DATE,
+    b2b BOOLEAN DEFAULT FALSE,
+    ust_id TEXT,
 
     -- 19%
     net_19 NUMERIC(10,2),
