@@ -48,7 +48,10 @@ app.use((req, res, next) => {
 
 const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "true").toLowerCase());
 
-const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
+const allowedOrigins = (
+  process.env.CORS_ORIGINS ||
+  "https://rechnung.intern,http://rechnung.intern"
+)
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);

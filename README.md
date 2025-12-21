@@ -102,7 +102,7 @@ curl -k https://<APP_DOMAIN>/api/testdb
 
 ### CI (GitHub Actions)
 - Workflow: `.github/workflows/ci.yml`
-- Triggers: push/pull_request auf `main` und `dev`
+- Triggers: push/pull_request auf `main` und `dev_Prisma`
 - Steps: `docker compose up -d --build`, Health-Wait, dann `check:api`, `check:pdf`, `check:invoice` im App-Container. Bei Fehlern: `docker compose logs`, danach `docker compose down -v`.
 - Branch Protection: PRs nur mergen, wenn der CI-Workflow grün ist (im GitHub-UI aktivieren).
 
@@ -124,7 +124,7 @@ curl -k https://<APP_DOMAIN>/api/testdb
 APP_DOMAIN=http://rechnung.intern
 APP_HTTPS_PORT=3030
 APP_HTTPS_DISABLE=true
-CORS_ORIGINS=http://rechnung.intern,https://rechnung.intern,https://192.168.50.100
+CORS_ORIGINS=https://rechnung.intern,http://rechnung.intern
 ```
 Der Proxy (NPM) terminiert TLS und reicht `X-Forwarded-Proto: https` durch. Express hat `trust proxy = 1`, dadurch werden Cookies bei HTTPS-Aufruf durch den Proxy trotzdem als `Secure` gesetzt.
 

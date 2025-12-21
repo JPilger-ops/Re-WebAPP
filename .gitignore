@@ -8,6 +8,7 @@ backend/yarn-error.log*
 backend/.env
 .env.local
 .env.*
+!.env.example
 .env
 
 # Build / Cache / Temp

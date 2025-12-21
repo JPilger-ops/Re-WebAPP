@@ -60,7 +60,6 @@ async function seedAdmin(adminRoleId) {
   });
 
   if (existing) {
-    // Stelle sicher, dass admin der admin-Rolle zugeordnet ist
     await prisma.users.update({
       where: { id: existing.id },
       data: {
