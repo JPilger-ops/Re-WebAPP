@@ -13,6 +13,8 @@
 - Kategorien mit Logos, Templates sowie SMTP-/IMAP-Konfiguration; Logo-Uploads landen in `public/logos`.
 - Statistikseite mit KPIs (gesamt + pro Jahr) und Filtern nach Jahr/Kategorie; Zugriff via Permission `stats.view`.
 - Statische Frontend-Seiten in `public/` (Login, Rechnungen, Kunden, Kategorien, Rollen-/Benutzerverwaltung, Statistik).
+- E-Mail-Preview: `GET /api/invoices/:id/email-preview` liefert subject/body_html/body_text, From-Absender und DATEV-Info.
+- Versand-Testmodus: `EMAIL_SEND_DISABLED=1` unterdrückt den realen Versand, markiert aber Status als „gesendet“; `EMAIL_REDIRECT_TO=<adresse>` leitet alle Sendungen auf diese Adresse um (kein DATEV-BCC im Redirect-Modus).
 
 ## Projektaufbau
 - `src/` – Express-Server, Routen und Controller.
@@ -144,8 +146,12 @@ npm --prefix backend run check:api
 # PDF-Smoketest (legt backend/pdfs/smoke-check.pdf an)
 npm --prefix backend run check:pdf
 
+# Invoice-Smoketest (legt Rechnung + PDF an, prüft Datei >0 Bytes, löscht wieder)
+npm --prefix backend run check:invoice
+
 # Im Container (falls nötig):
 # CHECK_HOST=127.0.0.1 CHECK_PORT=3030 npm --prefix backend run check:api
+# CHECK_HOST=127.0.0.1 CHECK_PORT=3030 npm --prefix backend run check:invoice
 ```
 
 ### 4) DB-Init & Idempotenz

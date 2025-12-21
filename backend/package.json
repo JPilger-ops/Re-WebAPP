@@ -12,7 +12,8 @@
     "db:init": "node ./scripts/init-db.js",
     "test:pdf": "node scripts/pdf-smoke.js",
     "check:api": "node scripts/check-api.js",
-    "check:pdf": "node scripts/check-pdf.mjs"
+    "check:pdf": "node scripts/check-pdf.mjs",
+    "check:invoice": "node scripts/check-invoice.mjs"
   },
   "keywords": [],
   "author": "",

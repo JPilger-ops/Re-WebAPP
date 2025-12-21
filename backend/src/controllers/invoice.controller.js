@@ -1,4 +1,3 @@
-import { db } from "../utils/db.js";
 import { prisma } from "../utils/prisma.js";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
@@ -490,16 +489,10 @@ for (let i = 0; i < items.length; i++) {
   }
 }
 
-  const client = await db.connect();
-
   try {
-    await client.query("BEGIN");
-
     if (!invoice.date) {
-    return res.status(400).json({ message: "Rechnungsdatum ist erforderlich." });
+      return res.status(400).json({ message: "Rechnungsdatum ist erforderlich." });
     }
-
-    // --- EMPFÄNGER ERMITTELN ODER ANLEGEN -----------------------------
 
     // Whitespace etwas bereinigen, um doppelte Treffer zu vermeiden
     const rName   = (recipient.name   || "").trim();
@@ -507,145 +500,93 @@ for (let i = 0; i < items.length; i++) {
     const rZip    = (recipient.zip    || "").trim();
     const rCity   = (recipient.city   || "").trim();
 
-    let recipientId;
-
-    // 1. Prüfen, ob ein Empfänger mit denselben Stammdaten schon existiert
-    const existingRecipient = await client.query(
-      `
-      SELECT id 
-      FROM recipients
-      WHERE 
-        LOWER(name)   = LOWER($1)
-        AND LOWER(street) = LOWER($2)
-        AND zip       = $3
-        AND LOWER(city)   = LOWER($4)
-      LIMIT 1
-      `,
-      [rName, rStreet, rZip, rCity]
-    );
-
-    if (existingRecipient.rowCount > 0) {
-      // ✅ Kunde existiert bereits → vorhandene ID verwenden
-      recipientId = existingRecipient.rows[0].id;
-    } else {
-      // ❌ Kunde existiert noch nicht → neu anlegen
-      const recipientResult = await client.query(
-        `
-        INSERT INTO recipients (name, street, zip, city, email, phone)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
-        `,
-        [
-          rName,
-          rStreet,
-          rZip,
-          rCity,
-          recipient.email || null,
-          recipient.phone || null
-        ]
-      );
-
-      recipientId = recipientResult.rows[0].id;
-    }
-
-    // 2. Gesamtsummen berechnen
+    // Gesamtsummen berechnen
     const totals = calculateTotals(items);
 
-    // Leere Strings auf null mappen, damit Postgres nicht meckert
-    const invoiceDate = invoice.date && invoice.date.trim() !== "" ? invoice.date : null;
-    const receiptDate = invoice.receipt_date && invoice.receipt_date.trim() !== "" ? invoice.receipt_date : null;
-    const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category : null;
+    // Leere Strings auf null mappen
+    const invoiceDate = invoice.date && invoice.date.trim() !== "" ? new Date(invoice.date) : null;
+    const receiptDate = invoice.receipt_date && invoice.receipt_date.trim() !== "" ? new Date(invoice.receipt_date) : null;
+    const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
     const reservationRequestId = invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
 
-    // B2B + USt-ID aus dem Payload
-    const isB2B  = invoice.b2b === true;              // kommt als boolean aus dem Frontend
+    const isB2B  = invoice.b2b === true;
     const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
-    // 3. Rechnung anlegen
-  const invoiceResult = await client.query(
-    `
-    INSERT INTO invoices (
-      invoice_number,
-      date,
-      recipient_id,
-      category,
-      reservation_request_id,
-      external_reference,
-      receipt_date,
-      b2b,
-      ust_id,
-      net_19, vat_19, gross_19,
-      net_7, vat_7, gross_7,
-      gross_total
-    )
-    VALUES (
-      $1, $2, $3, $4, $5,
-      $6, $7, $8,
-      $9, $10, $11,
-      $12, $13, $14,
-      $15, $16
-    )
-    RETURNING id
-    `,
-    [
-      invoice.invoice_number,
-      invoiceDate,
-      recipientId,
-      category,
-      reservationRequestId,
-      externalReference,
-      receiptDate,
-      isB2B,
-      ustId,
+    const txResult = await prisma.$transaction(async (tx) => {
+      // Empfänger suchen/erstellen
+      let recipientRow = await tx.recipients.findFirst({
+        where: {
+          name: rName,
+          street: rStreet,
+          zip: rZip,
+          city: rCity,
+        },
+        select: { id: true },
+      });
 
-      totals.net_19,
-      totals.vat_19,
-      totals.gross_19,
+      if (!recipientRow) {
+        recipientRow = await tx.recipients.create({
+          data: {
+            name: rName,
+            street: rStreet || null,
+            zip: rZip || null,
+            city: rCity || null,
+            email: recipient.email || null,
+            phone: recipient.phone || null,
+          },
+          select: { id: true },
+        });
+      }
 
-      totals.net_7,
-      totals.vat_7,
-      totals.gross_7,
+      const invoiceRow = await tx.invoices.create({
+        data: {
+          invoice_number: invoice.invoice_number,
+          date: invoiceDate,
+          recipient_id: recipientRow.id,
+          category,
+          reservation_request_id: reservationRequestId,
+          external_reference: externalReference,
+          receipt_date: receiptDate,
+          b2b: isB2B,
+          ust_id: ustId,
+          net_19: totals.net_19,
+          vat_19: totals.vat_19,
+          gross_19: totals.gross_19,
+          net_7: totals.net_7,
+          vat_7: totals.vat_7,
+          gross_7: totals.gross_7,
+          gross_total: totals.gross_total,
+        },
+        select: { id: true },
+      });
 
-      totals.gross_total
-    ]
-  );
+      const itemsData = items.map((item) => ({
+        invoice_id: invoiceRow.id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price_gross: item.unit_price_gross,
+        vat_key: item.vat_key,
+        line_total_gross: n(item.quantity) * n(item.unit_price_gross),
+      }));
 
-    const invoiceId = invoiceResult.rows[0].id;
+      if (itemsData.length) {
+        await tx.invoice_items.createMany({
+          data: itemsData,
+        });
+      }
 
-    // 4. Positionen speichern
-    for (const item of items) {
-      const gross = n(item.quantity) * n(item.unit_price_gross);
-
-      await client.query(
-        `
-        INSERT INTO invoice_items (
-          invoice_id, description, quantity, unit_price_gross, vat_key, line_total_gross
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        `,
-        [
-          invoiceId,
-          item.description,
-          item.quantity,
-          item.unit_price_gross,
-          item.vat_key,
-          gross
-        ]
-      );
-    }
-
-    await client.query("COMMIT");
+      return invoiceRow.id;
+    });
 
     return res.status(201).json({
       message: "Rechnung erfolgreich erstellt",
-      invoice_id: invoiceId
+      invoice_id: txResult,
     });
-
   } catch (err) {
-    await client.query("ROLLBACK");
     console.error("Fehler bei der Rechnungserstellung:", err);
 
-    if (err?.code === "23505" && (err?.constraint || "").includes("reservation_request_id")) {
+    if (err?.code === "P2002" && (err?.meta?.target || []).join(",").includes("reservation_request_id")) {
       return res.status(400).json({
         message: "Diese HKForms-Anfrage-ID ist bereits einer anderen Rechnung zugeordnet."
       });
@@ -654,8 +595,6 @@ for (let i = 0; i < items.length; i++) {
     return res.status(500).json({
       error: "Es ist ein Fehler beim Erstellen der Rechnung aufgetreten."
     });
-  } finally {
-    client.release();
   }
 };
 
@@ -1013,7 +952,41 @@ async function ensureInvoicePdf(id) {
 
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
 
-    fs.writeFileSync(filepath, pdfBuffer);
+    // Falls bereits final vorhanden und gültig: direkt zurückgeben (Concurrency-Fall)
+    try {
+      if (fs.existsSync(filepath)) {
+        const stats = fs.statSync(filepath);
+        if (stats.size > 0) {
+          const existingBuffer = fs.readFileSync(filepath);
+          return { buffer: existingBuffer, filename, filepath, invoiceRow };
+        }
+      }
+    } catch (fsErr) {
+      console.warn(`[PDF] Konnte bestehende Datei nicht prüfen: ${fsErr.message}`);
+    }
+
+    const tmpPath = `${filepath}.tmp-${Date.now()}`;
+    try {
+      fs.writeFileSync(tmpPath, pdfBuffer);
+      try {
+        fs.renameSync(tmpPath, filepath);
+      } catch (renameErr) {
+        if (fs.existsSync(filepath)) {
+          fs.unlinkSync(tmpPath);
+          const finalBuf = fs.readFileSync(filepath);
+          return { buffer: finalBuf, filename, filepath, invoiceRow };
+        }
+        throw renameErr;
+      }
+    } finally {
+      if (fs.existsSync(tmpPath)) {
+        try {
+          fs.unlinkSync(tmpPath);
+        } catch (cleanupErr) {
+          console.warn(`[PDF] Tmp-Datei konnte nicht entfernt werden: ${cleanupErr.message}`);
+        }
+      }
+    }
 
     return { buffer: pdfBuffer, filename, filepath, invoiceRow };
   } finally {
@@ -1335,21 +1308,26 @@ export const markSent = async (req, res) => {
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
   try {
-    const updateResult = await db.query(
-      `
-        UPDATE invoices
-        SET status_sent = true, status_sent_at = NOW()
-        WHERE id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent_at, status_paid_at
-      `,
-      [id]
-    );
+    const updated = await prisma.invoices.update({
+      where: { id },
+      data: {
+        status_sent: true,
+        status_sent_at: new Date(),
+      },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent_at: true,
+        status_paid_at: true,
+      },
+    });
 
-    if (updateResult.rowCount === 0) {
+    if (!updated) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const row = updateResult.rows[0];
+    const row = updated;
     const firstItem = await fetchFirstItemDescription(id);
 
     // HKForms Sync (best effort, nicht blocking)
@@ -1366,6 +1344,9 @@ export const markSent = async (req, res) => {
 
     return res.json({ message: "Rechnung als versendet markiert" });
   } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
     console.error("Fehler beim Markieren als versendet:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
   }
@@ -1419,6 +1400,10 @@ export const sendInvoiceEmail = async (req, res) => {
   const { to, subject, message, html, include_datev } = req.body || {};
   const email = (to || "").trim();
   const includeDatev = include_datev === true;
+  const emailSendDisabled = ["1", "true", "yes"].includes(
+    (process.env.EMAIL_SEND_DISABLED || "").toLowerCase()
+  );
+  const redirectTo = (process.env.EMAIL_REDIRECT_TO || "").trim();
 
   if (!email) {
     return res.status(400).json({ message: "E-Mail-Adresse fehlt." });
@@ -1470,67 +1455,89 @@ export const sendInvoiceEmail = async (req, res) => {
     const emailText = stripHtmlToText(rawHtml) || content.bodyText || (message || "").trim();
 
     const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
+    const finalRecipients = redirectTo
+      ? { to: redirectTo, includeDatev: false }
+      : recipients;
 
-    const transporter = nodemailer.createTransport({
-      host: smtpConfig.host,
-      port: smtpConfig.port,
-      secure: smtpConfig.secure,
-      auth: {
-        user: smtpConfig.authUser,
-        pass: smtpConfig.authPass,
-      },
-    });
-
-    await transporter.sendMail({
-      from: smtpConfig.from,
-      to: recipients.to,
-      // DATEV-Adresse als BCC, damit der Kunde die interne Export-Adresse nicht sieht.
-      ...(recipients.includeDatev ? { bcc: recipients.bcc } : {}),
-      subject: emailSubject,
-      text: emailText,
-      html: emailHtml,
-      attachments: [
-        {
-          filename,
-          path: filepath,
-          contentType: "application/pdf",
-          contentDisposition: "attachment",
+    let mailSent = false;
+    if (!emailSendDisabled) {
+      const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth: {
+          user: smtpConfig.authUser,
+          pass: smtpConfig.authPass,
         },
-      ],
-    });
+      });
 
-    const updateResult = await db.query(
-      `
-        UPDATE invoices
-        SET status_sent = true, status_sent_at = NOW()
-        WHERE id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent_at
-      `,
-      [id]
-    );
+      await transporter.sendMail({
+        from: smtpConfig.from,
+        to: finalRecipients.to,
+        // DATEV-Adresse als BCC, damit der Kunde die interne Export-Adresse nicht sieht.
+        ...(finalRecipients.includeDatev ? { bcc: finalRecipients.bcc } : {}),
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        attachments: [
+          {
+            filename,
+            path: filepath,
+            contentType: "application/pdf",
+            contentDisposition: "attachment",
+          },
+        ],
+      });
+      mailSent = true;
+    } else {
+      console.log(
+        `[MAIL] Versand unterdrückt (EMAIL_SEND_DISABLED). To=${finalRecipients.to}`
+      );
+    }
 
-    const updatedRow = updateResult.rows[0];
-    const firstItem = await fetchFirstItemDescription(id);
+    let updatedRow = null;
+    let firstItem = null;
 
-    if (includeDatev) {
+    if (mailSent) {
+      updatedRow = await prisma.invoices.update({
+        where: { id },
+        data: {
+          status_sent: true,
+          status_sent_at: new Date(),
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          reservation_request_id: true,
+          status_sent_at: true,
+        },
+      });
+      firstItem = await fetchFirstItemDescription(id);
+    }
+
+    if (includeDatev && mailSent) {
       await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
     }
 
-    const successMessage = includeDatev
-      ? "E-Mail wurde verschickt (Kunde + DATEV)."
-      : "E-Mail wurde verschickt.";
+    const successMessage = mailSent
+      ? includeDatev
+        ? "E-Mail wurde verschickt (Kunde + DATEV)."
+        : "E-Mail wurde verschickt."
+      : "E-Mail-Versand deaktiviert (EMAIL_SEND_DISABLED). Keine Mail gesendet.";
 
     // HKForms Sync (best effort)
-    sendHkformsStatus({
-      reservationId: updatedRow?.reservation_request_id,
-      payload: {
-        status: "SENT",
-        reference: updatedRow?.invoice_number || row.invoice_number,
-        sentAt: updatedRow?.status_sent_at || new Date(),
-        firstItem,
-      },
-      endpoint: "invoices",
-    });
+    if (mailSent) {
+      sendHkformsStatus({
+        reservationId: updatedRow?.reservation_request_id,
+        payload: {
+          status: "SENT",
+          reference: updatedRow?.invoice_number || row.invoice_number,
+          sentAt: updatedRow?.status_sent_at || new Date(),
+          firstItem,
+        },
+        endpoint: "invoices",
+      });
+    }
 
     return res.json({ message: successMessage });
   } catch (err) {
@@ -1643,21 +1650,25 @@ export const markPaid = async (req, res) => {
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
   try {
-    const updateResult = await db.query(
-      `
-        UPDATE invoices
-        SET status_paid_at = NOW()
-        WHERE id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent_at, status_paid_at
-      `,
-      [id]
-    );
+    const updated = await prisma.invoices.update({
+      where: { id },
+      data: {
+        status_paid_at: new Date(),
+      },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent_at: true,
+        status_paid_at: true,
+      },
+    });
 
-    if (updateResult.rowCount === 0) {
+    if (!updated) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const row = updateResult.rows[0];
+    const row = updated;
     const firstItem = await fetchFirstItemDescription(id);
 
     // HKForms Sync (best effort)
@@ -1675,6 +1686,9 @@ export const markPaid = async (req, res) => {
 
     return res.json({ message: "Rechnung als bezahlt markiert" });
   } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
     console.error("Fehler beim Markieren als bezahlt:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
   }
@@ -1698,21 +1712,23 @@ export const getInvoiceStatusByReservation = async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      `
-        SELECT id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
-        FROM invoices
-        WHERE reservation_request_id = $1
-        LIMIT 1
-      `,
-      [reservationId]
-    );
+    const row = await prisma.invoices.findFirst({
+      where: { reservation_request_id: reservationId },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent: true,
+        status_sent_at: true,
+        status_paid_at: true,
+        overdue_since: true,
+        external_reference: true,
+      },
+    });
 
-    if (result.rowCount === 0) {
+    if (!row) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
-
-    const row = result.rows[0];
 
     return res.json({
       invoiceId: row.id,
@@ -1761,21 +1777,25 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
   }
 
   try {
-    const existing = await db.query(
-      `
-        SELECT id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
-        FROM invoices
-        WHERE reservation_request_id = $1
-        LIMIT 1
-      `,
-      [reservationId]
-    );
+    const existing = await prisma.invoices.findFirst({
+      where: { reservation_request_id: reservationId },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent: true,
+        status_sent_at: true,
+        status_paid_at: true,
+        overdue_since: true,
+        external_reference: true,
+      },
+    });
 
-    if (existing.rowCount === 0) {
+    if (!existing) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const current = existing.rows[0];
+    const current = existing;
 
     let nextStatusSent = false;
     let nextStatusSentAt = null;
@@ -1812,29 +1832,31 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
 
     const nextReference = (reference || "").trim() || current.external_reference || null;
 
-    const updated = await db.query(
-      `
-        UPDATE invoices
-        SET
-          status_sent = $2,
-          status_sent_at = $3,
-          status_paid_at = $4,
-          overdue_since = $5,
-          external_reference = $6
-        WHERE reservation_request_id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
-      `,
-      [
-        reservationId,
-        nextStatusSent,
-        nextStatusSentAt,
-        nextStatusPaidAt,
-        nextOverdueSince,
-        nextReference
-      ]
-    );
+    const updated = await prisma.invoices.updateMany({
+      where: { reservation_request_id: reservationId },
+      data: {
+        status_sent: nextStatusSent,
+        status_sent_at: nextStatusSentAt,
+        status_paid_at: nextStatusPaidAt,
+        overdue_since: nextOverdueSince,
+        external_reference: nextReference,
+      },
+    });
 
-    const row = updated.rows[0];
+    if (updated.count === 0) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const row = {
+      id: current.id,
+      invoice_number: current.invoice_number,
+      reservation_request_id: current.reservation_request_id,
+      status_sent: nextStatusSent,
+      status_sent_at: nextStatusSentAt,
+      status_paid_at: nextStatusPaidAt,
+      overdue_since: nextOverdueSince,
+      external_reference: nextReference,
+    };
 
     // HKForms Sync (best effort, nur wenn Reservation-ID vorhanden)
     let syncPayload = null;
@@ -1895,39 +1917,29 @@ export const deleteInvoice = async (req, res) => {
 
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
-  const client = await db.connect();
-
   try {
-    await client.query("BEGIN");
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      select: { invoice_number: true },
+    });
 
-    // Positionen löschen (falls kein ON DELETE CASCADE gesetzt ist)
-    await client.query(
-      "DELETE FROM invoice_items WHERE invoice_id = $1",
-      [id]
-    );
-
-    // Rechnung holen (für evtl. PDF-Datei)
-    const invoiceResult = await client.query(
-      "SELECT invoice_number FROM invoices WHERE id = $1",
-      [id]
-    );
-
-    if (invoiceResult.rowCount === 0) {
-      await client.query("ROLLBACK");
+    if (!invoiceRow) {
       return res.status(404).json({ error: "Rechnung nicht gefunden" });
     }
 
-    const invoiceNumber = invoiceResult.rows[0].invoice_number;
-
-    // Rechnung löschen
-    await client.query("DELETE FROM invoices WHERE id = $1", [id]);
-
-    await client.query("COMMIT");
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice_items.deleteMany({
+        where: { invoice_id: id },
+      });
+      await tx.invoices.delete({
+        where: { id },
+      });
+    });
 
     // PDF-Datei (falls vorhanden) löschen
     try {
       const pdfDir = path.join(__dirname, "../../pdfs");
-      const filename = `Rechnung-${invoiceNumber}.pdf`;
+      const filename = `Rechnung-${invoiceRow.invoice_number}.pdf`;
       const filepath = path.join(pdfDir, filename);
       if (fs.existsSync(filepath)) {
         fs.unlinkSync(filepath);
@@ -1938,11 +1950,11 @@ export const deleteInvoice = async (req, res) => {
 
     return res.json({ message: "Rechnung gelöscht" });
   } catch (err) {
-    await client.query("ROLLBACK");
     console.error("Fehler beim Löschen der Rechnung:", err);
+    if (err?.code === "P2025") {
+      return res.status(404).json({ error: "Rechnung nicht gefunden" });
+    }
     return res.status(500).json({ error: "Fehler beim Löschen der Rechnung" });
-  } finally {
-    client.release();
   }
 };
 
@@ -1957,22 +1969,16 @@ export const getNextInvoiceNumber = async (req, res) => {
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const prefix = `${year}${month}`; // z.B. "202502"
 
-    const result = await db.query(
-      `
-      SELECT invoice_number
-      FROM invoices
-      WHERE invoice_number LIKE $1
-      ORDER BY invoice_number DESC
-      LIMIT 1
-      `,
-      [prefix + "%"]
-    );
+    const last = await prisma.invoices.findFirst({
+      where: { invoice_number: { startsWith: prefix } },
+      orderBy: { invoice_number: "desc" },
+      select: { invoice_number: true },
+    });
 
     let nextRunningNumber = 1;
 
-    if (result.rowCount > 0) {
-      const lastNumber = result.rows[0].invoice_number;
-      const lastSuffix = lastNumber.substring(6); // alles nach YYYYMM
+    if (last?.invoice_number) {
+      const lastSuffix = last.invoice_number.substring(6); // alles nach YYYYMM
       const lastInt = parseInt(lastSuffix, 10) || 0;
       nextRunningNumber = lastInt + 1;
     }
