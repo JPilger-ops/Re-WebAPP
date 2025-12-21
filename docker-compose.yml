@@ -1,17 +1,17 @@
 services:
   db:
     image: postgres:15
-    network_mode: host
+    restart: unless-stopped
     environment:
       POSTGRES_DB: rechnung_prod
       POSTGRES_USER: rechnung_app
       POSTGRES_PASSWORD: change_me
-      PGPORT: 55432
-    command: ["postgres", "-p", "55432"]
+    networks:
+      - appnet
     volumes:
       - ./data/db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rechnung_app -d rechnung_prod -h localhost -p 55432"]
+      test: ["CMD-SHELL", "pg_isready -U rechnung_app -d rechnung_prod -h localhost -p 5432"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -19,13 +19,17 @@ services:
   app:
     image: "rechnungsapp:${APP_VERSION:-0.9.8}"
     build: ./backend
-    network_mode: host
+    restart: unless-stopped
+    ports:
+      - "192.200.255.225:3031:3030"
+    networks:
+      - appnet
     env_file:
       - .env
       - backend/.env
     environment:
-      DB_HOST: 127.0.0.1
-      DB_PORT: 55432
+      DB_HOST: db
+      DB_PORT: 5432
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
     depends_on:
@@ -43,6 +47,10 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+networks:
+  appnet:
+    driver: bridge
 
   # pgadmin:
   #   image: dpage/pgadmin4

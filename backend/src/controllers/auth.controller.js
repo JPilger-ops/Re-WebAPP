@@ -17,6 +17,7 @@ const buildCookieOptions = (req) => {
     secure: secureCookie,
     path: "/",
     maxAge: 1000 * 60 * 60 * 12,
+    domain: process.env.COOKIE_DOMAIN || undefined,
   };
 };
 

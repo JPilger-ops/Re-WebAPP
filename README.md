@@ -99,9 +99,9 @@ curl -k https://<APP_DOMAIN>/api/testdb
 **Ziel:** `docker compose build && docker compose up -d` startet App + Postgres “out of the box”, DB wird automatisch initialisiert (Schema, Migrationen, Admin + Permissions), PDFs schreiben nach `backend/pdfs`.
 
 ### 1) Env-Dateien
-- `backend/.env` (anlegen aus `backend/.env.example`) enthält App-/DB-/SMTP-/TLS-Settings.
+- `backend/.env` (anlegen aus `backend/.env.example`) enthält App-/DB-/SMTP-Settings.
 - Root `.env` steuert nur das Image-Tag (`APP_VERSION`).
-- Compose liest beide via `env_file`. DB-Host/Port werden zusätzlich überschrieben (`DB_HOST=127.0.0.1`, `DB_PORT=55432`), weil Compose den DB-Port intern auf 55432 legt (host network).
+- Compose liest beide via `env_file`. DB-Host/Port werden intern auf `db:5432` gesetzt (bridge network).
 
 **Minimal zwingend (Backend/.env):**
 - `APP_DOMAIN`, `CORS_ORIGINS` (siehe Modi unten)
@@ -111,30 +111,28 @@ curl -k https://<APP_DOMAIN>/api/testdb
 - TLS: entweder Zertifikatspfad (Modus A) oder `APP_HTTPS_DISABLE=true` (Modus B)
 - Optional: `DEFAULT_ADMIN_PASSWORD` (ansonsten `admin`)
 
-**Modus A – HTTPS in der App (Default wie main):**
-```
-APP_DOMAIN=https://rechnung.intern
-APP_HTTPS_PORT=3030
-APP_HTTPS_DISABLE=false
-CORS_ORIGINS=https://rechnung.intern
-APP_SSL_CERT_DIR=/app/certificates/rechnung.intern  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
-```
-
-**Modus B – HTTP in der App, TLS nur im Proxy:**
+**Modus A – HTTP in der App, TLS nur im Proxy (Standard im Docker):**
 ```
 APP_DOMAIN=http://rechnung.intern
 APP_HTTPS_PORT=3030
 APP_HTTPS_DISABLE=true
-CORS_ORIGINS=http://rechnung.intern
+CORS_ORIGINS=http://rechnung.intern,https://rechnung.intern,https://192.168.50.100
 ```
-In Modus B setzt der Proxy (z. B. Nginx Proxy Manager) TLS davor und reicht `X-Forwarded-Proto: https` durch. Cookies/CORS funktionieren, weil Express `trust proxy` aktiviert und die Secure-Flags daran ausrichtet.
+Der Proxy (NPM) terminiert TLS und reicht `X-Forwarded-Proto: https` durch. Express hat `trust proxy = 1`, dadurch werden Cookies bei HTTPS-Aufruf durch den Proxy trotzdem als `Secure` gesetzt.
+
+**Modus B – HTTPS in der App (nur wenn Zertifikat gemountet wird):**
+```
+APP_DOMAIN=https://rechnung.intern
+APP_HTTPS_PORT=3030
+APP_HTTPS_DISABLE=false
+APP_SSL_CERT_DIR=/app/certificates/rechnung.intern  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
+```
 
 ### 2) Build & Start
 ```bash
-docker compose build app      # baut das Backend-Image inkl. Chromium für PDFs
-docker compose up -d          # startet Postgres + App
+docker compose up -d --build  # startet Postgres + App
 ```
-Ports: App lauscht intern auf 3030 (host network). DB-Port intern 55432, Volume unter `./data/db`. PDFs landen in `./backend/pdfs`.
+Ports: App lauscht intern auf 3030, wird auf dem Host nur an `192.200.255.225:3030` gepublished. DB hat kein Port-Mapping (nur intern). PDFs landen in `./backend/pdfs`.
 
 Healthcheck: nutzt automatisch HTTP oder HTTPS je nach `APP_HTTPS_DISABLE`.
 
@@ -167,7 +165,7 @@ ls -lh backend/pdfs
 ### 5) Troubleshooting
 - Healthcheck rot & APP_HTTPS_DISABLE=true → prüfe, ob Compose-Healthcheck auf HTTP zeigt (siehe `docker-compose.yml`).
 - PDFs: Image muss Chromium enthalten (`docker exec rechnungsapp-app-1 which chromium-browser`). Falls nicht, `docker compose build app --no-cache`.
-- Proxy-Betrieb: im Proxy auf Backend-HTTP zeigen; wenn TLS terminiert wird, Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
+- Proxy-Betrieb (NPM): Proxy Host `rechnung.intern`, Forward Host/IP `192.200.255.225`, Forward Port `3030`, Schema `http`, Websockets on, TLS/Certificate im NPM, optional Force SSL. Wenn TLS terminiert wird, Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
 - Zertifikate: In Modus A müssen `privkey.pem` und `fullchain.pem` an den in `.env` gesetzten Pfad gemountet werden.
 
 ## API-Überblick (gekürzt)

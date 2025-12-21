@@ -8,7 +8,8 @@
     "dev": "node src/index.js",
     "start": "node src/index.js",
     "start:docker": "node ./scripts/init-db.js && node src/index.js",
-    "db:init": "node ./scripts/init-db.js"
+    "db:init": "node ./scripts/init-db.js",
+    "test:pdf": "node --input-type=module scripts/pdf-smoke.js"
   },
   "keywords": [],
   "author": "",

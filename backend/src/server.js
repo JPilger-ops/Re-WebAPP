@@ -26,8 +26,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Recognize forwarded proto/host when running behind a reverse proxy
-const trustProxySetting = process.env.TRUST_PROXY || "loopback";
-app.set("trust proxy", trustProxySetting);
+// We run behind NPM; trust the first proxy hop.
+app.set("trust proxy", process.env.TRUST_PROXY || 1);
 
 // Etags/Caching für API unterdrücken, damit /api/auth/me nicht mit 304 beantwortet wird
 app.disable("etag");
@@ -38,7 +38,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
+const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "true").toLowerCase());
 
 const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
   .split(",")
