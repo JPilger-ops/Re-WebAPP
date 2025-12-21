@@ -75,7 +75,7 @@ cp .env.example .env  # falls vorhanden; sonst mit Editor anlegen
 - Standardpfad: `certificates/rechnung.intern/privkey.pem` und `certificates/rechnung.intern/fullchain.pem`.  
 - Alternativ eigene Pfade per Env (siehe `.env`). Ohne Zertifikat startet `npm run dev` nicht.
 
-7) Basisrollen/-rechte + Admin werden automatisch per `scripts/init-db.js` angelegt (Admin-User `admin`, Passwort per `DEFAULT_ADMIN_PASSWORD` oder Default `admin`, volle Permissions).  
+7) Basisrollen/-rechte + Admin werden automatisch per Prisma-Seed angelegt (Admin-User `admin`, Passwort per `DEFAULT_ADMIN_PASSWORD` oder Default `admin`, volle Permissions).  
 
 8) Entwicklung starten und prüfen  
 ```bash
@@ -99,6 +99,12 @@ curl -k https://<APP_DOMAIN>/api/testdb
 
 ## Docker Compose (dev_DOCKER)
 **Ziel:** `docker compose build && docker compose up -d` startet App + Postgres “out of the box”, DB wird automatisch initialisiert (Schema, Migrationen, Admin + Permissions), PDFs schreiben nach `backend/pdfs`.
+
+### CI (GitHub Actions)
+- Workflow: `.github/workflows/ci.yml`
+- Triggers: push/pull_request auf `main` und `dev`
+- Steps: `docker compose up -d --build`, Health-Wait, dann `check:api`, `check:pdf`, `check:invoice` im App-Container. Bei Fehlern: `docker compose logs`, danach `docker compose down -v`.
+- Branch Protection: PRs nur mergen, wenn der CI-Workflow grün ist (im GitHub-UI aktivieren).
 
 ### 1) Env-Dateien
 - `backend/.env` (anlegen aus `backend/.env.example`) enthält App-/DB-/SMTP-Settings.
@@ -155,12 +161,13 @@ npm --prefix backend run check:invoice
 ```
 
 ### 4) DB-Init & Idempotenz
-`npm run start:docker` ruft `scripts/init-db.js` auf:
-- legt Basis-Schema an (falls leer),
-- spielt SQL-Migrationen aus `backend/migrations/` in sortierter Reihenfolge ein,
-- fügt `is_active`/`role_id` an `users` an,
-- legt Rollen `admin`/`user` und alle Permissions an,
-- legt Admin-Benutzer `admin` mit Passwort `DEFAULT_ADMIN_PASSWORD` (oder `admin`) an, falls nicht vorhanden. Berechtigungen für Admin werden bei jedem Start ergänzt (`ON CONFLICT DO NOTHING`), vorhandene Logins bleiben erhalten.
+`npm run start:docker` ruft `scripts/bootstrap-db.mjs` auf und führt immer:
+- `npx prisma migrate deploy`
+- `npx prisma db seed` (idempotent)
+
+Seed legt Rollen `admin`/`user`, alle Permissions und den Admin-User `admin` (Passwort `DEFAULT_ADMIN_PASSWORD` oder `admin`) an; bestehende Admin-User werden nur der Admin-Rolle zugeordnet, Passwort bleibt unverändert.
+
+Seed-Idempotenz geprüft: frische DB (compose down -v → up) legt Admin/Rollen/Permissions an; erneuter Start ohne DB-Reset läuft fehlerfrei durch, keine Duplikate (`admin_users=1`, `admin_roles=1`, `admin_perms=23`).
 
 ### 5) Troubleshooting
 - Healthcheck rot & APP_HTTPS_DISABLE=true → prüfe, ob Compose-Healthcheck auf HTTP zeigt (siehe `docker-compose.yml`).
@@ -168,10 +175,40 @@ npm --prefix backend run check:invoice
 - Proxy-Betrieb (NPM): Proxy Host `rechnung.intern`, Forward Host/IP `192.200.255.225`, Forward Port `3031`, Schema `http`, Websockets on, TLS/Certificate im NPM, optional Force SSL. TLS wird nur im NPM terminiert; Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
 - Zertifikate: In Modus A müssen `privkey.pem` und `fullchain.pem` an den in `.env` gesetzten Pfad gemountet werden.
 
+## Security / Production Notes
+- Env/Secrets: `.env`, `backend/.env` nicht commiten (siehe .gitignore). Credentials per Env/Secrets im Deployment setzen.
+- HTTP Security: `helmet` aktiv, `x-powered-by` disabled, HSTS nur wenn HTTPS in der App aktiv ist. CSP ist aus, um SPA/Assets nicht zu brechen (bei Bedarf projektweit definieren).
+- CORS: nur explizite Origins (Default `https://rechnung.intern`), `credentials: true`.
+- Rate Limiting: allgemeines Limit (Default 300 req/Minute) und Login-Limiter (Default 20 req/Minute). Konfigurierbar via `RATE_LIMIT_*` Envs.
+- Logging: Request-Logging nur in non-production (`morgan dev`). Startup loggt Ports/Proxy/CORS/Public URL (keine Secrets).
+- Runtime: Container läuft als non-root; Schreibrechte benötigt für `backend/pdfs/`.
+
 ## CORS / Proxy / Cookies
 - Default-CORS: `https://rechnung.intern` (weitere Origins per CSV in `CORS_ORIGINS`, z. B. externe Domain später anhängen).
 - `trust proxy`: per `TRUST_PROXY` (0/1/true/false), Default 1. Secure-Cookies werden gesetzt, wenn Request via HTTPS (X-Forwarded-Proto=https) kam.
 - App spricht intern nur HTTP (Port 3030); NPM terminiert TLS auf `192.200.255.225:3031 -> 3030`.
+
+## NGINX Proxy Manager (NPM) Setup
+- Proxy Host:
+  - Domain: `rechnung.intern`
+  - Forward Scheme/Host/Port: `http://192.200.255.225:3031`
+  - Websockets: ON, Block common exploits: ON (bei Problemen toggeln)
+- SSL:
+  - Zertifikat wählen (`rechnung.intern`)
+  - Force SSL: ON, HTTP/2: ON, HSTS optional (nur bei dauerhaftem Betrieb)
+- Advanced Headers (custom locations):
+  ```
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  ```
+- Access List (Beispiel): Allow `192.168.50.0/24` (und weitere interne Netze), Deny all.
+- App-Config-Hinweise: `TRUST_PROXY=1`, `COOKIE_SECURE=auto` (X-Forwarded-Proto), `CORS_ORIGINS` Standard `https://rechnung.intern` (weitere Domains anhängen).
+- Troubleshooting:
+  - Login/Cookie fehlt → Proxy-Header + Trust Proxy + CORS Credentials prüfen
+  - PDF hängt → ggf. `proxy_read_timeout` erhöhen
+  - 502/504 → Host-IP/Port/Firewall prüfen (Forward auf `192.200.255.225:3031`)
 
 ## Frontend (Vite Option A)
 - Vite + React + TS + Tailwind unter `frontend/`.

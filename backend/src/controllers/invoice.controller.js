@@ -931,8 +931,9 @@ async function ensureInvoicePdf(id) {
     console.log(`[PDF] Page erstellt für Invoice ${id}`);
     await page.setDefaultNavigationTimeout(30000);
 
-    // HTML (debug optional auf Platte)
-    const tempPath = path.join(__dirname, "invoice_temp.html");
+    // HTML (debug optional auf Platte) – schreibe in ein beschreibbares temp-Verzeichnis
+    if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+    const tempPath = path.join(pdfDir, `invoice_${id}.tmp.html`);
     fs.writeFileSync(tempPath, html, "utf-8");
     await page.setContent(html, { waitUntil: "networkidle0" });
     console.log(`[PDF] HTML gesetzt für Invoice ${id}`);
@@ -950,7 +951,12 @@ async function ensureInvoicePdf(id) {
     await browser.close();
     console.log(`[PDF] Browser geschlossen für Invoice ${id}`);
 
-    if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+    // Temp-Datei aufräumen
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (cleanupErr) {
+      console.warn(`[PDF] Konnte temp HTML nicht löschen (${tempPath}):`, cleanupErr);
+    }
 
     // Falls bereits final vorhanden und gültig: direkt zurückgeben (Concurrency-Fall)
     try {

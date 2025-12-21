@@ -17,11 +17,18 @@ import app from "./server.js";
 
 const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
 const appDomain = process.env.APP_DOMAIN || (httpsDisabled ? "http://localhost:3030" : "https://rechnung.intern");
+const port = Number(process.env.APP_PORT || process.env.APP_HTTPS_PORT || 3030);
+const trustProxyEnv = (process.env.TRUST_PROXY || "1");
+const corsOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern");
+const publicUrl = process.env.APP_PUBLIC_URL || appDomain;
+
+console.log("[config] httpsDisabled:", httpsDisabled, "| port:", port, "| trustProxy:", trustProxyEnv);
+console.log("[config] CORS_ORIGINS:", corsOrigins);
+console.log("[config] APP_PUBLIC_URL:", publicUrl);
 
 if (httpsDisabled) {
-  const httpPort = Number(process.env.APP_PORT || process.env.APP_HTTPS_PORT || 3030);
-  http.createServer(app).listen(httpPort, () => {
-    console.log(`HTTP Server läuft auf Port ${httpPort} für ${appDomain}`);
+  http.createServer(app).listen(port, () => {
+    console.log(`HTTP Server läuft auf Port ${port} für ${appDomain}`);
   });
 } else {
   // Use app-specific env vars to avoid collision with system SSL_CERT_DIR

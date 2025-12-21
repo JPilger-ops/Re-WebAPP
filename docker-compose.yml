@@ -3,9 +3,9 @@ services:
     image: postgres:15
     restart: unless-stopped
     environment:
-      POSTGRES_DB: rechnung_prod
-      POSTGRES_USER: rechnung_app
-      POSTGRES_PASSWORD: change_me
+      POSTGRES_DB: ${DB_NAME:-rechnung_prod}
+      POSTGRES_USER: ${DB_USER:-rechnung_app}
+      POSTGRES_PASSWORD: ${DB_PASS:-change_me}
     networks:
       - appnet
     volumes:
@@ -31,7 +31,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${DB_USER:-rechnung_app}:${DB_PASS:-change_me}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-rechnung_prod}?schema=${DB_SCHEMA:-public}}
       DB_HOST: db
       DB_PORT: 5432
-      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
     depends_on:
       db:

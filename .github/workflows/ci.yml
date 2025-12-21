@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare env files
+        run: |
+          cp .env.example .env
+          cp backend/.env.example backend/.env
+
+      - name: Build and start services
+        run: docker compose up -d --build
+
+      - name: Wait for app health
+        run: |
+          for i in {1..40}; do
+            status=$(docker compose ps --format '{{.Service}} {{.Status}}' | grep '^app' | awk '{print $2" "$3}')
+            if echo "$status" | grep -q "running (healthy)"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose ps
+          exit 1
+
+      - name: Smoke - check:api
+        run: docker compose exec -T app npm --prefix backend run check:api
+
+      - name: Smoke - check:pdf
+        run: docker compose exec -T app npm --prefix backend run check:pdf
+
+      - name: Smoke - check:invoice
+        run: docker compose exec -T app npm --prefix backend run check:invoice
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Shutdown
+        if: always()
+        run: docker compose down -v

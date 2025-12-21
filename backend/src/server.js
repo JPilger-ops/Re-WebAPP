@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -24,6 +25,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.disable("x-powered-by");
 
 // Recognize forwarded proto/host when running behind a reverse proxy
 // TRUST_PROXY can be 0/1/true/false
@@ -51,6 +53,20 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// Rate limits (lightweight defaults)
+const loginLimiter = rateLimit({
+  windowMs: Number(process.env.RATE_LIMIT_AUTH_WINDOW_MS || 60_000),
+  max: Number(process.env.RATE_LIMIT_AUTH_MAX || 20),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const generalLimiter = rateLimit({
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
+  max: Number(process.env.RATE_LIMIT_MAX || 300),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use((req, res, next) => {
   res.removeHeader("WWW-Authenticate");
   next();
@@ -68,9 +84,12 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   hsts: httpsDisabled ? false : undefined, // disable HSTS when running HTTP behind proxy
 }));
-app.use(morgan("dev"));
+if ((process.env.NODE_ENV || "development") !== "production") {
+  app.use(morgan("dev"));
+}
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
+app.use(generalLimiter);
 
 /* -------------------------
    📁 STATIC FILES
@@ -80,7 +99,7 @@ app.use(express.static(path.join(__dirname, "../public")));
 /* -------------------------
    🚀 API ROUTES
 -------------------------- */
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", loginLimiter, authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/invoices", invoiceRoutes);
