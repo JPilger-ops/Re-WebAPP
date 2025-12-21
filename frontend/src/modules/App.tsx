@@ -25,7 +25,13 @@ export function App() {
       setStatus(null);
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setStatus(apiErr.message || "Login fehlgeschlagen");
+      if (apiErr.status === 429) {
+        setStatus("Zu viele Login-Versuche. Bitte kurz warten und erneut versuchen.");
+      } else if (apiErr.status === 401) {
+        setStatus("Login fehlgeschlagen. Bitte Zugangsdaten prüfen.");
+      } else {
+        setStatus(apiErr.message || "Login fehlgeschlagen");
+      }
     }
   };
 

@@ -3,20 +3,59 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-const JWT_EXPIRES = "12h";
+const JWT_TTL_HOURS = Number(process.env.AUTH_TOKEN_TTL_HOURS || 12);
+const JWT_EXPIRES = `${JWT_TTL_HOURS}h`;
 const isSecureRequest = (req) =>
   req?.secure || req?.get("x-forwarded-proto") === "https";
 
+// Lockout / brute-force protection (simple in-memory)
+const LOGIN_LOCK_THRESHOLD = Number(process.env.LOGIN_LOCKOUT_THRESHOLD || 10);
+const LOGIN_LOCK_WINDOW_MS = Number(process.env.LOGIN_LOCKOUT_WINDOW_MS || 15 * 60 * 1000);
+const LOGIN_LOCK_COOLDOWN_MS = Number(process.env.LOGIN_LOCKOUT_COOLDOWN_MS || LOGIN_LOCK_WINDOW_MS);
+const failedLogins = new Map(); // key: username -> { count, firstTs, lockUntil }
+
+function isLocked(username) {
+  const entry = failedLogins.get(username);
+  if (!entry) return false;
+  if (entry.lockUntil && entry.lockUntil > Date.now()) return true;
+  return false;
+}
+
+function registerFailure(username) {
+  const now = Date.now();
+  const entry = failedLogins.get(username) || { count: 0, firstTs: now, lockUntil: 0 };
+  // reset window if expired
+  if (entry.firstTs + LOGIN_LOCK_WINDOW_MS < now) {
+    entry.count = 0;
+    entry.firstTs = now;
+  }
+  entry.count += 1;
+  if (entry.count >= LOGIN_LOCK_THRESHOLD) {
+    entry.lockUntil = now + LOGIN_LOCK_COOLDOWN_MS;
+  }
+  failedLogins.set(username, entry);
+}
+
+function clearFailures(username) {
+  failedLogins.delete(username);
+}
+
+const sameSiteFromEnv = () => {
+  const value = (process.env.AUTH_COOKIE_SAMESITE || "lax").toLowerCase();
+  if (["lax", "strict", "none"].includes(value)) return value;
+  return "lax";
+};
+
 const buildCookieOptions = (req) => {
   const secureCookie = isSecureRequest(req);
-  const sameSite = secureCookie ? "none" : "lax";
+  const sameSite = sameSiteFromEnv();
 
   return {
     httpOnly: true,
     sameSite,
     secure: secureCookie,
     path: "/",
-    maxAge: 1000 * 60 * 60 * 12,
+    maxAge: JWT_TTL_HOURS * 60 * 60 * 1000,
     domain: process.env.COOKIE_DOMAIN || undefined,
   };
 };
@@ -169,6 +208,10 @@ export const login = async (req, res) => {
         .json({ message: "Benutzername und Passwort sind erforderlich." });
     }
 
+    if (isLocked(username)) {
+      return res.status(429).json({ message: "Zu viele Login-Versuche. Bitte später erneut versuchen." });
+    }
+
     // Benutzer + Rolle laden
     const user = await prisma.users.findUnique({
       where: { username },
@@ -198,6 +241,7 @@ export const login = async (req, res) => {
 
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) {
+      registerFailure(username);
       return res.status(401).json({ message: "Login fehlgeschlagen." });
     }
 
@@ -214,6 +258,7 @@ export const login = async (req, res) => {
     };
 
     const token = signToken(fullUser);
+    clearFailures(username);
 
     res
       .cookie("token", token, buildCookieOptions(req))

@@ -56,19 +56,27 @@ const allowedOrigins = (
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const rateLimitEnabled = !["0", "false", "no"].includes(
+  (process.env.RATE_LIMIT_ENABLED || "1").toLowerCase()
+);
+
 // Rate limits (lightweight defaults)
-const loginLimiter = rateLimit({
-  windowMs: Number(process.env.RATE_LIMIT_AUTH_WINDOW_MS || 60_000),
-  max: Number(process.env.RATE_LIMIT_AUTH_MAX || 20),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-const generalLimiter = rateLimit({
-  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
-  max: Number(process.env.RATE_LIMIT_MAX || 300),
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+const loginLimiter = rateLimitEnabled
+  ? rateLimit({
+      windowMs: Number(process.env.RATE_LIMIT_AUTH_WINDOW_MS || 60_000),
+      max: Number(process.env.RATE_LIMIT_AUTH_MAX || 20),
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+  : (req, res, next) => next();
+const generalLimiter = rateLimitEnabled
+  ? rateLimit({
+      windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000),
+      max: Number(process.env.RATE_LIMIT_MAX || 300),
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+  : (req, res, next) => next();
 
 app.use((req, res, next) => {
   res.removeHeader("WWW-Authenticate");
