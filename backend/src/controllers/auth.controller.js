@@ -1,4 +1,4 @@
-import { db } from "../utils/db.js";
+import { prisma } from "../utils/prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
@@ -48,11 +48,11 @@ function signToken(user) {
  * Hilfsfunktion: alle Permissions zu einer role_id laden
  */
 async function loadPermissionsForRole(roleId) {
-  const permRes = await db.query(
-    "SELECT permission_key FROM role_permissions WHERE role_id = $1",
-    [roleId]
-  );
-  return permRes.rows.map((p) => p.permission_key);
+  const permRes = await prisma.role_permissions.findMany({
+    where: { role_id: roleId },
+    select: { permission_key: true },
+  });
+  return permRes.map((p) => p.permission_key);
 }
 
 /**
@@ -86,25 +86,25 @@ export const register = async (req, res) => {
 
     // Rolle auflösen
     const roleName = role || "user";
-    const roleRes = await db.query(
-      "SELECT id FROM roles WHERE name = $1",
-      [roleName]
-    );
+    const roleRes = await prisma.roles.findUnique({
+      where: { name: roleName }
+    });
 
-    if (roleRes.rowCount === 0) {
+    if (!roleRes) {
       return res
         .status(400)
         .json({ message: `Rolle '${roleName}' existiert nicht.` });
     }
 
-    const roleId = roleRes.rows[0].id;
+    const roleId = roleRes.id;
+    const roleNameResolved = roleRes.name;
 
     // prüfen, ob Benutzername bereits vergeben
-    const existing = await db.query(
-      "SELECT id FROM users WHERE username = $1",
-      [username]
-    );
-    if (existing.rowCount > 0) {
+    const existing = await prisma.users.findUnique({
+      where: { username },
+      select: { id: true },
+    });
+    if (existing) {
       return res
         .status(409)
         .json({ message: "Benutzername ist bereits vergeben." });
@@ -112,21 +112,26 @@ export const register = async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
 
-    const result = await db.query(
-      `INSERT INTO users (username, password_hash, role_id, is_active)
-       VALUES ($1, $2, $3, true)
-       RETURNING id, username, role_id`,
-      [username, hash, roleId]
-    );
-
-    const user = result.rows[0];
+    const user = await prisma.users.create({
+      data: {
+        username,
+        password_hash: hash,
+        role_id: roleId,
+        is_active: true,
+      },
+      select: {
+        id: true,
+        username: true,
+        role_id: true,
+      }
+    });
 
     // Permissions laden
     const permissions = await loadPermissionsForRole(user.role_id);
 
     const fullUser = {
       ...user,
-      role_name: roleName,
+      role_name: roleNameResolved,
       permissions,
     };
 
@@ -146,7 +151,7 @@ export const register = async (req, res) => {
       });
   } catch (err) {
     console.error("Fehler bei register:", err);
-    res.status(500).json({ message: "Fehler bei der Registrierung." });
+      res.status(500).json({ message: "Fehler bei der Registrierung." });
   }
 };
 
@@ -165,25 +170,25 @@ export const login = async (req, res) => {
     }
 
     // Benutzer + Rolle laden
-    const result = await db.query(
-      `SELECT 
-         users.id,
-         users.username,
-         users.password_hash,
-         users.is_active,
-         users.role_id,
-         roles.name AS role_name
-       FROM users
-       LEFT JOIN roles ON roles.id = users.role_id
-       WHERE users.username = $1`,
-      [username]
-    );
+    const user = await prisma.users.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        username: true,
+        password_hash: true,
+        is_active: true,
+        role_id: true,
+        roles: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
 
-    if (result.rowCount === 0) {
+    if (!user) {
       return res.status(401).json({ message: "Login fehlgeschlagen." });
     }
-
-    const user = result.rows[0];
 
     if (user.is_active === false) {
       return res
@@ -198,12 +203,13 @@ export const login = async (req, res) => {
 
     // Permissions laden
     const permissions = await loadPermissionsForRole(user.role_id);
+    const roleName = user.roles?.name || null;
 
     const fullUser = {
       id: user.id,
       username: user.username,
       role_id: user.role_id,
-      role_name: user.role_name,
+      role_name: roleName,
       permissions,
     };
 
@@ -276,19 +282,17 @@ export const changePassword = async (req, res) => {
     }
 
     // User laden
-    const result = await db.query(
-      "SELECT password_hash FROM users WHERE id = $1",
-      [userId]
-    );
+    const userRecord = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { password_hash: true },
+    });
 
-    if (result.rowCount === 0) {
+    if (!userRecord) {
       return res.status(404).json({ message: "Benutzer nicht gefunden." });
     }
 
-    const user = result.rows[0];
-
     // Prüfen ob altes Passwort korrekt ist
-    const ok = await bcrypt.compare(oldPassword, user.password_hash);
+    const ok = await bcrypt.compare(oldPassword, userRecord.password_hash);
     if (!ok) {
       return res.status(401).json({ message: "Altes Passwort ist falsch." });
     }
@@ -296,10 +300,10 @@ export const changePassword = async (req, res) => {
     // Neues Passwort speichern
     const hash = await bcrypt.hash(newPassword, 10);
 
-    await db.query(
-      "UPDATE users SET password_hash = $1 WHERE id = $2",
-      [hash, userId]
-    );
+    await prisma.users.update({
+      where: { id: userId },
+      data: { password_hash: hash },
+    });
 
     res.json({ message: "Passwort erfolgreich geändert." });
 

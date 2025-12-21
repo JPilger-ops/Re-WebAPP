@@ -138,20 +138,14 @@ Healthcheck: nutzt automatisch HTTP oder HTTPS je nach `APP_HTTPS_DISABLE`.
 
 ### 3) Smoke-Tests
 ```bash
-# API-Version
-curl -k http://localhost:3030/api/version
+# API-Version (Host-Port 3031)
+npm --prefix backend run check:api
 
-# Login (Default-Admin: admin / ${DEFAULT_ADMIN_PASSWORD:-admin})
-curl -i -H "Content-Type: application/json" \
-     -d '{"username":"admin","password":"admin"}' \
-     http://localhost:3030/api/auth/login
+# PDF-Smoketest (legt backend/pdfs/smoke-check.pdf an)
+npm --prefix backend run check:pdf
 
-# PDF-Check (liefert Datei + legt sie in backend/pdfs ab)
-TOKEN=$(curl -si -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin"}' \
-  http://localhost:3030/api/auth/login | sed -n 's/Set-Cookie: token=\\([^;]*\\).*/\\1/p' | head -n1)
-curl -H "Authorization: Bearer $TOKEN" -o test.pdf http://localhost:3030/api/invoices/1/pdf
-ls -lh backend/pdfs
+# Im Container (falls nötig):
+# CHECK_HOST=127.0.0.1 CHECK_PORT=3030 npm --prefix backend run check:api
 ```
 
 ### 4) DB-Init & Idempotenz
@@ -167,6 +161,24 @@ ls -lh backend/pdfs
 - PDFs: Image muss Chromium enthalten (`docker exec rechnungsapp-app-1 which chromium-browser`). Falls nicht, `docker compose build app --no-cache`.
 - Proxy-Betrieb (NPM): Proxy Host `rechnung.intern`, Forward Host/IP `192.200.255.225`, Forward Port `3031`, Schema `http`, Websockets on, TLS/Certificate im NPM, optional Force SSL. TLS wird nur im NPM terminiert; Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
 - Zertifikate: In Modus A müssen `privkey.pem` und `fullchain.pem` an den in `.env` gesetzten Pfad gemountet werden.
+
+## CORS / Proxy / Cookies
+- Default-CORS: `https://rechnung.intern` (weitere Origins per CSV in `CORS_ORIGINS`, z. B. externe Domain später anhängen).
+- `trust proxy`: per `TRUST_PROXY` (0/1/true/false), Default 1. Secure-Cookies werden gesetzt, wenn Request via HTTPS (X-Forwarded-Proto=https) kam.
+- App spricht intern nur HTTP (Port 3030); NPM terminiert TLS auf `192.200.255.225:3031 -> 3030`.
+
+## Frontend (Vite Option A)
+- Vite + React + TS + Tailwind unter `frontend/`.
+- Build-Output: `frontend` -> `backend/public/` (base `/`, Option A). `vite build` überschreibt `backend/public/index.html` und legt Assets unter `backend/public/assets/` ab.
+- Dev: `npm --prefix frontend run dev` (Proxy für /api zu `http://localhost:3031`, konfigurierbar via `VITE_DEV_PROXY`).
+- API-Client nutzt `credentials: 'include'`, Basis `VITE_API_BASE` (Default `/api`).
+
+## UI-MVP (Feature-Parität, minimal)
+- Login/Logout (Cookie-basiert)
+- Dashboard/Landing (Übersicht)
+- Recipients: Liste + Anlegen/Bearbeiten/Löschen
+- Invoices: Liste + Anlegen + PDF erzeugen/Download
+- Users/Roles/Permissions: mindestens anzeigen, Admin kann verwalten
 
 ## API-Überblick (gekürzt)
 - Auth: `POST /api/auth/login`, `POST /api/auth/register` (mit `createPin`), `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`.

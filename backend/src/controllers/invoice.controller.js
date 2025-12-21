@@ -1,4 +1,5 @@
 import { db } from "../utils/db.js";
+import { prisma } from "../utils/prisma.js";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import fs from "fs";
@@ -21,17 +22,12 @@ import { sendHkformsStatus } from "../utils/hkformsSync.js";
 
 const fetchFirstItemDescription = async (invoiceId) => {
   if (!invoiceId) return null;
-  const itemRes = await db.query(
-    `
-      SELECT description
-      FROM invoice_items
-      WHERE invoice_id = $1
-      ORDER BY id ASC
-      LIMIT 1
-    `,
-    [invoiceId]
-  );
-  return itemRes.rows?.[0]?.description || null;
+  const item = await prisma.invoice_items.findFirst({
+    where: { invoice_id: invoiceId },
+    orderBy: { id: "asc" },
+    select: { description: true },
+  });
+  return item?.description || null;
 };
 
 dotenv.config();
@@ -67,6 +63,12 @@ try {
 }
 
 const n = (value) => Number(value) || 0;
+const toNumber = (value) =>
+  value === null || value === undefined
+    ? value
+    : typeof value === "number"
+    ? value
+    : Number(value);
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -164,47 +166,89 @@ const ensureHtmlBody = (rawBody = "", fallbackText = "") => {
     : escapeHtml(body).replace(/\r?\n/g, "<br>");
 };
 
+const normalizeInvoiceDecimals = (row) => {
+  const decimalFields = [
+    "net_19",
+    "vat_19",
+    "gross_19",
+    "net_7",
+    "vat_7",
+    "gross_7",
+    "gross_total",
+  ];
+  for (const field of decimalFields) {
+    if (field in row) {
+      row[field] = toNumber(row[field]);
+    }
+  }
+  return row;
+};
+
+const shapeInvoiceListRow = (invoice, recipient, category) => {
+  const base = normalizeInvoiceDecimals({ ...invoice });
+  return {
+    ...base,
+    recipient_name: recipient?.name || null,
+    recipient_email: recipient?.email || null,
+    category_id: category?.id || null,
+    category_label: category?.label || null,
+  };
+};
+
 const loadInvoiceWithCategory = async (id) => {
   await ensureInvoiceCategoriesTable();
   await ensureDatevExportColumns();
-  const result = await db.query(
-    `
-    SELECT
-      i.*,
-      r.name   AS recipient_name,
-      r.street AS recipient_street,
-      r.zip    AS recipient_zip,
-      r.city   AS recipient_city,
-      r.email  AS recipient_email,
-      r.phone  AS recipient_phone,
-      c.id     AS category_id,
-      c.key    AS category_key,
-      c.label  AS category_label,
-      ea.display_name AS email_display_name,
-      ea.email_address AS email_address,
-      ea.smtp_host AS email_smtp_host,
-      ea.smtp_port AS email_smtp_port,
-      ea.smtp_secure AS email_smtp_secure,
-      ea.smtp_user AS email_smtp_user,
-      ea.smtp_pass AS email_smtp_pass,
-      tpl.subject AS tpl_subject,
-      tpl.body_html AS tpl_body_html
-    FROM invoices i
-    LEFT JOIN recipients r ON i.recipient_id = r.id
-    LEFT JOIN invoice_categories c ON c.key = i.category
-    LEFT JOIN category_email_accounts ea ON ea.category_id = c.id
-    LEFT JOIN category_templates tpl ON tpl.category_id = c.id
-    WHERE i.id = $1
-  `,
-    [id]
-  );
+  const invoice = await prisma.invoices.findUnique({
+    where: { id },
+    include: { recipients: true },
+  });
 
-  if (result.rowCount === 0) {
+  if (!invoice) {
     const err = new Error("Rechnung nicht gefunden");
     err.code = "NOT_FOUND";
     throw err;
   }
-  return result.rows[0];
+
+  let category = null;
+  let emailAccount = null;
+  let template = null;
+
+  if (invoice.category) {
+    category = await prisma.invoice_categories.findUnique({
+      where: { key: invoice.category },
+      include: {
+        category_email_accounts: true,
+        category_templates: true,
+      },
+    });
+    emailAccount = category?.category_email_accounts || null;
+    template = category?.category_templates || null;
+  }
+
+  const row = normalizeInvoiceDecimals({
+    ...invoice,
+    recipient_name: invoice.recipients?.name || null,
+    recipient_street: invoice.recipients?.street || null,
+    recipient_zip: invoice.recipients?.zip || null,
+    recipient_city: invoice.recipients?.city || null,
+    recipient_email: invoice.recipients?.email || null,
+    recipient_phone: invoice.recipients?.phone || null,
+    category_id: category?.id || null,
+    category_key: category?.key || null,
+    category_label: category?.label || null,
+    email_display_name: emailAccount?.display_name || null,
+    email_address: emailAccount?.email_address || null,
+    email_smtp_host: emailAccount?.smtp_host || null,
+    email_smtp_port: emailAccount?.smtp_port || null,
+    email_smtp_secure:
+      emailAccount?.smtp_secure === false ? false : emailAccount?.smtp_secure ?? null,
+    email_smtp_user: emailAccount?.smtp_user || null,
+    email_smtp_pass: emailAccount?.smtp_pass || null,
+    tpl_subject: template?.subject || null,
+    tpl_body_html: template?.body_html || null,
+  });
+
+  return row;
 };
 
 const resolveSmtpConfig = (row = {}) => {
@@ -623,20 +667,28 @@ export const getAllInvoices = async (req, res) => {
   try {
     await ensureInvoiceCategoriesTable();
     await ensureDatevExportColumns();
-    const result = await db.query(`
-      SELECT 
-        invoices.*, 
-        recipients.name AS recipient_name, 
-        recipients.email AS recipient_email,
-        c.id AS category_id,
-        c.label AS category_label
-      FROM invoices
-      LEFT JOIN recipients ON invoices.recipient_id = recipients.id
-      LEFT JOIN invoice_categories c ON c.key = invoices.category
-      ORDER BY invoices.invoice_number DESC
-    `);
 
-    res.json(result.rows);
+    const invoices = await prisma.invoices.findMany({
+      include: { recipients: true },
+      orderBy: { invoice_number: "desc" },
+    });
+
+    const categoryKeys = Array.from(
+      new Set(invoices.map((i) => i.category).filter(Boolean))
+    );
+    const categories = categoryKeys.length
+      ? await prisma.invoice_categories.findMany({
+          where: { key: { in: categoryKeys } },
+          select: { id: true, key: true, label: true },
+        })
+      : [];
+    const catByKey = new Map(categories.map((c) => [c.key, c]));
+
+    const shaped = invoices.map((inv) =>
+      shapeInvoiceListRow(inv, inv.recipients, catByKey.get(inv.category || ""))
+    );
+
+    res.json(shaped);
   } catch (err) {
     console.error("Fehler beim Laden der Rechnungen:", err);
     res.status(500).json({ error: "Fehler beim Abrufen der Rechnungen" });
@@ -652,82 +704,75 @@ export const getInvoiceById = async (req, res) => {
 
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
-  await ensureInvoiceCategoriesTable();
-  await ensureDatevExportColumns();
-  const client = await db.connect();
-
   try {
-    const invoiceResult = await client.query(`
-      SELECT 
-        i.*,
-        r.name  AS recipient_name,
-        r.street AS recipient_street,
-        r.zip   AS recipient_zip,
-        r.city  AS recipient_city,
-        r.email AS recipient_email,
-        r.phone AS recipient_phone,
-        c.logo_file AS category_logo_file
-      FROM invoices i
-      LEFT JOIN recipients r ON i.recipient_id = r.id
-      LEFT JOIN invoice_categories c ON c.key = i.category
-      WHERE i.id = $1
-    `, [id]);
+    await ensureInvoiceCategoriesTable();
+    await ensureDatevExportColumns();
 
-    if (invoiceResult.rowCount === 0)
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      include: { recipients: true },
+    });
+
+    if (!invoiceRow) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
 
-    const row = invoiceResult.rows[0];
-
-    const invoice = {
-      id: row.id,
-      invoice_number: row.invoice_number,
-      date: row.date,
-      category: row.category,
-      reservation_request_id: row.reservation_request_id,
-      external_reference: row.external_reference,
-      receipt_date: row.receipt_date,
-      status_sent: row.status_sent,
-      status_sent_at: row.status_sent_at,
-      status_paid_at: row.status_paid_at,
-      overdue_since: row.overdue_since,
-      datev_export_status: row.datev_export_status,
-      datev_exported_at: row.datev_exported_at,
-      datev_export_error: row.datev_export_error,
-      net_19: row.net_19,
-      vat_19: row.vat_19,
-      gross_19: row.gross_19,
-      net_7: row.net_7,
-      vat_7: row.vat_7,
-      gross_7: row.gross_7,
-      gross_total: row.gross_total,
+    const invoice = normalizeInvoiceDecimals({
+      id: invoiceRow.id,
+      invoice_number: invoiceRow.invoice_number,
+      date: invoiceRow.date,
+      category: invoiceRow.category,
+      reservation_request_id: invoiceRow.reservation_request_id,
+      external_reference: invoiceRow.external_reference,
+      receipt_date: invoiceRow.receipt_date,
+      status_sent: invoiceRow.status_sent,
+      status_sent_at: invoiceRow.status_sent_at,
+      status_paid_at: invoiceRow.status_paid_at,
+      overdue_since: invoiceRow.overdue_since,
+      datev_export_status: invoiceRow.datev_export_status,
+      datev_exported_at: invoiceRow.datev_exported_at,
+      datev_export_error: invoiceRow.datev_export_error,
+      net_19: invoiceRow.net_19,
+      vat_19: invoiceRow.vat_19,
+      gross_19: invoiceRow.gross_19,
+      net_7: invoiceRow.net_7,
+      vat_7: invoiceRow.vat_7,
+      gross_7: invoiceRow.gross_7,
+      gross_total: invoiceRow.gross_total,
       recipient: {
-        id: row.recipient_id,
-        name: row.recipient_name,
-        street: row.recipient_street,
-        zip: row.recipient_zip,
-        city: row.recipient_city,
-        email: row.recipient_email,
-        phone: row.recipient_phone
-      }
-    };
+        id: invoiceRow.recipient_id,
+        name: invoiceRow.recipients?.name || null,
+        street: invoiceRow.recipients?.street || null,
+        zip: invoiceRow.recipients?.zip || null,
+        city: invoiceRow.recipients?.city || null,
+        email: invoiceRow.recipients?.email || null,
+        phone: invoiceRow.recipients?.phone || null,
+      },
+    });
 
-    const itemsResult = await client.query(
-      `
-      SELECT id, description, quantity, unit_price_gross, vat_key, line_total_gross
-      FROM invoice_items
-      WHERE invoice_id = $1
-      ORDER BY id ASC
-      `,
-      [id]
-    );
+    const items = await prisma.invoice_items.findMany({
+      where: { invoice_id: id },
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        description: true,
+        quantity: true,
+        unit_price_gross: true,
+        vat_key: true,
+        line_total_gross: true,
+      },
+    });
 
-    return res.json({ invoice, items: itemsResult.rows });
+    const shapedItems = items.map((item) => ({
+      ...item,
+      unit_price_gross: toNumber(item.unit_price_gross),
+      line_total_gross: toNumber(item.line_total_gross),
+    }));
 
+    return res.json({ invoice, items: shapedItems });
   } catch (err) {
     console.error("Fehler beim Laden der Rechnung:", err);
     res.status(500).json({ error: "Fehler beim Abrufen der Rechnung" });
-  } finally {
-    client.release();
   }
 };
 
@@ -767,62 +812,57 @@ export const getInvoicePdf = async (req, res) => {
  */
 async function ensureInvoicePdf(id) {
   await ensureInvoiceCategoriesTable();
-  const client = await db.connect();
-
   try {
-    const invoiceResult = await client.query(`
-      SELECT 
-        i.*,
-        r.name   AS recipient_name,
-        r.street AS recipient_street,
-        r.zip    AS recipient_zip,
-        r.city   AS recipient_city,
-        r.email  AS recipient_email,
-        r.phone  AS recipient_phone,
-        c.logo_file AS category_logo_file
-      FROM invoices i
-      LEFT JOIN recipients r ON i.recipient_id = r.id
-      LEFT JOIN invoice_categories c ON c.key = i.category
-      WHERE i.id = $1
-    `, [id]);
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      include: { recipients: true },
+    });
 
-    if (invoiceResult.rowCount === 0) {
+    if (!invoiceRow) {
       const error = new Error("Rechnung nicht gefunden");
       error.code = "NOT_FOUND";
       throw error;
     }
     console.log(`[PDF] Datenbank-Lookup ok für Invoice ${id}`);
 
-    const row = invoiceResult.rows[0];
-    const filename = `RE-${row.invoice_number}.pdf`;
+    let categoryLogo = null;
+    if (invoiceRow.category) {
+      const category = await prisma.invoice_categories.findUnique({
+        where: { key: invoiceRow.category },
+        select: { logo_file: true },
+      });
+      categoryLogo = category?.logo_file || null;
+    }
+
+    const filename = `RE-${invoiceRow.invoice_number}.pdf`;
     const filepath = path.join(pdfDir, filename);
 
     const invoice = {
-      invoice_number: row.invoice_number,
-      date: row.date,
-      receipt_date: row.receipt_date,
-      b2b: row.b2b === true,
-      ust_id: row.ust_id || null,
-      net_19: n(row.net_19),
-      net_7: n(row.net_7),
-      vat_19: n(row.vat_19),
-      vat_7: n(row.vat_7),
-      gross_total: n(row.gross_total),
+      invoice_number: invoiceRow.invoice_number,
+      date: invoiceRow.date,
+      receipt_date: invoiceRow.receipt_date,
+      b2b: invoiceRow.b2b === true,
+      ust_id: invoiceRow.ust_id || null,
+      net_19: n(invoiceRow.net_19),
+      net_7: n(invoiceRow.net_7),
+      vat_19: n(invoiceRow.vat_19),
+      vat_7: n(invoiceRow.vat_7),
+      gross_total: n(invoiceRow.gross_total),
       recipient: {
-        name: row.recipient_name,
-        street: row.recipient_street,
-        zip: row.recipient_zip,
-        city: row.recipient_city
-      }
+        name: invoiceRow.recipients?.name || "",
+        street: invoiceRow.recipients?.street || "",
+        zip: invoiceRow.recipients?.zip || "",
+        city: invoiceRow.recipients?.city || "",
+      },
     };
 
     let logoBase64ForInvoice = defaultLogoBase64;
-    if (row.category_logo_file) {
+    if (categoryLogo) {
       try {
         const categoryLogoPath = path.join(
           __dirname,
           "../../public/logos",
-          row.category_logo_file
+          categoryLogo
         );
 
         if (fs.existsSync(categoryLogoPath)) {
@@ -836,12 +876,22 @@ async function ensureInvoicePdf(id) {
       }
     }
 
-    const itemsResult = await client.query(
-      "SELECT description, quantity, unit_price_gross, line_total_gross FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
-      [id]
-    );
+    const itemsRows = await prisma.invoice_items.findMany({
+      where: { invoice_id: id },
+      orderBy: { id: "asc" },
+      select: {
+        description: true,
+        quantity: true,
+        unit_price_gross: true,
+        line_total_gross: true,
+      },
+    });
 
-    const items = itemsResult.rows;
+    const items = itemsRows.map((item) => ({
+      ...item,
+      unit_price_gross: toNumber(item.unit_price_gross),
+      line_total_gross: toNumber(item.line_total_gross),
+    }));
     const bankSettings = await getBankSettings();
     console.log(`[PDF] ${items.length} Positionen + Bank-Settings geladen für Invoice ${id}`);
 
@@ -965,9 +1015,9 @@ async function ensureInvoicePdf(id) {
 
     fs.writeFileSync(filepath, pdfBuffer);
 
-    return { buffer: pdfBuffer, filename, filepath, invoiceRow: row };
+    return { buffer: pdfBuffer, filename, filepath, invoiceRow };
   } finally {
-    client.release();
+    // no-op
   }
 }
 

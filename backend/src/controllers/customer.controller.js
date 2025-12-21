@@ -1,15 +1,21 @@
-import { db } from "../utils/db.js";
+import { prisma } from "../utils/prisma.js";
 
 export const getAllCustomers = async (req, res) => {
   try {
-    const result = await db.query(
-      `
-      SELECT id, name, street, zip, city, email, phone
-      FROM recipients
-      ORDER BY name ASC
-      `
-    );
-    res.json(result.rows);
+    const customers = await prisma.recipients.findMany({
+      select: {
+        id: true,
+        name: true,
+        street: true,
+        zip: true,
+        city: true,
+        email: true,
+        phone: true,
+      },
+      orderBy: { name: "asc" },
+    });
+
+    res.json(customers);
   } catch (err) {
     console.error("Fehler beim Laden der Kunden:", err);
     res.status(500).json({ error: "Fehler beim Abrufen der Kunden" });
@@ -24,16 +30,19 @@ export const createCustomer = async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      `
-      INSERT INTO recipients (name, street, zip, city, email, phone)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id
-      `,
-      [name, street, zip, city, email, phone]
-    );
+    const result = await prisma.recipients.create({
+      data: {
+        name,
+        street,
+        zip,
+        city,
+        email,
+        phone,
+      },
+      select: { id: true },
+    });
 
-    res.status(201).json({ id: result.rows[0].id });
+    res.status(201).json({ id: result.id });
   } catch (err) {
     console.error("Fehler beim Erstellen des Kunden:", err);
     res.status(500).json({ error: "Fehler beim Erstellen des Kunden" });
@@ -47,22 +56,23 @@ export const updateCustomer = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Kunden-ID" });
 
   try {
-    await db.query(
-      `
-      UPDATE recipients
-      SET name = $1,
-          street = $2,
-          zip = $3,
-          city = $4,
-          email = $5,
-          phone = $6
-      WHERE id = $7
-      `,
-      [name, street, zip, city, email, phone, id]
-    );
+    await prisma.recipients.update({
+      where: { id },
+      data: {
+        name,
+        street,
+        zip,
+        city,
+        email,
+        phone,
+      },
+    });
 
     res.json({ message: "Kunde aktualisiert" });
   } catch (err) {
+    if (err.code === "P2025") {
+      return res.status(404).json({ message: "Kunde nicht gefunden." });
+    }
     console.error("Fehler beim Aktualisieren des Kunden:", err);
     res.status(500).json({ error: "Fehler beim Aktualisieren des Kunden" });
   }
@@ -73,19 +83,19 @@ export const deleteCustomer = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Kunden-ID" });
 
   try {
-    // prüfen, ob noch Rechnungen existieren
-    const invResult = await db.query(
-      "SELECT COUNT(*)::int AS count FROM invoices WHERE recipient_id = $1",
-      [id]
-    );
+    const invoiceCount = await prisma.invoices.count({
+      where: { recipient_id: id },
+    });
 
-    if (invResult.rows[0].count > 0) {
+    if (invoiceCount > 0) {
       return res.status(400).json({
         message: "Kunde kann nicht gelöscht werden, es existieren noch Rechnungen.",
       });
     }
 
-    await db.query("DELETE FROM recipients WHERE id = $1", [id]);
+    await prisma.recipients.deleteMany({
+      where: { id },
+    });
 
     res.json({ message: "Kunde gelöscht" });
   } catch (err) {

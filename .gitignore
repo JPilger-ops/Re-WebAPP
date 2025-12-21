@@ -1,10 +1,13 @@
 # Node
 backend/node_modules/
+frontend/node_modules/
 backend/npm-debug.log*
 backend/yarn-error.log*
 
 # Env / Secrets
 backend/.env
+.env.local
+.env.*
 .env
 
 # Build / Cache / Temp
@@ -32,3 +35,4 @@ logs/
 .idea/
 *.swp
 backend/core/
+.npmrc

@@ -6,12 +6,16 @@ WORKDIR /app
 RUN apk add --no-cache \
   python3 make g++ curl \
   chromium nss freetype harfbuzz ca-certificates ttf-freefont \
-  wqy-zenhei
+  wqy-zenhei && \
+  apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.16/main libssl1.1
+
+# TODO: Replace libssl1.1 compatibility hack with a proper runtime base (e.g. debian-slim or Alpine + OpenSSL 3 Prisma engine)
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY . .
+RUN npx prisma generate && npm run build
 
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
