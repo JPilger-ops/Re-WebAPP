@@ -18,6 +18,10 @@ import {
   DATEV_STATUS,
 } from "../utils/datevExport.js";
 import { sendHkformsStatus } from "../utils/hkformsSync.js";
+import {
+  resolveGlobalSmtpFromDb,
+  resolveGlobalSmtpFromEnv,
+} from "../utils/smtpSettings.js";
 
 const fetchFirstItemDescription = async (invoiceId) => {
   if (!invoiceId) return null;
@@ -250,14 +254,7 @@ const loadInvoiceWithCategory = async (id) => {
   return row;
 };
 
-const resolveSmtpConfig = (row = {}) => {
-  const envHost = process.env.SMTP_HOST;
-  const envPort = Number(process.env.SMTP_PORT || 587);
-  const envUser = process.env.SMTP_USER;
-  const envPass = process.env.SMTP_PASS;
-  const envFrom = process.env.MAIL_FROM || envUser;
-  const envSecure = process.env.SMTP_SECURE === "true" || envPort === 465;
-
+const resolveSmtpConfig = async (row = {}) => {
   if (
     row.email_address &&
     row.email_smtp_host &&
@@ -279,16 +276,14 @@ const resolveSmtpConfig = (row = {}) => {
     };
   }
 
-  if (envHost && envUser && envPass && envFrom) {
-    return {
-      host: envHost,
-      port: envPort,
-      secure: envSecure,
-      authUser: envUser,
-      authPass: envPass,
-      from: envFrom,
-      usingCategoryAccount: false,
-    };
+  const dbConfig = await resolveGlobalSmtpFromDb();
+  if (dbConfig) {
+    return { ...dbConfig, usingCategoryAccount: false };
+  }
+
+  const envConfig = resolveGlobalSmtpFromEnv();
+  if (envConfig) {
+    return { ...envConfig, usingCategoryAccount: false };
   }
 
   return null;
@@ -1370,7 +1365,7 @@ export const getInvoiceEmailPreview = async (req, res) => {
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
     const content = buildEmailContent(row, bankSettings);
-    const smtp = resolveSmtpConfig(row);
+    const smtp = await resolveSmtpConfig(row);
     const datevSettings = await getDatevSettings();
     const datevEmail = (datevSettings?.email || "").trim();
 
@@ -1426,14 +1421,14 @@ export const sendInvoiceEmail = async (req, res) => {
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
     const content = buildEmailContent(row, bankSettings);
-    const smtpConfig = resolveSmtpConfig(row);
+    const smtpConfig = await resolveSmtpConfig(row);
     const datevSettings = includeDatev ? await getDatevSettings() : null;
     const datevEmail = includeDatev ? (datevSettings?.email || "").trim() : "";
 
     if (!smtpConfig) {
       return res.status(400).json({
         message:
-          "Kein SMTP-Konto hinterlegt. Bitte entweder in der Kategorie ein Konto speichern oder die globalen SMTP-ENV-Variablen setzen.",
+          "Kein SMTP-Konto hinterlegt. Bitte ein Konto in der Kategorie oder unter Einstellungen → SMTP (oder via ENV) hinterlegen.",
       });
     }
 
@@ -1470,7 +1465,7 @@ export const sendInvoiceEmail = async (req, res) => {
       const transporter = nodemailer.createTransport({
         host: smtpConfig.host,
         port: smtpConfig.port,
-        secure: smtpConfig.secure,
+        secure: smtpConfig.secure === true || smtpConfig.secure === "true",
         auth: {
           user: smtpConfig.authUser,
           pass: smtpConfig.authPass,
@@ -1485,6 +1480,7 @@ export const sendInvoiceEmail = async (req, res) => {
         subject: emailSubject,
         text: emailText,
         html: emailHtml,
+        replyTo: smtpConfig.reply_to || undefined,
         attachments: [
           {
             filename,
@@ -1588,7 +1584,7 @@ export const exportInvoiceToDatev = async (req, res) => {
     const { filename, filepath } = await ensureInvoicePdf(id);
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
-    const smtpConfig = resolveSmtpConfig(row);
+    const smtpConfig = await resolveSmtpConfig(row);
 
     if (!smtpConfig) {
       return res.status(400).json({
@@ -1602,7 +1598,7 @@ export const exportInvoiceToDatev = async (req, res) => {
     const transporter = nodemailer.createTransport({
       host: smtpConfig.host,
       port: smtpConfig.port,
-      secure: smtpConfig.secure,
+      secure: smtpConfig.secure === true || smtpConfig.secure === "true",
       auth: {
         user: smtpConfig.authUser,
         pass: smtpConfig.authPass,
@@ -1615,6 +1611,7 @@ export const exportInvoiceToDatev = async (req, res) => {
       subject,
       text: bodyText,
       html: bodyText.replace(/\n/g, "<br>"),
+      replyTo: smtpConfig.reply_to || undefined,
       attachments: [
         {
           filename,

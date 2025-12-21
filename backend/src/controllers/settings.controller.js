@@ -4,6 +4,17 @@ import { getBankSettings, saveBankSettings } from "../utils/bankSettings.js";
 import { getDatevSettings, saveDatevSettings, isValidEmail } from "../utils/datevSettings.js";
 import { getHkformsSettings, saveHkformsSettings } from "../utils/hkformsSettings.js";
 import { getTaxSettings, saveTaxSettings } from "../utils/taxSettings.js";
+import {
+  getSmtpSettings,
+  saveSmtpSettings,
+  resolveGlobalSmtpFromDb,
+  resolveGlobalSmtpFromEnv,
+} from "../utils/smtpSettings.js";
+import {
+  getInvoiceHeaderSettings,
+  saveInvoiceHeaderSettings,
+} from "../utils/invoiceHeaderSettings.js";
+import nodemailer from "nodemailer";
 
 const isValidBic = (bic) => /^[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test((bic || "").toUpperCase());
 
@@ -221,5 +232,153 @@ export const updateTaxData = async (req, res) => {
     const message = err?.userMessage || "Steuer-Einstellungen konnten nicht gespeichert werden.";
     const status = err?.statusCode || 500;
     return res.status(status).json({ message });
+  }
+};
+
+export const getSmtpData = async (_req, res) => {
+  try {
+    const settings = await getSmtpSettings();
+    return res.json(settings || { has_password: false });
+  } catch (err) {
+    console.error("SMTP-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "SMTP-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updateSmtpData = async (req, res) => {
+  try {
+    const {
+      host,
+      port,
+      secure,
+      user,
+      from,
+      reply_to,
+      password,
+    } = req.body || {};
+
+    const errors = [];
+    const parsedPort = port ? Number(port) : null;
+    if (port !== undefined && (Number.isNaN(parsedPort) || parsedPort <= 0)) {
+      errors.push("SMTP-Port ist ungültig.");
+    }
+    if (host !== undefined && !host) errors.push("SMTP-Host darf nicht leer sein.");
+    if (user !== undefined && !user) errors.push("SMTP-Benutzer darf nicht leer sein.");
+    if (from !== undefined && !from) errors.push("Absender (FROM) darf nicht leer sein.");
+    if (errors.length) {
+      return res.status(400).json({ message: errors.join(" ") });
+    }
+
+    const saved = await saveSmtpSettings({
+      host: host?.trim() || null,
+      port: parsedPort,
+      secure,
+      user: user?.trim() || null,
+      pass_value: password !== undefined ? password : undefined,
+      from: from?.trim() || null,
+      reply_to: reply_to?.trim() || null,
+    });
+
+    return res.json({ message: "SMTP-Einstellungen gespeichert.", ...saved });
+  } catch (err) {
+    console.error("SMTP-Einstellungen speichern fehlgeschlagen:", err);
+    return res.status(500).json({ message: "SMTP-Einstellungen konnten nicht gespeichert werden." });
+  }
+};
+
+export const testSmtpSettings = async (req, res) => {
+  try {
+    const emailSendDisabled = ["1", "true", "yes"].includes(
+      (process.env.EMAIL_SEND_DISABLED || "").toLowerCase()
+    );
+    const redirectTo = (process.env.EMAIL_REDIRECT_TO || "").trim();
+
+    const toRaw = req.body?.to || "";
+    const to = toRaw.trim();
+    if (!to) return res.status(400).json({ message: "Bitte eine Zieladresse angeben." });
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!emailRegex.test(to)) {
+      return res.status(400).json({ message: "E-Mail-Adresse ist ungültig." });
+    }
+
+    const dbConfig = await resolveGlobalSmtpFromDb();
+    const envConfig = resolveGlobalSmtpFromEnv();
+    const smtpConfig = dbConfig || envConfig;
+
+    if (!smtpConfig) {
+      return res.status(400).json({
+        message:
+          "Kein SMTP-Konto konfiguriert. Bitte in den SMTP-Einstellungen oder per ENV hinterlegen.",
+      });
+    }
+
+    const finalRecipient = redirectTo || to;
+    const dryRun = emailSendDisabled;
+
+    if (!dryRun) {
+      const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure === true,
+        auth: {
+          user: smtpConfig.authUser,
+          pass: smtpConfig.authPass,
+        },
+      });
+
+      await transporter.sendMail({
+        from: smtpConfig.from,
+        to: finalRecipient,
+        subject: "SMTP Test",
+        text: "Testnachricht aus den SMTP-Einstellungen.",
+        replyTo: smtpConfig.reply_to || undefined,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      dry_run: dryRun,
+      redirected: Boolean(redirectTo),
+      to: finalRecipient,
+      message: dryRun
+        ? "E-Mail-Versand ist deaktiviert (EMAIL_SEND_DISABLED=1) – Dry-Run erfolgreich."
+        : "Testmail erfolgreich gesendet.",
+    });
+  } catch (err) {
+    console.error("SMTP-Test fehlgeschlagen:", err);
+    return res.status(500).json({ message: "SMTP-Test fehlgeschlagen." });
+  }
+};
+
+export const getInvoiceHeaderData = async (_req, res) => {
+  try {
+    const settings = await getInvoiceHeaderSettings();
+    return res.json(settings);
+  } catch (err) {
+    console.error("Briefkopf-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Briefkopf-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updateInvoiceHeaderData = async (req, res) => {
+  try {
+    const saved = await saveInvoiceHeaderSettings({
+      company_name: req.body?.company_name?.trim() || null,
+      address_line1: req.body?.address_line1?.trim() || null,
+      address_line2: req.body?.address_line2?.trim() || null,
+      zip: req.body?.zip?.trim() || null,
+      city: req.body?.city?.trim() || null,
+      country: req.body?.country?.trim() || null,
+      vat_id: req.body?.vat_id?.trim() || null,
+      bank_name: req.body?.bank_name?.trim() || null,
+      iban: req.body?.iban?.trim() || null,
+      bic: req.body?.bic?.trim() || null,
+      footer_text: req.body?.footer_text?.trim() || null,
+      logo_url: req.body?.logo_url?.trim() || null,
+    });
+    return res.json({ message: "Briefkopf-Einstellungen gespeichert.", ...saved });
+  } catch (err) {
+    console.error("Briefkopf-Einstellungen speichern fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Briefkopf-Einstellungen konnten nicht gespeichert werden." });
   }
 };

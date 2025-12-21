@@ -11,6 +11,11 @@ import {
   testHkformsConnection,
   getTaxData,
   updateTaxData,
+  getSmtpData,
+  updateSmtpData,
+  testSmtpSettings,
+  getInvoiceHeaderData,
+  updateInvoiceHeaderData,
 } from "../controllers/settings.controller.js";
 
 const router = Router();
@@ -75,6 +80,36 @@ router.get(
   "/ca-cert",
   requireRole("admin"),
   downloadCaCertificate
+);
+
+router.get(
+  "/smtp",
+  requireRole("admin"),
+  getSmtpData
+);
+
+router.put(
+  "/smtp",
+  requireRole("admin"),
+  updateSmtpData
+);
+
+router.post(
+  "/smtp/test",
+  requireRole("admin"),
+  testSmtpSettings
+);
+
+router.get(
+  "/invoice-header",
+  requireRole("admin"),
+  getInvoiceHeaderData
+);
+
+router.put(
+  "/invoice-header",
+  requireRole("admin"),
+  updateInvoiceHeaderData
 );
 
 export default router;
