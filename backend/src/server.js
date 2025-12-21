@@ -26,8 +26,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Recognize forwarded proto/host when running behind a reverse proxy
-// We run behind NPM; trust the first proxy hop.
-app.set("trust proxy", process.env.TRUST_PROXY || 1);
+// TRUST_PROXY can be 0/1/true/false
+const trustProxyEnv = (process.env.TRUST_PROXY || "1").toLowerCase();
+const trustProxy =
+  trustProxyEnv === "1" ||
+  trustProxyEnv === "true" ||
+  trustProxyEnv === "yes" ||
+  trustProxyEnv === "on";
+app.set("trust proxy", trustProxy ? 1 : 0);
 
 // Etags/Caching für API unterdrücken, damit /api/auth/me nicht mit 304 beantwortet wird
 app.disable("etag");
@@ -89,6 +95,11 @@ app.use("/api/version", versionRoutes);
    🌐 FRONTEND ROUTE
 -------------------------- */
 app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "../public/index.html"));
+});
+
+// SPA fallback für alles außer /api/*
+app.get(/^\/(?!api\/).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 

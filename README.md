@@ -132,7 +132,7 @@ APP_SSL_CERT_DIR=/app/certificates/rechnung.intern  # oder APP_SSL_KEY_PATH / AP
 ```bash
 docker compose up -d --build  # startet Postgres + App
 ```
-Ports: App lauscht intern auf 3030, wird auf dem Host nur an `192.200.255.225:3030` gepublished. DB hat kein Port-Mapping (nur intern). PDFs landen in `./backend/pdfs`.
+Ports: App lauscht intern auf 3030, wird auf dem Host nur an `192.200.255.225:3031` gepublished (für NPM). DB hat kein Port-Mapping (nur intern). PDFs landen in `./backend/pdfs`.
 
 Healthcheck: nutzt automatisch HTTP oder HTTPS je nach `APP_HTTPS_DISABLE`.
 
@@ -165,7 +165,7 @@ ls -lh backend/pdfs
 ### 5) Troubleshooting
 - Healthcheck rot & APP_HTTPS_DISABLE=true → prüfe, ob Compose-Healthcheck auf HTTP zeigt (siehe `docker-compose.yml`).
 - PDFs: Image muss Chromium enthalten (`docker exec rechnungsapp-app-1 which chromium-browser`). Falls nicht, `docker compose build app --no-cache`.
-- Proxy-Betrieb (NPM): Proxy Host `rechnung.intern`, Forward Host/IP `192.200.255.225`, Forward Port `3030`, Schema `http`, Websockets on, TLS/Certificate im NPM, optional Force SSL. Wenn TLS terminiert wird, Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
+- Proxy-Betrieb (NPM): Proxy Host `rechnung.intern`, Forward Host/IP `192.200.255.225`, Forward Port `3031`, Schema `http`, Websockets on, TLS/Certificate im NPM, optional Force SSL. TLS wird nur im NPM terminiert; Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
 - Zertifikate: In Modus A müssen `privkey.pem` und `fullchain.pem` an den in `.env` gesetzten Pfad gemountet werden.
 
 ## API-Überblick (gekürzt)

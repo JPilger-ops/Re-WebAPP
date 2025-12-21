@@ -9,7 +9,9 @@
     "start": "node src/index.js",
     "start:docker": "node ./scripts/init-db.js && node src/index.js",
     "db:init": "node ./scripts/init-db.js",
-    "test:pdf": "node --input-type=module scripts/pdf-smoke.js"
+    "test:pdf": "node scripts/pdf-smoke.js",
+    "check:api": "node scripts/check-api.js",
+    "check:pdf": "node scripts/check-pdf.mjs"
   },
   "keywords": [],
   "author": "",
