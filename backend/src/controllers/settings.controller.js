@@ -15,6 +15,8 @@ import {
   saveInvoiceHeaderSettings,
 } from "../utils/invoiceHeaderSettings.js";
 import nodemailer from "nodemailer";
+import crypto from "crypto";
+import { prisma } from "../utils/prisma.js";
 
 const isValidBic = (bic) => /^[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test((bic || "").toUpperCase());
 
@@ -380,5 +382,120 @@ export const updateInvoiceHeaderData = async (req, res) => {
   } catch (err) {
     console.error("Briefkopf-Einstellungen speichern fehlgeschlagen:", err);
     return res.status(500).json({ message: "Briefkopf-Einstellungen konnten nicht gespeichert werden." });
+  }
+};
+
+// -------------- API Keys --------------
+const sha256Hex = (value) => crypto.createHash("sha256").update(value).digest("hex");
+
+const generateApiKeyValue = () => {
+  const raw = crypto.randomBytes(32).toString("hex"); // 64 chars
+  const prefix = raw.slice(0, 8);
+  return { api_key: `rk_${raw}`, prefix };
+};
+
+export const listApiKeys = async (_req, res) => {
+  try {
+    const keys = await prisma.api_keys.findMany({
+      orderBy: { created_at: "desc" },
+    });
+    return res.json(
+      keys.map((k) => ({
+        id: k.id,
+        name: k.name,
+        prefix: k.prefix,
+        scopes: k.scopes,
+        created_at: k.created_at,
+        last_used_at: k.last_used_at,
+        revoked_at: k.revoked_at,
+      }))
+    );
+  } catch (err) {
+    console.error("API-Keys laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "API-Keys konnten nicht geladen werden." });
+  }
+};
+
+export const createApiKey = async (req, res) => {
+  try {
+    const name = req.body?.name?.trim() || null;
+    const scopes = req.body?.scopes ?? null;
+    const { api_key, prefix } = generateApiKeyValue();
+    const key_hash = sha256Hex(api_key);
+
+    const saved = await prisma.api_keys.create({
+      data: {
+        name,
+        prefix,
+        key_hash,
+        scopes,
+      },
+    });
+
+    return res.json({
+      id: saved.id,
+      name: saved.name,
+      prefix: saved.prefix,
+      scopes: saved.scopes,
+      created_at: saved.created_at,
+      api_key, // nur einmalig
+    });
+  } catch (err) {
+    console.error("API-Key erstellen fehlgeschlagen:", err);
+    return res.status(500).json({ message: "API-Key konnte nicht erstellt werden." });
+  }
+};
+
+export const rotateApiKey = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige ID." });
+  try {
+    const existing = await prisma.api_keys.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ message: "API-Key nicht gefunden." });
+
+    await prisma.api_keys.update({
+      where: { id },
+      data: { revoked_at: new Date() },
+    });
+
+    const { api_key, prefix } = generateApiKeyValue();
+    const key_hash = sha256Hex(api_key);
+    const created = await prisma.api_keys.create({
+      data: {
+        name: existing.name,
+        scopes: existing.scopes,
+        prefix,
+        key_hash,
+      },
+    });
+
+    return res.json({
+      id: created.id,
+      name: created.name,
+      prefix: created.prefix,
+      scopes: created.scopes,
+      created_at: created.created_at,
+      api_key, // einmalig
+    });
+  } catch (err) {
+    console.error("API-Key rotate fehlgeschlagen:", err);
+    return res.status(500).json({ message: "API-Key konnte nicht rotiert werden." });
+  }
+};
+
+export const revokeApiKey = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige ID." });
+  try {
+    const existing = await prisma.api_keys.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ message: "API-Key nicht gefunden." });
+    await prisma.api_keys.update({
+      where: { id },
+      data: { revoked_at: new Date() },
+    });
+    return res.json({ message: "API-Key widerrufen." });
+  } catch (err) {
+    console.error("API-Key Revoke fehlgeschlagen:", err);
+    return res.status(500).json({ message: "API-Key konnte nicht widerrufen werden." });
   }
 };

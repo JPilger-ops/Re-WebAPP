@@ -118,3 +118,36 @@ export async function regenerateInvoicePdf(id: number) {
     { method: "POST" }
   );
 }
+
+export interface ApiKeyInfo {
+  id: number;
+  name: string | null;
+  prefix: string;
+  scopes?: any;
+  created_at: string;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+}
+
+export async function listApiKeys() {
+  return apiFetch<ApiKeyInfo[]>("/settings/api-keys");
+}
+
+export async function createApiKey(payload: { name?: string | null; scopes?: any }) {
+  return apiFetch<ApiKeyInfo & { api_key: string }>("/settings/api-keys", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function rotateApiKey(id: number) {
+  return apiFetch<ApiKeyInfo & { api_key: string }>(`/settings/api-keys/${id}/rotate`, {
+    method: "POST",
+  });
+}
+
+export async function revokeApiKey(id: number) {
+  return apiFetch<{ message: string }>(`/settings/api-keys/${id}/revoke`, {
+    method: "POST",
+  });
+}

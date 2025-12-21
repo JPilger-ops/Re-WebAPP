@@ -16,6 +16,10 @@ import {
   testSmtpSettings,
   getInvoiceHeaderData,
   updateInvoiceHeaderData,
+  listApiKeys,
+  createApiKey,
+  rotateApiKey,
+  revokeApiKey,
 } from "../controllers/settings.controller.js";
 
 const router = Router();
@@ -110,6 +114,30 @@ router.put(
   "/invoice-header",
   requireRole("admin"),
   updateInvoiceHeaderData
+);
+
+router.get(
+  "/api-keys",
+  requireRole("admin"),
+  listApiKeys
+);
+
+router.post(
+  "/api-keys",
+  requireRole("admin"),
+  createApiKey
+);
+
+router.post(
+  "/api-keys/:id/rotate",
+  requireRole("admin"),
+  rotateApiKey
+);
+
+router.post(
+  "/api-keys/:id/revoke",
+  requireRole("admin"),
+  revokeApiKey
 );
 
 export default router;

@@ -195,3 +195,14 @@ model invoice_header_settings {
   logo_url       String?   @db.VarChar(512)
   updated_at     DateTime? @default(now()) @db.Timestamp(6)
 }
+
+model api_keys {
+  id           Int       @id @default(autoincrement())
+  name         String?   @db.VarChar(255)
+  key_hash     String    @unique @db.VarChar(128)
+  prefix       String    @db.VarChar(32)
+  scopes       Json?
+  created_at   DateTime  @default(now()) @db.Timestamp(6)
+  last_used_at DateTime? @db.Timestamp(6)
+  revoked_at   DateTime? @db.Timestamp(6)
+}

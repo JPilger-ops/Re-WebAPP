@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   AuthUser,
+  ApiKeyInfo,
   getInvoiceHeader,
   getSmtpSettings,
   login as apiLogin,
@@ -10,6 +11,10 @@ import {
   updateInvoiceHeader,
   updateSmtpSettings,
   regenerateInvoicePdf,
+  listApiKeys,
+  createApiKey,
+  rotateApiKey,
+  revokeApiKey,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 
@@ -304,6 +309,7 @@ function AdminSettings() {
       </div>
       <SmtpSettingsForm />
       <InvoiceHeaderForm />
+      <ApiKeysSection />
     </div>
   );
 }
@@ -672,6 +678,197 @@ function InvoiceHeaderForm() {
           </button>
         </div>
       </form>
+      {status && (
+        <div
+          className={`mt-4 text-sm rounded-md px-3 py-2 ${
+            status.type === "success"
+              ? "bg-green-50 text-green-800 border border-green-100"
+              : "bg-red-50 text-red-700 border border-red-100"
+          }`}
+        >
+          {status.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ApiKeysSection() {
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [rotatingId, setRotatingId] = useState<number | null>(null);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [lastPlain, setLastPlain] = useState<{ api_key: string; prefix: string } | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const res = await listApiKeys();
+      setKeys(res);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "API-Keys konnten nicht geladen werden." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const onCreate = async () => {
+    setCreating(true);
+    setStatus(null);
+    try {
+      const res = await createApiKey({ name: newKeyName || null });
+      setLastPlain({ api_key: res.api_key, prefix: res.prefix });
+      setNewKeyName("");
+      await load();
+      setStatus({ type: "success", message: "API-Key erstellt. Kopiere ihn jetzt – später nicht mehr sichtbar!" });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "API-Key konnte nicht erstellt werden." });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const onRotate = async (id: number) => {
+    setRotatingId(id);
+    setStatus(null);
+    try {
+      const res = await rotateApiKey(id);
+      setLastPlain({ api_key: res.api_key, prefix: res.prefix });
+      await load();
+      setStatus({ type: "success", message: "API-Key rotiert. Neuer Key wird nur einmal angezeigt!" });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Rotation fehlgeschlagen." });
+    } finally {
+      setRotatingId(null);
+    }
+  };
+
+  const onRevoke = async (id: number) => {
+    if (!confirm("API-Key wirklich widerrufen?")) return;
+    setRevokingId(id);
+    setStatus(null);
+    try {
+      await revokeApiKey(id);
+      await load();
+      setStatus({ type: "success", message: "API-Key widerrufen." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Widerruf fehlgeschlagen." });
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const copyKey = async () => {
+    if (!lastPlain?.api_key) return;
+    await navigator.clipboard.writeText(lastPlain.api_key);
+    setStatus({ type: "success", message: "API-Key kopiert." });
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold">API Keys</h2>
+        {loading && <span className="text-sm text-slate-500">Lade ...</span>}
+      </div>
+      <div className="flex flex-wrap gap-3 mb-4">
+        <input
+          className="input w-60"
+          placeholder="Name (optional)"
+          value={newKeyName}
+          onChange={(e) => setNewKeyName(e.target.value)}
+        />
+        <button className="btn-primary" onClick={onCreate} disabled={creating || loading}>
+          {creating ? "Erstelle ..." : "Neuen Key erstellen"}
+        </button>
+      </div>
+
+      {lastPlain && (
+        <div className="mb-4 p-3 rounded-md border border-amber-200 bg-amber-50 text-sm text-amber-900">
+          Neuer Key (nur jetzt sichtbar):<br />
+          <code className="block break-all mt-1 font-mono text-xs bg-white border border-amber-200 rounded px-2 py-1">
+            {lastPlain.api_key}
+          </code>
+          <div className="mt-2 flex gap-2">
+            <button className="btn-secondary" onClick={copyKey}>Kopieren</button>
+            <span className="text-xs text-amber-800">
+              Speichere den Key sicher – nach dem Schließen dieser Meldung ist er nicht mehr abrufbar.
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="text-left border-b border-slate-200">
+              <th className="py-2 pr-3">Name</th>
+              <th className="py-2 pr-3">Prefix</th>
+              <th className="py-2 pr-3">Erstellt</th>
+              <th className="py-2 pr-3">Zuletzt genutzt</th>
+              <th className="py-2 pr-3">Status</th>
+              <th className="py-2 pr-3 text-right">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {keys.map((k) => {
+              const revoked = Boolean(k.revoked_at);
+              return (
+                <tr key={k.id} className="border-b border-slate-100">
+                  <td className="py-2 pr-3">{k.name || "–"}</td>
+                  <td className="py-2 pr-3 font-mono text-xs">{k.prefix}</td>
+                  <td className="py-2 pr-3">{new Date(k.created_at).toLocaleString()}</td>
+                  <td className="py-2 pr-3">
+                    {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "–"}
+                  </td>
+                  <td className="py-2 pr-3">
+                    {revoked ? (
+                      <span className="text-red-600">widerrufen</span>
+                    ) : (
+                      <span className="text-green-600">aktiv</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-right flex gap-2 justify-end">
+                    <button
+                      className="btn-secondary"
+                      onClick={() => onRotate(k.id)}
+                      disabled={rotatingId === k.id}
+                    >
+                      {rotatingId === k.id ? "rotiert..." : "Rotieren"}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => onRevoke(k.id)}
+                      disabled={revokingId === k.id || revoked}
+                    >
+                      {revokingId === k.id ? "widerrufe..." : "Widerrufen"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!keys.length && (
+              <tr>
+                <td colSpan={6} className="py-3 text-slate-500">
+                  Noch keine API Keys vorhanden.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {status && (
         <div
           className={`mt-4 text-sm rounded-md px-3 py-2 ${
