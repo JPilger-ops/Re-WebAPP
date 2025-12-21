@@ -14,8 +14,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/api-key-test", apiKeyAuth, (_req, res) => {
-  res.json({ ok: true, message: "API-Key gültig." });
-});
+if (process.env.NODE_ENV !== "production") {
+  router.get("/api-key-test", apiKeyAuth, (_req, res) => {
+    res.json({ ok: true, message: "API-Key gültig." });
+  });
+}
 
 export default router;
