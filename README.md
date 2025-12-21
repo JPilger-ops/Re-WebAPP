@@ -95,67 +95,80 @@ npm test
 curl -k https://<APP_DOMAIN>/api/testdb
 ```
 
-## Docker Compose Betrieb
-- `.env` aus `backend/.env.example` kopieren und anpassen (DB-Host `db`, Port `3030`, `CORS_ORIGINS` auf die Proxy-URL z. B. `https://192.169.50.100:3030` setzen, `APP_VERSION` nach Bedarf). DB-Creds in `backend/.env` müssen zu den `POSTGRES_*` Werten im Compose passen (Standard: User `rechnung_app`, Passwort `change_me`, DB `rechnung_prod`).  
-- Build & Start:  
-  ```bash
-  docker compose build
-  docker compose up -d
-  ```  
-  Die App lauscht intern auf 3030 und wird auf dem Host unter `https://localhost:3030` bzw. über den NPM-Proxy `https://192.169.50.100:3030` bereitgestellt.
-- Prüfung:  
-  ```bash
-  curl -k https://localhost:3030/api/version
-  # oder via Proxy
-  curl -k https://192.169.50.100:3030/api/version
-  ```
-- Volumes: Datenbank unter `./data/db`, erzeugte PDFs unter `./backend/pdfs` (Bind-Mount).  
-- Beim Start führt `npm run start:docker` automatisch `scripts/init-db.js` aus (legt Schema an, spielt SQL-Migrationen ein und legt Admin + Permissions an).  
-- Optional: In `docker-compose.yml` sind kommentierte Services für pgAdmin/Adminer hinterlegt.
-- TLS nur im Proxy terminieren: setze `APP_HTTPS_DISABLE=true` und nutze `APP_DOMAIN`/`CORS_ORIGINS` mit `http://…`. Healthcheck in Compose ist bereits auf HTTP gestellt.
+## Docker Compose (dev_DOCKER)
+**Ziel:** `docker compose build && docker compose up -d` startet App + Postgres “out of the box”, DB wird automatisch initialisiert (Schema, Migrationen, Admin + Permissions), PDFs schreiben nach `backend/pdfs`.
 
-## Beispiel `.env`
+### 1) Env-Dateien
+- `backend/.env` (anlegen aus `backend/.env.example`) enthält App-/DB-/SMTP-/TLS-Settings.
+- Root `.env` steuert nur das Image-Tag (`APP_VERSION`).
+- Compose liest beide via `env_file`. DB-Host/Port werden zusätzlich überschrieben (`DB_HOST=127.0.0.1`, `DB_PORT=55432`), weil Compose den DB-Port intern auf 55432 legt (host network).
+
+**Minimal zwingend (Backend/.env):**
+- `APP_DOMAIN`, `CORS_ORIGINS` (siehe Modi unten)
+- `JWT_SECRET`, `SESSION_SECRET`, `APP_CREATE_PIN`, `APP_PIN`
+- DB: `DB_USER`, `DB_PASS`, `DB_NAME` (müssen zu `POSTGRES_*` in compose passen), `DB_HOST=db` wird überschrieben
+- SMTP: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` (oder Dummy, falls Versand nicht genutzt wird)
+- TLS: entweder Zertifikatspfad (Modus A) oder `APP_HTTPS_DISABLE=true` (Modus B)
+- Optional: `DEFAULT_ADMIN_PASSWORD` (ansonsten `admin`)
+
+**Modus A – HTTPS in der App (Default wie main):**
 ```
 APP_DOMAIN=https://rechnung.intern
-APP_HTTPS_PORT=443
+APP_HTTPS_PORT=3030
+APP_HTTPS_DISABLE=false
 CORS_ORIGINS=https://rechnung.intern
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=rechnung_app
-DB_PASS=<<secret>>
-DB_NAME=rechnung_prod
-
-JWT_SECRET=<<secret>>
-APP_CREATE_PIN=<<pin-fuer-registry>>
-
-SMTP_HOST=smtp.example.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=rechnungen@example.com
-SMTP_PASS=<<secret>>
-MAIL_FROM="Waldwirtschaft Heidekönig <rechnungen@example.com>"
-DATEV_EMAIL=datev@example.com
-HKFORMS_BASE_URL=https://app.bistrottelegraph.de/api
-HKFORMS_ORGANIZATION=hk-mandant-01
-HKFORMS_SYNC_TOKEN=<<secret>>
-TAX_NUMBER=12/345/67890
-VAT_ID=DE123456789
-
-# Überfällig-Job (optional)
-OVERDUE_DAYS=14
-OVERDUE_JOB_ENABLED=true
-# Millisekunden; Default 900000 (15 Minuten)
-OVERDUE_JOB_INTERVAL_MS=900000
-
-SEPA_CREDITOR_NAME="Waldwirtschaft Heidekönig"
-SEPA_CREDITOR_IBAN="DE00123456780000000000"
-SEPA_CREDITOR_BIC="ABCDEFGHXXX"
-BANK_NAME="Hausbank"
-
-APP_SSL_CERT_DIR=/path/zum/zertifikat  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
-APP_VERSION=0.9.0
+APP_SSL_CERT_DIR=/app/certificates/rechnung.intern  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
 ```
+
+**Modus B – HTTP in der App, TLS nur im Proxy:**
+```
+APP_DOMAIN=http://rechnung.intern
+APP_HTTPS_PORT=3030
+APP_HTTPS_DISABLE=true
+CORS_ORIGINS=http://rechnung.intern
+```
+In Modus B setzt der Proxy (z. B. Nginx Proxy Manager) TLS davor und reicht `X-Forwarded-Proto: https` durch. Cookies/CORS funktionieren, weil Express `trust proxy` aktiviert und die Secure-Flags daran ausrichtet.
+
+### 2) Build & Start
+```bash
+docker compose build app      # baut das Backend-Image inkl. Chromium für PDFs
+docker compose up -d          # startet Postgres + App
+```
+Ports: App lauscht intern auf 3030 (host network). DB-Port intern 55432, Volume unter `./data/db`. PDFs landen in `./backend/pdfs`.
+
+Healthcheck: nutzt automatisch HTTP oder HTTPS je nach `APP_HTTPS_DISABLE`.
+
+### 3) Smoke-Tests
+```bash
+# API-Version
+curl -k http://localhost:3030/api/version
+
+# Login (Default-Admin: admin / ${DEFAULT_ADMIN_PASSWORD:-admin})
+curl -i -H "Content-Type: application/json" \
+     -d '{"username":"admin","password":"admin"}' \
+     http://localhost:3030/api/auth/login
+
+# PDF-Check (liefert Datei + legt sie in backend/pdfs ab)
+TOKEN=$(curl -si -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' \
+  http://localhost:3030/api/auth/login | sed -n 's/Set-Cookie: token=\\([^;]*\\).*/\\1/p' | head -n1)
+curl -H "Authorization: Bearer $TOKEN" -o test.pdf http://localhost:3030/api/invoices/1/pdf
+ls -lh backend/pdfs
+```
+
+### 4) DB-Init & Idempotenz
+`npm run start:docker` ruft `scripts/init-db.js` auf:
+- legt Basis-Schema an (falls leer),
+- spielt SQL-Migrationen aus `backend/migrations/` in sortierter Reihenfolge ein,
+- fügt `is_active`/`role_id` an `users` an,
+- legt Rollen `admin`/`user` und alle Permissions an,
+- legt Admin-Benutzer `admin` mit Passwort `DEFAULT_ADMIN_PASSWORD` (oder `admin`) an, falls nicht vorhanden. Berechtigungen für Admin werden bei jedem Start ergänzt (`ON CONFLICT DO NOTHING`), vorhandene Logins bleiben erhalten.
+
+### 5) Troubleshooting
+- Healthcheck rot & APP_HTTPS_DISABLE=true → prüfe, ob Compose-Healthcheck auf HTTP zeigt (siehe `docker-compose.yml`).
+- PDFs: Image muss Chromium enthalten (`docker exec rechnungsapp-app-1 which chromium-browser`). Falls nicht, `docker compose build app --no-cache`.
+- Proxy-Betrieb: im Proxy auf Backend-HTTP zeigen; wenn TLS terminiert wird, Header `X-Forwarded-Proto: https` durchreichen (Express erkennt das über `trust proxy` für Cookie/Secure-Flags).
+- Zertifikate: In Modus A müssen `privkey.pem` und `fullchain.pem` an den in `.env` gesetzten Pfad gemountet werden.
 
 ## API-Überblick (gekürzt)
 - Auth: `POST /api/auth/login`, `POST /api/auth/register` (mit `createPin`), `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`.

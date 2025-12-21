@@ -25,6 +25,10 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Recognize forwarded proto/host when running behind a reverse proxy
+const trustProxySetting = process.env.TRUST_PROXY || "loopback";
+app.set("trust proxy", trustProxySetting);
+
 // Etags/Caching für API unterdrücken, damit /api/auth/me nicht mit 304 beantwortet wird
 app.disable("etag");
 app.use((req, res, next) => {

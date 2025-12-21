@@ -4,6 +4,21 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const JWT_EXPIRES = "12h";
+const isSecureRequest = (req) =>
+  req?.secure || req?.get("x-forwarded-proto") === "https";
+
+const buildCookieOptions = (req) => {
+  const secureCookie = isSecureRequest(req);
+  const sameSite = secureCookie ? "none" : "lax";
+
+  return {
+    httpOnly: true,
+    sameSite,
+    secure: secureCookie,
+    path: "/",
+    maxAge: 1000 * 60 * 60 * 12,
+  };
+};
 
 /**
  * Hilfsfunktion: JWT erstellen
@@ -117,13 +132,7 @@ export const register = async (req, res) => {
     const token = signToken(fullUser);
 
     res
-      .cookie("token", token, {
-        httpOnly: true,
-        sameSite: "none",
-        secure: true,
-        path: "/",
-        maxAge: 1000 * 60 * 60 * 12,
-      })
+      .cookie("token", token, buildCookieOptions(req))
       .json({
         message: "Registrierung erfolgreich.",
         user: {
@@ -200,13 +209,7 @@ export const login = async (req, res) => {
     const token = signToken(fullUser);
 
     res
-      .cookie("token", token, {
-        httpOnly: true,
-        sameSite: "none",
-        secure: true,
-        path: "/",
-        maxAge: 1000 * 60 * 60 * 12,
-      })
+      .cookie("token", token, buildCookieOptions(req))
       .json({
         message: "Login erfolgreich.",
         user: fullUser,
@@ -223,7 +226,7 @@ export const login = async (req, res) => {
  */
 export const logout = (req, res) => {
   res
-    .clearCookie("token")
+    .clearCookie("token", { path: "/" })
     .status(200)
     .json({ message: "Logout erfolgreich." });
 };

@@ -740,7 +740,9 @@ export const getInvoicePdf = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
   try {
+    console.log(`[PDF] starte Generierung für Invoice ${id}`);
     const { buffer, filename } = await ensureInvoicePdf(id);
+    console.log(`[PDF] fertig für Invoice ${id}: ${filename} (${buffer.length} bytes)`);
     const mode = req.query.mode;
 
     res.setHeader("Content-Type", "application/pdf");
@@ -789,6 +791,7 @@ async function ensureInvoicePdf(id) {
       error.code = "NOT_FOUND";
       throw error;
     }
+    console.log(`[PDF] Datenbank-Lookup ok für Invoice ${id}`);
 
     const row = invoiceResult.rows[0];
     const filename = `RE-${row.invoice_number}.pdf`;
@@ -840,6 +843,7 @@ async function ensureInvoicePdf(id) {
 
     const items = itemsResult.rows;
     const bankSettings = await getBankSettings();
+    console.log(`[PDF] ${items.length} Positionen + Bank-Settings geladen für Invoice ${id}`);
 
     const formattedDate =
       invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
@@ -897,6 +901,7 @@ async function ensureInvoicePdf(id) {
       margin: 1,
       scale: 5
     });
+    console.log(`[PDF] QR-Code erzeugt für Invoice ${id}`);
 
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
     const html = generateInvoiceHtml(
@@ -912,11 +917,21 @@ async function ensureInvoicePdf(id) {
     //
     // ⭐ PUPPETEER FIX – DAMIT LOGO & ASSETS LADEN ⭐
     //
+    const chromiumPath =
+      process.env.PUPPETEER_EXECUTABLE_PATH ||
+      process.env.CHROMIUM_PATH ||
+      ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/lib/chromium/chrome"].find(fs.existsSync);
+
+    console.log(`[PDF] Starte Chromium (${chromiumPath}) für Invoice ${id}`);
     const browser = await puppeteer.launch({
-      headless: "new",
+      headless: true,
+      executablePath: chromiumPath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-zygote",
         "--allow-file-access-from-files",
         "--disable-web-security",
         "--disable-features=IsolateOrigins,site-per-process"
@@ -924,27 +939,27 @@ async function ensureInvoicePdf(id) {
     });
 
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(0);
+    console.log(`[PDF] Page erstellt für Invoice ${id}`);
+    await page.setDefaultNavigationTimeout(30000);
 
-    // HTML in Datei schreiben
+    // HTML (debug optional auf Platte)
     const tempPath = path.join(__dirname, "invoice_temp.html");
     fs.writeFileSync(tempPath, html, "utf-8");
-
-    // Datei statt Data-URL öffnen
-    await page.goto("file://" + tempPath, {
-      waitUntil: "networkidle0"
-    });
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    console.log(`[PDF] HTML gesetzt für Invoice ${id}`);
 
     let pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true
     });
+    console.log(`[PDF] PDF gerendert (${pdfBuffer.length} bytes) für Invoice ${id}`);
 
     // PDF-Metadaten-Titel auf Rechnungsdatei setzen
     pdfBuffer = setPdfTitle(pdfBuffer, filename);
 
     await browser.close();
+    console.log(`[PDF] Browser geschlossen für Invoice ${id}`);
 
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
 

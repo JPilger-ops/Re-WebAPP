@@ -26,13 +26,19 @@ services:
     environment:
       DB_HOST: 127.0.0.1
       DB_PORT: 55432
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./backend/pdfs:/app/pdfs
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS -k https://127.0.0.1:3030/api/version || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "if [ \"$${APP_HTTPS_DISABLE}\" = \"true\" ] || [ \"$${APP_HTTPS_DISABLE}\" = \"1\" ]; then curl -fsS http://127.0.0.1:3030/api/version; else curl -fsS -k https://127.0.0.1:3030/api/version; fi",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
