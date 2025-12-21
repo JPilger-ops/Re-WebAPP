@@ -166,3 +166,32 @@ model schema_migrations {
   filename   String   @id
   applied_at DateTime @default(now()) @db.Timestamptz(6)
 }
+
+model smtp_settings {
+  id          Int       @id @default(1)
+  host        String?   @db.VarChar(255)
+  port        Int?
+  secure      Boolean?  @default(false)
+  user        String?   @db.VarChar(255)
+  pass_value  String?   @db.VarChar(1024)
+  from        String?   @db.VarChar(255)
+  reply_to    String?   @db.VarChar(255)
+  updated_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model invoice_header_settings {
+  id             Int       @id @default(1)
+  company_name   String?   @db.VarChar(255)
+  address_line1  String?   @db.VarChar(255)
+  address_line2  String?   @db.VarChar(255)
+  zip            String?   @db.VarChar(50)
+  city           String?   @db.VarChar(255)
+  country        String?   @db.VarChar(100)
+  vat_id         String?   @db.VarChar(100)
+  bank_name      String?   @db.VarChar(255)
+  iban           String?   @db.VarChar(100)
+  bic            String?   @db.VarChar(50)
+  footer_text    String?   @db.Text
+  logo_url       String?   @db.VarChar(512)
+  updated_at     DateTime? @default(now()) @db.Timestamp(6)
+}

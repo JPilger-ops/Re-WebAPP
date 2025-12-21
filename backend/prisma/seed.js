@@ -83,9 +83,50 @@ async function seedAdmin(adminRoleId) {
   console.log(`[seed] Admin-User angelegt (admin / ${DEFAULT_ADMIN_PASSWORD})`);
 }
 
+async function seedSmtpSettings() {
+  await prisma.smtp_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      host: null,
+      port: null,
+      secure: false,
+      user: null,
+      pass_value: null,
+      from: null,
+      reply_to: null,
+    },
+  });
+}
+
+async function seedInvoiceHeader() {
+  await prisma.invoice_header_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      company_name: null,
+      address_line1: null,
+      address_line2: null,
+      zip: null,
+      city: null,
+      country: null,
+      vat_id: null,
+      bank_name: null,
+      iban: null,
+      bic: null,
+      footer_text: null,
+      logo_url: null,
+    },
+  });
+}
+
 async function main() {
   const adminRoleId = await seedRoles();
   await seedAdmin(adminRoleId);
+  await seedSmtpSettings();
+  await seedInvoiceHeader();
 }
 
 main()
