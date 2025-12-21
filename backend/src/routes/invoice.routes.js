@@ -10,6 +10,7 @@ import {
   getNextInvoiceNumber,
   markPaid,
   exportInvoiceToDatev,
+  regenerateInvoicePdf,
   deleteInvoice,         // ⬅️ NEU
   getInvoiceStatusByReservation,
   updateInvoiceStatusByReservation
@@ -37,6 +38,7 @@ router.get("/next-number", getNextInvoiceNumber);
 router.get("/", getAllInvoices);     
 router.get("/:id", getInvoiceById);
 router.get("/:id/pdf", getInvoicePdf);
+router.post("/:id/pdf/regenerate", requireRole("admin"), regenerateInvoicePdf);
 router.post("/", createInvoice);
 
 // Löschen

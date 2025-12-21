@@ -9,6 +9,7 @@ import {
   testSmtp,
   updateInvoiceHeader,
   updateSmtpSettings,
+  regenerateInvoicePdf,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 
@@ -203,8 +204,11 @@ function Dashboard() {
         ))}
       </div>
       {isAdmin && (
-        <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-900">
-          Admin: Einstellungen findest du unter <a className="underline" href="/settings">/settings</a>.
+        <div className="mt-8 space-y-4">
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-900">
+            Admin: Einstellungen findest du unter <a className="underline" href="/settings">/settings</a>.
+          </div>
+          <RegeneratePdfCard />
         </div>
       )}
     </div>
@@ -216,6 +220,66 @@ function PlaceholderCard({ title }: { title: string }) {
     <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
       <h2 className="font-semibold mb-2">{title}</h2>
       <p className="text-sm text-slate-600">Noch nicht migriert. Funktionalität folgt in der neuen SPA.</p>
+    </div>
+  );
+}
+
+function RegeneratePdfCard() {
+  const [invoiceId, setInvoiceId] = useState("");
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onRegenerate = async () => {
+    const id = Number(invoiceId);
+    if (!id) {
+      setStatus({ type: "error", message: "Bitte eine gültige Rechnungs-ID angeben." });
+      return;
+    }
+    setBusy(true);
+    setStatus(null);
+    try {
+      const res = await regenerateInvoicePdf(id);
+      setStatus({
+        type: "success",
+        message: `PDF neu erstellt (${res.filename})${res.size ? `, Größe ${res.size} Bytes` : ""}.`,
+      });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "PDF konnte nicht neu erstellt werden." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+      <h3 className="font-semibold mb-2">PDF neu erstellen (Admin)</h3>
+      <p className="text-sm text-slate-600 mb-3">
+        Falls Briefkopf geändert wurde oder das PDF veraltet ist, kannst du es hier neu erzeugen.
+      </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          className="input w-40"
+          placeholder="Rechnungs-ID"
+          value={invoiceId}
+          onChange={(e) => setInvoiceId(e.target.value)}
+          inputMode="numeric"
+        />
+        <button className="btn-secondary" onClick={onRegenerate} disabled={busy}>
+          {busy ? "Erzeuge ..." : "PDF neu erstellen"}
+        </button>
+      </div>
+      {status && (
+        <div
+          className={`mt-3 text-sm rounded-md px-3 py-2 ${
+            status.type === "success"
+              ? "bg-green-50 text-green-800 border border-green-100"
+              : "bg-red-50 text-red-700 border border-red-100"
+          }`}
+        >
+          {status.message}
+        </div>
+      )}
     </div>
   );
 }

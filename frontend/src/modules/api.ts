@@ -111,3 +111,10 @@ export async function updateInvoiceHeader(payload: Partial<InvoiceHeaderSettings
     body: JSON.stringify(payload),
   });
 }
+
+export async function regenerateInvoicePdf(id: number) {
+  return apiFetch<{ message: string; filename: string; path: string; size?: number | null }>(
+    `/invoices/${id}/pdf/regenerate`,
+    { method: "POST" }
+  );
+}

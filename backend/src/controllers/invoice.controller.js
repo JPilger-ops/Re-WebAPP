@@ -9,6 +9,7 @@ import { getBankSettings } from "../utils/bankSettings.js";
 import { getDatevSettings } from "../utils/datevSettings.js";
 import nodemailer from "nodemailer";
 import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
+import { getInvoiceHeaderSettings } from "../utils/invoiceHeaderSettings.js";
 import {
   buildDatevMailBody,
   buildDatevMailSubject,
@@ -742,6 +743,50 @@ export const getInvoicePdf = async (req, res) => {
 };
 
 /**
+ * POST /api/invoices/:id/pdf/regenerate
+ * Entfernt bestehendes PDF (falls vorhanden) und erzeugt ein neues
+ */
+export const regenerateInvoicePdf = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  try {
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      select: { invoice_number: true },
+    });
+    if (!invoiceRow) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const filename = `RE-${invoiceRow.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+    try {
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+      }
+    } catch (err) {
+      console.warn(`[PDF] Konnte bestehendes PDF nicht löschen (${filepath}):`, err.message);
+    }
+
+    const { filepath: finalPath, filename: finalName, buffer } = await ensureInvoicePdf(id);
+
+    return res.json({
+      message: "PDF neu erstellt.",
+      filename: finalName,
+      path: finalPath,
+      size: buffer?.length || null,
+    });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("PDF Regenerate fehlgeschlagen:", err);
+    return res.status(500).json({ message: "PDF konnte nicht neu erstellt werden." });
+  }
+};
+
+/**
  * Erstellt bei Bedarf das PDF und liefert Buffer + Metadaten zurück
  */
 async function ensureInvoicePdf(id) {
@@ -827,6 +872,7 @@ async function ensureInvoicePdf(id) {
       line_total_gross: toNumber(item.line_total_gross),
     }));
     const bankSettings = await getBankSettings();
+    const headerSettings = await getInvoiceHeaderSettings();
     console.log(`[PDF] ${items.length} Positionen + Bank-Settings geladen für Invoice ${id}`);
 
     const formattedDate =
@@ -887,6 +933,22 @@ async function ensureInvoicePdf(id) {
     });
     console.log(`[PDF] QR-Code erzeugt für Invoice ${id}`);
 
+    // Briefkopf/Footersettings kombinieren (Header > Bank Fallback)
+    const header = {
+      company_name: headerSettings?.company_name || bankSettings.account_holder || "RechnungsAPP",
+      address_line1: headerSettings?.address_line1 || "",
+      address_line2: headerSettings?.address_line2 || "",
+      zip: headerSettings?.zip || "",
+      city: headerSettings?.city || "",
+      country: headerSettings?.country || "",
+      vat_id: headerSettings?.vat_id || "",
+      footer_text: headerSettings?.footer_text || "",
+      logo_url: headerSettings?.logo_url || null,
+      bank_name: headerSettings?.bank_name || bankSettings.bank_name || "",
+      iban: headerSettings?.iban || bankSettings.iban || "",
+      bic: headerSettings?.bic || bankSettings.bic || "",
+    };
+
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
     const html = generateInvoiceHtml(
       invoice,
@@ -895,7 +957,8 @@ async function ensureInvoicePdf(id) {
       itemsRowsHtml,
       sepaQrBase64,
       logoBase64ForInvoice,
-      bankSettings
+      bankSettings,
+      header
     );
 
     //
@@ -995,7 +1058,16 @@ async function ensureInvoicePdf(id) {
   }
 }
 
-function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice, bankSettings) {
+function generateInvoiceHtml(
+  invoice,
+  formattedDate,
+  formattedReceiptDate,
+  itemsRowsHtml,
+  sepaQrBase64,
+  logoBase64ForInvoice,
+  bankSettings,
+  headerSettings
+) {
   const formatIban = (iban) => {
     if (!iban) return "-";
     return iban.replace(/(.{4})/g, "$1 ").trim();
@@ -1003,10 +1075,30 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
   const bankDisplay = {
     account_holder: bankSettings?.account_holder || "-",
-    bank_name: bankSettings?.bank_name || "-",
-    iban: formatIban(bankSettings?.iban),
-    bic: (bankSettings?.bic || "-").toUpperCase(),
+    bank_name: headerSettings?.bank_name || bankSettings?.bank_name || "-",
+    iban: formatIban(headerSettings?.iban || bankSettings?.iban),
+    bic: (headerSettings?.bic || bankSettings?.bic || "-").toUpperCase(),
   };
+
+  const header = {
+    company_name: headerSettings?.company_name || bankDisplay.account_holder || "RechnungsAPP",
+    address_line1: headerSettings?.address_line1 || "",
+    address_line2: headerSettings?.address_line2 || "",
+    zip: headerSettings?.zip || "",
+    city: headerSettings?.city || "",
+    country: headerSettings?.country || "",
+    vat_id: headerSettings?.vat_id || "",
+    footer_text: headerSettings?.footer_text || "",
+    logo_url: headerSettings?.logo_url || null,
+  };
+
+  const brandLines = [
+    header.company_name,
+    [header.address_line1, header.address_line2].filter(Boolean).join(", "),
+    [header.zip, header.city].filter(Boolean).join(" "),
+    header.country,
+    header.vat_id ? `USt-IdNr.: ${header.vat_id}` : "",
+  ].filter(Boolean);
 
   return `
 <!DOCTYPE html>
@@ -1197,18 +1289,14 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
   "></div>
 
   <div class="brand-box">
-  <img src="data:image/png;base64,${logoBase64ForInvoice}" />
-  <div class="brand-sub">
-      Thomas Pilger<br>
-      Mauspfad 3 · 53842 Troisdorf<br>
-      Tel: 02241 76649<br>
-      E-Mail: welcome@forsthaus-telegraph.de<br>
-      www.der-heidekoenig.de
+    <img src="${header.logo_url ? header.logo_url : `data:image/png;base64,${logoBase64ForInvoice}`}" alt="Logo" />
+    <div class="brand-sub">
+      ${brandLines.join("<br>")}
+    </div>
   </div>
-</div>
 
   <div class="sender-line">
-    Waldwirtschaft Heidekönig · Mauspfad 3 · 53842 Troisdorf
+    ${[header.company_name, header.address_line1, header.address_line2, [header.zip, header.city].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
   </div>
 
   <div class="recipient">
@@ -1287,9 +1375,14 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
     }
 
     <div class="footer">
-      Steuernummer: 220/5060/2434 · USt-IdNr.: DE123224453<br>
+      ${
+        header.vat_id
+          ? `USt-IdNr.: ${header.vat_id}<br>`
+          : ""
+      }
       Bank: ${bankDisplay.bank_name} · IBAN: ${bankDisplay.iban} · BIC: ${bankDisplay.bic}<br>
-      Kontoinhaber: ${bankDisplay.account_holder}
+      Kontoinhaber: ${bankDisplay.account_holder}<br>
+      ${header.footer_text || ""}
     </div>
 
 </div>
