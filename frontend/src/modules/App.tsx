@@ -5,6 +5,10 @@ import {
   AuthUser,
   ApiKeyInfo,
   Customer,
+  Category,
+  InvoiceDetail,
+  InvoiceItem,
+  InvoiceListItem,
   getInvoiceHeader,
   getSmtpSettings,
   login as apiLogin,
@@ -20,6 +24,17 @@ import {
   createCustomer,
   updateCustomer,
   deleteCustomer,
+  listCategories,
+  listCategoryLogos,
+  uploadCategoryLogo,
+  createCategory as apiCreateCategory,
+  updateCategory as apiUpdateCategory,
+  deleteCategory as apiDeleteCategory,
+  getCategoryTemplateApi,
+  saveCategoryTemplateApi,
+  getCategoryEmailApi,
+  saveCategoryEmailApi,
+  testCategoryEmailApi,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea } from "./ui";
@@ -145,7 +160,7 @@ function Shell() {
     { to: "/dashboard", label: "Dashboard" },
     { to: "/customers", label: "Kunden" },
     { to: "/invoices", label: "Rechnungen" },
-    ...(isAdmin ? [{ to: "/settings", label: "Einstellungen" }] : []),
+    ...(isAdmin ? [{ to: "/categories", label: "Kategorien" }, { to: "/settings", label: "Einstellungen" }] : []),
   ];
 
   return (
@@ -188,6 +203,7 @@ function Shell() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/invoices" element={<Invoices />} />
+            <Route path="/categories" element={<Categories />} />
             <Route path="/settings" element={<AdminSettings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
@@ -256,6 +272,7 @@ function PlaceholderCard({ title }: { title: string }) {
 
 function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [filtered, setFiltered] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -413,6 +430,168 @@ function Customers() {
   );
 }
 
+function Categories() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [logos, setLogos] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<FormStatus>(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; category?: Category } | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [busyDelete, setBusyDelete] = useState(false);
+
+  const applyFilter = (list: Category[], term: string) => {
+    const t = term.toLowerCase();
+    if (!t) return list;
+    return list.filter((c) => (c.label || "").toLowerCase().includes(t) || (c.key || "").toLowerCase().includes(t));
+  };
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [cats, logoList] = await Promise.all([listCategories(), listCategoryLogos().catch(() => [])]);
+      setCategories(cats);
+      setLogos(logoList);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || "Kategorien konnten nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = applyFilter(categories, search);
+
+  const onDelete = async (id: number) => {
+    setBusyDelete(true);
+    setToast(null);
+    try {
+      await apiDeleteCategory(id);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      setToast({ type: "success", message: "Kategorie gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Kategorie konnte nicht gelöscht werden." });
+    } finally {
+      setBusyDelete(false);
+      setConfirmId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Kategorien</h1>
+          <p className="text-slate-600 text-sm">Logos, Templates und SMTP pro Kategorie verwalten.</p>
+        </div>
+        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
+      </div>
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <Input
+          placeholder="Suche nach Label/Key"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-64"
+        />
+        <Button variant="secondary" onClick={load}>Aktualisieren</Button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Kategorien ...
+        </div>
+      )}
+      {error && <Alert type="error">{error}</Alert>}
+      {!loading && !filtered.length && !error && (
+        <EmptyState title="Keine Kategorien" description="Lege eine neue Kategorie mit Logo an." />
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {filtered.map((cat) => (
+            <div key={cat.id} className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {cat.logo_file ? (
+                    <img
+                      src={`/logos/${cat.logo_file}`}
+                      alt="Logo"
+                      className="w-12 h-12 object-contain border border-slate-200 rounded"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 border border-dashed border-slate-200 rounded flex items-center justify-center text-xs text-slate-500">
+                      Logo
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-semibold">{cat.label}</div>
+                    <div className="text-xs text-slate-500">{cat.key}</div>
+                  </div>
+                </div>
+                <div className="space-x-2">
+                  <Button variant="secondary" onClick={() => setModal({ mode: "edit", category: cat })}>Edit</Button>
+                  <Button variant="danger" onClick={() => setConfirmId(cat.id)}>Delete</Button>
+                </div>
+              </div>
+              {cat.template && (
+                <div className="mt-3 text-xs text-slate-600">
+                  <div className="font-semibold">Template:</div>
+                  <div>{cat.template.subject}</div>
+                </div>
+              )}
+              {cat.email_account && (
+                <div className="mt-2 text-xs text-slate-600">
+                  <div className="font-semibold">SMTP:</div>
+                  <div>{cat.email_account.email_address}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
+
+      {modal && (
+        <CategoryFormModal
+          mode={modal.mode}
+          category={modal.category}
+          logos={logos}
+          onClose={() => setModal(null)}
+          onSaved={(cat) => {
+            setModal(null);
+            if (modal.mode === "edit") {
+              setCategories((prev) => prev.map((c) => (c.id === cat.id ? cat : c)));
+            } else {
+              setCategories((prev) => [...prev, cat]);
+            }
+            setToast({ type: "success", message: "Kategorie gespeichert." });
+          }}
+          onError={(msg) => setToast({ type: "error", message: msg })}
+        />
+      )}
+
+      {confirmId !== null && (
+        <Confirm
+          title="Kategorie löschen?"
+          description="Kategorie wird entfernt. Stelle sicher, dass keine Rechnungen sie benötigen."
+          onConfirm={() => onDelete(confirmId)}
+          onCancel={() => setConfirmId(null)}
+          busy={busyDelete}
+        />
+      )}
+    </div>
+  );
+}
+
 function Invoices() {
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
@@ -548,6 +727,7 @@ function Invoices() {
                 <th className="px-3 py-2">Nr.</th>
                 <th className="px-3 py-2">Datum</th>
                 <th className="px-3 py-2">Kunde</th>
+                <th className="px-3 py-2">Kategorie</th>
                 <th className="px-3 py-2">Betrag</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 text-right">Aktionen</th>
@@ -559,13 +739,14 @@ function Invoices() {
                 return (
                   <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2 font-semibold">{inv.invoice_number}</td>
-                    <td className="px-3 py-2 text-slate-600">
-                      {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
-                    </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
+                  </td>
+                  <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
+                  <td className="px-3 py-2 text-slate-600">{inv.category_label || "–"}</td>
+                  <td className="px-3 py-2 text-slate-700">
+                    {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
+                  </td>
                     <td className="px-3 py-2">
                       {st === "paid" ? (
                         <span className="text-green-700">Bezahlt</span>
@@ -770,6 +951,7 @@ function InvoiceFormModal({
     date: new Date().toISOString().slice(0, 10),
     b2b: false,
     ust_id: "",
+    category_key: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -779,11 +961,13 @@ function InvoiceFormModal({
     setLoading(true);
     setError(null);
     try {
-      const [custs, nextNr] = await Promise.all([
+      const [custs, cats, nextNr] = await Promise.all([
         listCustomers(),
+        listCategories().catch(() => []),
         mode === "create" ? getNextInvoiceNumber() : Promise.resolve({ next_number: "" }),
       ]);
       setCustomers(custs);
+      setCategories(cats);
       if (mode === "create") {
         setForm((f) => ({ ...f, invoice_number: nextNr.next_number || f.invoice_number }));
       }
@@ -800,6 +984,7 @@ function InvoiceFormModal({
           date: data.invoice.date?.slice(0, 10) || "",
           b2b: data.invoice.b2b === true,
           ust_id: data.invoice.ust_id || "",
+          category_key: data.invoice.category || "",
         });
         setItems(
           data.items.map((i) => ({
@@ -891,7 +1076,7 @@ function InvoiceFormModal({
           date: form.date,
           b2b: form.b2b,
           ust_id: form.ust_id.trim() || null,
-          category: null,
+          category: form.category_key || null,
         },
         items: items.map((i) => ({
           description: i.description.trim(),
@@ -949,6 +1134,20 @@ function InvoiceFormModal({
                 onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
                 required
               />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Kategorie</span>
+              <Select
+                value={form.category_key}
+                onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
+              >
+                <option value="">– Keine –</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
             </label>
             <label className="text-sm text-slate-700">
               <span className="font-medium">Datum</span>
@@ -1104,6 +1303,7 @@ function InvoiceDetailModal({
         <div className="grid md:grid-cols-2 gap-2">
           <div><span className="text-slate-500">Datum:</span> {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
           <div><span className="text-slate-500">Status:</span> {inv.status_paid_at ? "Bezahlt" : inv.status_sent ? "Gesendet" : "Offen"}</div>
+          <div><span className="text-slate-500">Kategorie:</span> {inv.category || "–"}</div>
         </div>
         <div className="border border-slate-200 rounded-md">
           <table className="w-full text-sm">
@@ -1131,6 +1331,271 @@ function InvoiceDetailModal({
           Summe: {inv.gross_total != null ? `${Number(inv.gross_total).toFixed(2)} €` : "–"}
         </div>
       </div>
+    </Modal>
+  );
+}
+
+function CategoryFormModal({
+  mode,
+  category,
+  logos,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  mode: "create" | "edit";
+  category?: Category;
+  logos: string[];
+  onClose: () => void;
+  onSaved: (c: Category) => void;
+  onError: (msg: string) => void;
+}) {
+  const [form, setForm] = useState({
+    key: category?.key || "",
+    label: category?.label || "",
+    logo_file: category?.logo_file || "",
+  });
+  const [availableLogos, setAvailableLogos] = useState<string[]>(logos || []);
+  const [template, setTemplate] = useState<{ subject: string; body_html: string }>({
+    subject: category?.template?.subject || "",
+    body_html: category?.template?.body_html || "",
+  });
+  const [email, setEmail] = useState({
+    email_address: category?.email_account?.email_address || "",
+    display_name: category?.email_account?.display_name || "",
+    smtp_host: category?.email_account?.smtp_host || "",
+    smtp_port: category?.email_account?.smtp_port ? String(category?.email_account?.smtp_port) : "",
+    smtp_secure: category?.email_account?.smtp_secure ?? true,
+    smtp_user: category?.email_account?.smtp_user || "",
+    smtp_pass: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+
+  useEffect(() => {
+    // load template/email for edit
+    if (mode === "edit" && category) {
+      Promise.all([
+        getCategoryTemplateApi(category.id).catch(() => null),
+        getCategoryEmailApi(category.id).catch(() => null),
+        listCategoryLogos().catch(() => []),
+      ]).then(([tpl, mail, logos]) => {
+        if (tpl) setTemplate({ subject: tpl.subject || "", body_html: tpl.body_html || "" });
+        if (mail) {
+          setEmail({
+            email_address: mail.email_address || "",
+            display_name: mail.display_name || "",
+            smtp_host: mail.smtp_host || "",
+            smtp_port: mail.smtp_port ? String(mail.smtp_port) : "",
+            smtp_secure: mail.smtp_secure ?? true,
+            smtp_user: mail.smtp_user || "",
+            smtp_pass: "",
+          });
+        }
+        if (logos?.length) setAvailableLogos(logos);
+      });
+    } else {
+      listCategoryLogos().then((l) => setAvailableLogos(l)).catch(() => {});
+    }
+  }, []);
+
+  const onFileSelect = async (file?: File) => {
+    if (!file) return;
+    const extOk = /\.(png|jpg|jpeg|svg)$/i.test(file.name);
+    if (!extOk) {
+      setStatus({ type: "error", message: "Nur PNG/JPG/SVG erlaubt." });
+      return;
+    }
+    if (file.size > 1.5 * 1024 * 1024) {
+      setStatus({ type: "error", message: "Datei zu groß (max 1.5 MB)." });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      try {
+        const res = await uploadCategoryLogo(file.name, dataUrl);
+        setForm((f) => ({ ...f, logo_file: res.filename }));
+        if (!availableLogos.includes(res.filename)) {
+          setAvailableLogos((prev) => [...prev, res.filename]);
+        }
+        setStatus({ type: "success", message: "Logo hochgeladen." });
+      } catch (err: any) {
+        const apiErr = err as ApiError;
+        setStatus({ type: "error", message: apiErr.message || "Upload fehlgeschlagen." });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus(null);
+    if (!form.key.trim() || !form.label.trim() || !form.logo_file) {
+      setStatus({ type: "error", message: "Key, Label und Logo sind erforderlich." });
+      return;
+    }
+    setLoading(true);
+    try {
+      let saved: Category;
+      if (mode === "create") {
+        saved = await apiCreateCategory({
+          key: form.key.trim(),
+          label: form.label.trim(),
+          logo_file: form.logo_file,
+        });
+      } else if (category) {
+        saved = await apiUpdateCategory(category.id, {
+          key: form.key.trim(),
+          label: form.label.trim(),
+          logo_file: form.logo_file,
+        });
+      } else {
+        throw new Error("Ungültiger Zustand");
+      }
+
+      // Template speichern (optional)
+      if (template.subject && template.body_html) {
+        await saveCategoryTemplateApi(saved.id, template);
+      }
+      // Email speichern, wenn Daten vorhanden
+      if (email.email_address || email.smtp_host || email.smtp_user || email.smtp_pass) {
+        await saveCategoryEmailApi(saved.id, {
+          display_name: email.display_name || null,
+          email_address: email.email_address || null,
+          smtp_host: email.smtp_host || null,
+          smtp_port: email.smtp_port ? Number(email.smtp_port) : null,
+          smtp_secure: email.smtp_secure,
+          smtp_user: email.smtp_user || null,
+          smtp_pass: email.smtp_pass || undefined,
+        });
+      }
+
+      onSaved({ ...saved });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "Kategorie konnte nicht gespeichert werden.";
+      setStatus({ type: "error", message: msg });
+      onError(msg);
+      return;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal title={mode === "create" ? "Neue Kategorie" : "Kategorie bearbeiten"} onClose={onClose}>
+      <form className="space-y-3" onSubmit={onSave}>
+        <div className="grid md:grid-cols-2 gap-3">
+          <Field label="Key">
+            <Input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} required />
+          </Field>
+          <Field label="Label">
+            <Input value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} required />
+          </Field>
+        </div>
+        <div className="space-y-2">
+          <div className="text-sm text-slate-700 font-medium">Logo</div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <select
+              className="input w-48"
+              value={form.logo_file}
+              onChange={(e) => setForm((f) => ({ ...f, logo_file: e.target.value }))}
+            >
+              <option value="">– Logo wählen –</option>
+              {availableLogos.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            <input
+              type="file"
+              accept=".png,.jpg,.jpeg,.svg"
+              onChange={(e) => onFileSelect(e.target.files?.[0])}
+            />
+            {form.logo_file && (
+              <img
+                src={`/logos/${form.logo_file}`}
+                alt="Logo"
+                className="w-12 h-12 object-contain border border-slate-200 rounded"
+              />
+            )}
+          </div>
+          <p className="text-xs text-slate-500">PNG/JPG/SVG, max 1.5 MB.</p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="font-semibold text-sm">E-Mail/SMTP (optional)</div>
+          <div className="grid md:grid-cols-2 gap-2">
+            <Input
+              placeholder="Absender-Name"
+              value={email.display_name}
+              onChange={(e) => setEmail((f) => ({ ...f, display_name: e.target.value }))}
+            />
+            <Input
+              placeholder="Absender-E-Mail"
+              value={email.email_address}
+              onChange={(e) => setEmail((f) => ({ ...f, email_address: e.target.value }))}
+            />
+            <Input
+              placeholder="SMTP Host"
+              value={email.smtp_host || ""}
+              onChange={(e) => setEmail((f) => ({ ...f, smtp_host: e.target.value }))}
+            />
+            <Input
+              placeholder="SMTP Port"
+              value={email.smtp_port}
+              onChange={(e) => setEmail((f) => ({ ...f, smtp_port: e.target.value }))}
+            />
+            <label className="text-sm text-slate-700 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={email.smtp_secure}
+                onChange={(e) => setEmail((f) => ({ ...f, smtp_secure: e.target.checked }))}
+              />
+              <span>SMTP Secure</span>
+            </label>
+            <Input
+              placeholder="SMTP User"
+              value={email.smtp_user || ""}
+              onChange={(e) => setEmail((f) => ({ ...f, smtp_user: e.target.value }))}
+            />
+            <Input
+              placeholder="SMTP Passwort (write-only)"
+              type="password"
+              value={email.smtp_pass}
+              onChange={(e) => setEmail((f) => ({ ...f, smtp_pass: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="font-semibold text-sm">Template (optional)</div>
+          <Input
+            placeholder="Betreff"
+            value={template.subject}
+            onChange={(e) => setTemplate((t) => ({ ...t, subject: e.target.value }))}
+          />
+          <Textarea
+            placeholder="HTML Body"
+            value={template.body_html}
+            onChange={(e) => setTemplate((t) => ({ ...t, body_html: e.target.value }))}
+            className="min-h-[120px]"
+          />
+        </div>
+
+        {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" type="button" onClick={onClose}>
+            Abbrechen
+          </Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? "Speichern ..." : "Speichern"}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

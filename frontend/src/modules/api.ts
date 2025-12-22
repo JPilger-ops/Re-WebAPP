@@ -280,3 +280,92 @@ export async function deleteInvoice(id: number) {
     method: "DELETE",
   });
 }
+
+// Categories
+export interface Category {
+  id: number;
+  key: string;
+  label: string;
+  logo_file: string | null;
+  email_account?: CategoryEmailAccount | null;
+  template?: CategoryTemplate | null;
+}
+
+export interface CategoryEmailAccount {
+  id: number | null;
+  display_name: string | null;
+  email_address: string | null;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_secure: boolean | null;
+  smtp_user: string | null;
+}
+
+export interface CategoryTemplate {
+  id: number;
+  category_id?: number;
+  subject: string;
+  body_html: string;
+}
+
+export async function listCategories() {
+  return apiFetch<Category[]>("/categories");
+}
+
+export async function listCategoryLogos() {
+  return apiFetch<string[]>("/categories/logos");
+}
+
+export async function uploadCategoryLogo(filename: string, dataUrl: string) {
+  return apiFetch<{ filename: string; size: number }>("/categories/logo", {
+    method: "POST",
+    body: JSON.stringify({ filename, dataUrl }),
+  });
+}
+
+export async function createCategory(payload: { key: string; label: string; logo_file: string }) {
+  return apiFetch<Category>("/categories", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCategory(id: number, payload: { key: string; label: string; logo_file: string }) {
+  return apiFetch<Category>(`/categories/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCategory(id: number) {
+  return apiFetch<{ message: string }>(`/categories/${id}`, { method: "DELETE" });
+}
+
+export async function getCategoryTemplateApi(id: number) {
+  return apiFetch<CategoryTemplate | null>(`/categories/${id}/template`);
+}
+
+export async function saveCategoryTemplateApi(id: number, payload: { subject: string; body_html: string }) {
+  return apiFetch<CategoryTemplate>(`/categories/${id}/template`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getCategoryEmailApi(id: number) {
+  return apiFetch<CategoryEmailAccount | null>(`/categories/${id}/email`);
+}
+
+export async function saveCategoryEmailApi(id: number, payload: Partial<CategoryEmailAccount> & { smtp_pass?: string }) {
+  return apiFetch<CategoryEmailAccount>(`/categories/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testCategoryEmailApi(id: number, payload: Partial<CategoryEmailAccount> & { smtp_pass?: string }) {
+  return apiFetch<{ ok: boolean; message?: string }>(`/categories/${id}/email/test`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
