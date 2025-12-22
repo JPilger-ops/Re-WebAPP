@@ -9,6 +9,8 @@ import {
   InvoiceDetail,
   InvoiceItem,
   InvoiceListItem,
+  User,
+  Role,
   getInvoiceHeader,
   getSmtpSettings,
   login as apiLogin,
@@ -40,11 +42,46 @@ import {
   getInvoiceEmailPreview,
   sendInvoiceEmailApi,
   exportInvoiceDatev,
+  listUsers,
+  createUserApi,
+  updateUserApi,
+  deleteUserApi,
+  listRoles,
+  getRolePermissionsApi,
+  createRoleApi,
+  updateRoleApi,
+  deleteRoleApi,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge } from "./ui";
 
 type FormStatus = { type: "success" | "error"; message: string } | null;
+
+const PERMISSION_OPTIONS: { key: string; label: string }[] = [
+  { key: "invoices.read", label: "Rechnungen lesen" },
+  { key: "invoices.create", label: "Rechnungen erstellen" },
+  { key: "invoices.update", label: "Rechnungen bearbeiten" },
+  { key: "invoices.export", label: "Rechnungen exportieren" },
+  { key: "invoices.delete", label: "Rechnungen löschen" },
+  { key: "stats.view", label: "Statistiken ansehen" },
+  { key: "customers.read", label: "Kunden lesen" },
+  { key: "customers.create", label: "Kunden anlegen" },
+  { key: "customers.update", label: "Kunden bearbeiten" },
+  { key: "customers.delete", label: "Kunden löschen" },
+  { key: "users.read", label: "Benutzer lesen" },
+  { key: "users.create", label: "Benutzer anlegen" },
+  { key: "users.update", label: "Benutzer bearbeiten" },
+  { key: "users.delete", label: "Benutzer löschen" },
+  { key: "users.resetPassword", label: "Benutzer-Passwort zurücksetzen" },
+  { key: "roles.read", label: "Rollen lesen" },
+  { key: "roles.create", label: "Rollen anlegen" },
+  { key: "roles.update", label: "Rollen bearbeiten" },
+  { key: "roles.delete", label: "Rollen löschen" },
+  { key: "settings.general", label: "Einstellungen ändern" },
+  { key: "categories.read", label: "Kategorien lesen" },
+  { key: "categories.write", label: "Kategorien bearbeiten" },
+  { key: "categories.delete", label: "Kategorien löschen" },
+];
 
 export function App() {
   return (
@@ -165,7 +202,14 @@ function Shell() {
     { to: "/dashboard", label: "Dashboard" },
     { to: "/customers", label: "Kunden" },
     { to: "/invoices", label: "Rechnungen" },
-    ...(isAdmin ? [{ to: "/categories", label: "Kategorien" }, { to: "/settings", label: "Einstellungen" }] : []),
+    ...(isAdmin
+      ? [
+          { to: "/categories", label: "Kategorien" },
+          { to: "/settings", label: "Einstellungen" },
+          { to: "/admin/users", label: "Admin: Benutzer" },
+          { to: "/admin/roles", label: "Admin: Rollen & Rechte" },
+        ]
+      : []),
   ];
 
   return (
@@ -210,6 +254,8 @@ function Shell() {
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/settings" element={<AdminSettings />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/roles" element={<AdminRoles />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
@@ -222,14 +268,14 @@ function NavLink({ href, label }: { href: string; label: string }) {
   const location = useLocation();
   const active = location.pathname === href;
   return (
-    <a
-      href={href}
+    <Link
+      to={href}
       className={`px-2 py-1 rounded-md text-sm ${
         active ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100"
       }`}
     >
       {label}
-    </a>
+    </Link>
   );
 }
 
@@ -2505,6 +2551,531 @@ function ApiKeysSection() {
         </div>
       )}
     </div>
+  );
+}
+
+function AdminUsers() {
+  const { user } = useAuth();
+  const isAdmin = user?.role_name === "admin";
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; user?: User } | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const withRoleName = (u: User) => ({
+    ...u,
+    role_name: roles.find((r) => r.id === u.role_id)?.name || u.role_name || null,
+  });
+
+  const load = async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const [roleRes, userRes] = await Promise.all([listRoles(), listUsers()]);
+      setRoles(roleRes);
+      setUsers(userRes);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Benutzer konnten nicht geladen werden." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) load();
+  }, [isAdmin]);
+
+  if (!isAdmin) {
+    return <Alert type="error">Keine Berechtigung.</Alert>;
+  }
+
+  const onDelete = async (id: number) => {
+    setBusyId(id);
+    setStatus(null);
+    try {
+      await deleteUserApi(id);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      setStatus({ type: "success", message: "Benutzer gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Löschen fehlgeschlagen." });
+    } finally {
+      setBusyId(null);
+      setConfirmId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Benutzer</h1>
+          <p className="text-slate-600 text-sm">Admin-Bereich: Benutzer anlegen, Rollen zuweisen.</p>
+        </div>
+        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Benutzer ...
+        </div>
+      )}
+
+      {!loading && (
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-slate-200 bg-slate-50">
+                <th className="px-3 py-2">Benutzername</th>
+                <th className="px-3 py-2">Rolle</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Erstellt</th>
+                <th className="px-3 py-2 text-right">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-b border-slate-100">
+                  <td className="px-3 py-2 font-medium">{u.username}</td>
+                  <td className="px-3 py-2">{u.role_name || "—"}</td>
+                  <td className="px-3 py-2">
+                    {u.is_active ? <Badge tone="green">aktiv</Badge> : <Badge tone="amber">inaktiv</Badge>}
+                  </td>
+                  <td className="px-3 py-2">
+                    {u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right flex gap-2 justify-end">
+                    <Button variant="secondary" onClick={() => setModal({ mode: "edit", user: u })}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => setConfirmId(u.id)}
+                      disabled={busyId === u.id}
+                    >
+                      {busyId === u.id ? "..." : "Delete"}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {!users.length && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-4 text-center text-slate-500">
+                    Keine Benutzer vorhanden.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
+
+      {modal && (
+        <UserModal
+          mode={modal.mode}
+          user={modal.user}
+          roles={roles}
+          onClose={() => setModal(null)}
+          onSaved={(saved) => {
+            const shaped = withRoleName(saved);
+            if (modal.mode === "edit" && saved) {
+              setUsers((prev) => prev.map((u) => (u.id === shaped.id ? shaped : u)));
+            } else if (saved) {
+              setUsers((prev) => [...prev, shaped]);
+            }
+            setStatus({ type: "success", message: "Benutzer gespeichert." });
+          }}
+          onError={(msg) => setStatus({ type: "error", message: msg })}
+        />
+      )}
+
+      {confirmId !== null && (
+        <Confirm
+          title="Benutzer löschen?"
+          description="Dieser Vorgang kann nicht rückgängig gemacht werden."
+          onConfirm={() => onDelete(confirmId)}
+          onCancel={() => setConfirmId(null)}
+          busy={busyId === confirmId}
+        />
+      )}
+    </div>
+  );
+}
+
+function UserModal({
+  mode,
+  user,
+  roles,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  mode: "create" | "edit";
+  user?: User;
+  roles: Role[];
+  onClose: () => void;
+  onSaved: (u: User) => void;
+  onError: (msg: string) => void;
+}) {
+  const [form, setForm] = useState({
+    username: user?.username || "",
+    password: "",
+    role_id: user?.role_id || null,
+    is_active: user?.is_active ?? true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.username.trim()) {
+      setError("Benutzername ist erforderlich.");
+      return;
+    }
+    if (mode === "create" && !form.password.trim()) {
+      setError("Passwort ist erforderlich.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (mode === "create") {
+        const res = await createUserApi({
+          username: form.username.trim(),
+          password: form.password,
+          role_id: form.role_id || undefined,
+        });
+        onSaved(res);
+      } else if (user) {
+        const res = await updateUserApi(user.id, {
+          username: form.username.trim(),
+          role_id: form.role_id || null,
+          is_active: form.is_active,
+        });
+        onSaved(res);
+      }
+      onClose();
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg =
+        apiErr.status === 409
+          ? "Benutzername existiert bereits."
+          : apiErr.message || "Speichern fehlgeschlagen.";
+      setError(msg);
+      onError(msg);
+      return;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={mode === "create" ? "Neuer Benutzer" : "Benutzer bearbeiten"} onClose={onClose}>
+      <form className="space-y-3" onSubmit={onSubmit}>
+        <Field label="Benutzername">
+          <Input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
+        </Field>
+        {mode === "create" && (
+          <Field label="Passwort">
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            />
+          </Field>
+        )}
+        <Field label="Rolle">
+          <Select
+            value={form.role_id ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value ? Number(e.target.value) : null }))}
+          >
+            <option value="">– Standard –</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={form.is_active}
+            onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+          />
+          <span>Aktiv</span>
+        </label>
+
+        {error && <Alert type="error">{error}</Alert>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" type="button" onClick={onClose}>
+            Abbrechen
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Speichern ..." : "Speichern"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function AdminRoles() {
+  const { user } = useAuth();
+  const isAdmin = user?.role_name === "admin";
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; role?: Role } | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const res = await listRoles();
+      setRoles(res);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Rollen konnten nicht geladen werden." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) load();
+  }, [isAdmin]);
+
+  if (!isAdmin) return <Alert type="error">Keine Berechtigung.</Alert>;
+
+  const onDelete = async (id: number) => {
+    setBusyId(id);
+    setStatus(null);
+    try {
+      await deleteRoleApi(id);
+      setRoles((prev) => prev.filter((r) => r.id !== id));
+      setStatus({ type: "success", message: "Rolle gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Löschen fehlgeschlagen." });
+    } finally {
+      setBusyId(null);
+      setConfirmId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Rollen & Berechtigungen</h1>
+          <p className="text-slate-600 text-sm">Definiere Rollen und zugehörige Rechte.</p>
+        </div>
+        <Button onClick={() => setModal({ mode: "create" })}>Neue Rolle</Button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Rollen ...
+        </div>
+      )}
+
+      {!loading && (
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-slate-200 bg-slate-50">
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Beschreibung</th>
+                <th className="px-3 py-2 text-right">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map((r) => (
+                <tr key={r.id} className="border-b border-slate-100">
+                  <td className="px-3 py-2 font-medium">{r.name}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.description || "–"}</td>
+                  <td className="px-3 py-2 text-right flex gap-2 justify-end">
+                    <Button variant="secondary" onClick={() => setModal({ mode: "edit", role: r })}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => setConfirmId(r.id)}
+                      disabled={busyId === r.id}
+                    >
+                      {busyId === r.id ? "..." : "Delete"}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {!roles.length && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-4 text-center text-slate-500">
+                    Keine Rollen vorhanden.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
+
+      {modal && (
+        <RoleModal
+          mode={modal.mode}
+          role={modal.role}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            load();
+            setStatus({ type: "success", message: "Rolle gespeichert." });
+          }}
+          onError={(msg) => setStatus({ type: "error", message: msg })}
+        />
+      )}
+
+      {confirmId !== null && (
+        <Confirm
+          title="Rolle löschen?"
+          description="Rolle wird entfernt. Prüfe zugewiesene Benutzer."
+          onConfirm={() => onDelete(confirmId)}
+          onCancel={() => setConfirmId(null)}
+          busy={busyId === confirmId}
+        />
+      )}
+    </div>
+  );
+}
+
+function RoleModal({
+  mode,
+  role,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  mode: "create" | "edit";
+  role?: Role;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [form, setForm] = useState({
+    name: role?.name || "",
+    description: role?.description || "",
+    permissions: [] as string[],
+  });
+  const [loading, setLoading] = useState(mode === "edit");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode === "edit" && role) {
+      getRolePermissionsApi(role.id)
+        .then((perms) => setForm((f) => ({ ...f, permissions: perms })))
+        .catch((err: ApiError) => setError(err.message || "Konnte Berechtigungen nicht laden."))
+        .finally(() => setLoading(false));
+    }
+  }, [mode, role]);
+
+  const togglePerm = (key: string) => {
+    setForm((f) => {
+      const exists = f.permissions.includes(key);
+      return { ...f, permissions: exists ? f.permissions.filter((p) => p !== key) : [...f.permissions, key] };
+    });
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.name.trim()) {
+      setError("Name ist erforderlich.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (mode === "create") {
+        await createRoleApi({
+          name: form.name.trim(),
+          description: form.description || null,
+          permissions: form.permissions,
+        });
+      } else if (role) {
+        await updateRoleApi(role.id, {
+          name: form.name.trim(),
+          description: form.description || null,
+          permissions: form.permissions,
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || "Speichern fehlgeschlagen.");
+      onError(apiErr.message || "Speichern fehlgeschlagen.");
+      return;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={mode === "create" ? "Neue Rolle" : "Rolle bearbeiten"} onClose={onClose}>
+      {loading ? (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Berechtigungen ...
+        </div>
+      ) : (
+        <form className="space-y-3" onSubmit={onSubmit}>
+          <Field label="Name">
+            <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          </Field>
+          <Field label="Beschreibung (optional)">
+            <Input
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </Field>
+          <div className="space-y-2">
+            <div className="font-semibold text-sm">Berechtigungen</div>
+            <div className="grid md:grid-cols-2 gap-2 max-h-72 overflow-y-auto border border-slate-200 rounded-md p-3">
+              {PERMISSION_OPTIONS.map((perm) => (
+                <label key={perm.key} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.permissions.includes(perm.key)}
+                    onChange={() => togglePerm(perm.key)}
+                  />
+                  <span>{perm.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {error && <Alert type="error">{error}</Alert>}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" type="button" onClick={onClose}>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Speichern ..." : "Speichern"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Modal>
   );
 }
 

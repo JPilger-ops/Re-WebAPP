@@ -315,6 +315,71 @@ export async function exportInvoiceDatev(id: number) {
   });
 }
 
+// Users
+export interface User {
+  id: number;
+  username: string;
+  role_id: number | null;
+  role_name?: string | null;
+  is_active?: boolean | null;
+  created_at?: string | null;
+}
+
+export async function listUsers() {
+  return apiFetch<User[]>("/users");
+}
+
+export async function createUserApi(payload: { username: string; password: string; role_id?: number | null }) {
+  return apiFetch<User>("/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateUserApi(id: number, payload: { username?: string; role_id?: number | null; is_active?: boolean }) {
+  return apiFetch<User>(`/users/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteUserApi(id: number) {
+  return apiFetch<{ message: string }>(`/users/${id}`, { method: "DELETE" });
+}
+
+// Roles
+export interface Role {
+  id: number;
+  name: string;
+  description?: string | null;
+}
+
+export async function listRoles() {
+  return apiFetch<Role[]>("/roles");
+}
+
+export async function getRolePermissionsApi(id: number) {
+  return apiFetch<string[]>(`/roles/${id}/permissions`);
+}
+
+export async function createRoleApi(payload: { name: string; description?: string | null; permissions?: string[] }) {
+  return apiFetch<Role>("/roles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateRoleApi(id: number, payload: { name: string; description?: string | null; permissions?: string[] }) {
+  return apiFetch<{ message: string }>(`/roles/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteRoleApi(id: number) {
+  return apiFetch<{ message: string }>(`/roles/${id}`, { method: "DELETE" });
+}
+
 // Categories
 export interface Category {
   id: number;
