@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -17,6 +17,7 @@ import {
   revokeApiKey,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
+import { Alert, Button, Checkbox, EmptyState, Input, Spinner, Textarea } from "./ui";
 
 type FormStatus = { type: "success" | "error"; message: string } | null;
 
@@ -134,34 +135,59 @@ function ProtectedLayout() {
 function Shell() {
   const { user, logout } = useAuth();
   const isAdmin = user?.role_name === "admin";
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const links = [
+    { to: "/dashboard", label: "Dashboard" },
+    { to: "/customers", label: "Kunden" },
+    { to: "/invoices", label: "Rechnungen" },
+    ...(isAdmin ? [{ to: "/settings", label: "Einstellungen" }] : []),
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="font-semibold">RechnungsAPP</div>
-          <div className="flex items-center gap-4 text-sm">
-            <nav className="flex items-center gap-3">
-              <NavLink href="/dashboard" label="Dashboard" />
-              {isAdmin && <NavLink href="/settings" label="Einstellungen" />}
-            </nav>
-            <span className="text-slate-600">Eingeloggt als {user?.username}</span>
+          <div className="flex items-center gap-3">
             <button
-              onClick={logout}
-              className="rounded-md border border-slate-300 px-3 py-1 hover:bg-slate-100 transition"
+              className="md:hidden rounded-md border border-slate-200 px-2 py-1"
+              onClick={() => setSidebarOpen((s) => !s)}
             >
-              Logout
+              ☰
             </button>
+            <div className="font-semibold">RechnungsAPP</div>
+          </div>
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-slate-600 hidden md:inline">
+              Eingeloggt als {user?.username} {isAdmin ? "(Admin)" : ""}
+            </span>
+            <Button variant="secondary" onClick={logout}>
+              Logout
+            </Button>
           </div>
         </div>
       </header>
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <Routes>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/settings" element={<AdminSettings />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </main>
+      <div className="max-w-6xl mx-auto px-4 py-8 flex gap-6">
+        <aside
+          className={`w-56 shrink-0 bg-white border border-slate-200 rounded-lg shadow-sm p-3 h-fit ${
+            sidebarOpen ? "block" : "hidden md:block"
+          }`}
+        >
+          <nav className="flex flex-col gap-1">
+            {links.map((l) => (
+              <NavLink key={l.to} href={l.to} label={l.label} />
+            ))}
+          </nav>
+        </aside>
+        <main className="flex-1 min-w-0">
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/invoices" element={<Invoices />} />
+            <Route path="/settings" element={<AdminSettings />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </main>
+      </div>
     </div>
   );
 }
@@ -198,20 +224,22 @@ function Dashboard() {
   );
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
-      <p className="text-slate-700 mb-6">
-        Du bist eingeloggt. Nicht migrierte Bereiche sind vorübergehend als Platzhalter markiert.
-      </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
+        <p className="text-slate-700">
+          Du bist eingeloggt. Nicht migrierte Bereiche sind vorübergehend als Platzhalter markiert.
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         {cards.map((title) => (
           <PlaceholderCard key={title} title={title} />
         ))}
       </div>
       {isAdmin && (
-        <div className="mt-8 space-y-4">
+        <div className="mt-2 space-y-4">
           <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-900">
-            Admin: Einstellungen findest du unter <a className="underline" href="/settings">/settings</a>.
+            Admin: Einstellungen findest du unter <Link className="underline" to="/settings">/settings</Link>.
           </div>
           <RegeneratePdfCard />
         </div>
@@ -225,6 +253,28 @@ function PlaceholderCard({ title }: { title: string }) {
     <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
       <h2 className="font-semibold mb-2">{title}</h2>
       <p className="text-sm text-slate-600">Noch nicht migriert. Funktionalität folgt in der neuen SPA.</p>
+    </div>
+  );
+}
+
+function Customers() {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Kunden</h1>
+      </div>
+      <EmptyState title="Kunden-Liste" description="Wird in der neuen SPA Schritt für Schritt migriert." />
+    </div>
+  );
+}
+
+function Invoices() {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Rechnungen</h1>
+      </div>
+      <EmptyState title="Rechnungen" description="Funktionalität folgt. PDF-Neuerstellung im Admin-Bereich möglich." />
     </div>
   );
 }
@@ -275,15 +325,7 @@ function RegeneratePdfCard() {
         </button>
       </div>
       {status && (
-        <div
-          className={`mt-3 text-sm rounded-md px-3 py-2 ${
-            status.type === "success"
-              ? "bg-green-50 text-green-800 border border-green-100"
-              : "bg-red-50 text-red-700 border border-red-100"
-          }`}
-        >
-          {status.message}
-        </div>
+        <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>
       )}
     </div>
   );

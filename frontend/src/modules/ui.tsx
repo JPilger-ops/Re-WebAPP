@@ -1,0 +1,105 @@
+import React from "react";
+import { Link, NavLink as RouterNavLink } from "react-router-dom";
+
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "ghost" | "danger";
+};
+
+export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
+  const base =
+    "inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold transition";
+  const variants: Record<string, string> = {
+    primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-70",
+    secondary:
+      "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 disabled:opacity-70",
+    ghost: "bg-transparent text-slate-700 hover:bg-slate-100",
+    danger: "bg-red-600 text-white hover:bg-red-700 disabled:opacity-70",
+  };
+  return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
+}
+
+export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`input ${props.className ?? ""}`}
+    />
+  );
+}
+
+export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`input ${props.className ?? ""}`} />;
+}
+
+export function Checkbox({
+  label,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & { label?: string }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-slate-700">
+      <input type="checkbox" {...props} />
+      {label && <span>{label}</span>}
+    </label>
+  );
+}
+
+export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`input ${props.className ?? ""}`}
+    />
+  );
+}
+
+export function Alert({ type = "info", children }: { type?: "success" | "error" | "info"; children: React.ReactNode; }) {
+  const styles: Record<string, string> = {
+    success: "bg-green-50 text-green-800 border border-green-100",
+    error: "bg-red-50 text-red-700 border border-red-100",
+    info: "bg-blue-50 text-blue-800 border border-blue-100",
+  };
+  return <div className={`rounded-md px-3 py-2 text-sm ${styles[type]}`}>{children}</div>;
+}
+
+export function Spinner() {
+  return (
+    <div className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+  );
+}
+
+export function EmptyState({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="border border-dashed border-slate-200 rounded-lg p-6 text-center text-slate-600">
+      <div className="font-semibold text-slate-800 mb-1">{title}</div>
+      {description && <div className="text-sm">{description}</div>}
+    </div>
+  );
+}
+
+export function SidebarLink({ to, label, icon }: { to: string; label: string; icon?: React.ReactNode }) {
+  return (
+    <RouterNavLink
+      to={to}
+      className={({ isActive }) =>
+        `flex items-center gap-2 px-3 py-2 rounded-md text-sm ${
+          isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100"
+        }`
+      }
+    >
+      {icon}
+      <span>{label}</span>
+    </RouterNavLink>
+  );
+}
+
+export function TopbarUser({ name, role, onLogout }: { name: string; role?: string | null; onLogout: () => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="text-sm text-slate-700">
+        <div className="font-semibold">{name}</div>
+        {role && <div className="text-xs text-slate-500">{role}</div>}
+      </div>
+      <Button variant="secondary" onClick={onLogout}>Logout</Button>
+    </div>
+  );
+}
