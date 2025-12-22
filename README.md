@@ -226,12 +226,27 @@ Seed-Idempotenz geprüft: frische DB (compose down -v → up) legt Admin/Rollen/
 - Dev: `npm --prefix frontend run dev` (Proxy für /api zu `http://localhost:3031`, konfigurierbar via `VITE_DEV_PROXY`).
 - API-Client nutzt `credentials: 'include'`, Basis `VITE_API_BASE` (Default `/api`).
 
-## UI-MVP (Feature-Parität, minimal)
+## Feature-Parität (React/Tailwind UI)
 - Login/Logout (Cookie-basiert)
-- Dashboard/Landing (Übersicht)
-- Recipients: Liste + Anlegen/Bearbeiten/Löschen
-- Invoices: Liste + Anlegen + PDF erzeugen/Download
-- Users/Roles/Permissions: mindestens anzeigen, Admin kann verwalten
+- Dashboard mit Quick-Links
+- Customers (Recipients): Liste + Anlegen/Bearbeiten/Löschen
+- Invoices: Liste + Filter (Status/Kategorie), Create/Edit, PDF (inline/download), Regenerate, Status sent/paid, Email Preview/Send (Dry-Run/Redirect), DATEV Export
+- Categories: CRUD, Logo-Upload, Template/SMTP je Kategorie inkl. Test
+- Settings (Admin): SMTP, Invoice Header, Bank/Tax, DATEV, HKForms (API-Key write-only, Test), API-Keys (X-API-Key)
+- Stats: KPIs + Filter (Jahr/Kategorie), Permission `stats.view`
+- Admin: Users (CRUD, aktiv/inaktiv), Roles (CRUD, Permissions-Matrix)
+
+## Kurzer API-Überblick (aktuell)
+- Auth: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
+- Users (Admin): `GET/POST/PUT/DELETE /api/users`, `POST /api/users/:id/reset-password`
+- Roles (Admin): `GET/POST/PUT/DELETE /api/roles`, `GET /api/roles/:id/permissions`
+- Customers: `GET/POST/PUT/DELETE /api/customers`
+- Invoices: `GET /api/invoices` (Filter), `GET /api/invoices/:id`, `POST /api/invoices`, `PUT /api/invoices/:id`, `DELETE /api/invoices/:id` (Admin), `GET /api/invoices/:id/pdf`, `POST /api/invoices/:id/pdf/regenerate`, Status sent/paid, Email Preview/Send, DATEV Export
+- HKForms/Reservation: `GET/POST /api/invoices/by-reservation/:reservationId/status` (Header `X-HKFORMS-CRM-TOKEN`)
+- Stats (Permission `stats.view`): `GET /api/stats/invoices?year=YYYY&category=cat1,cat2`
+- Categories: CRUD, Logo-Upload, Template/SMTP je Kategorie (`/api/categories/:id/email|template`), Mail-Test
+- Settings (Admin): Bank (`/settings/bank`), Tax (`/settings/tax`), DATEV (`/settings/datev`), HKForms (`/settings/hkforms` + `/test`), SMTP (`/settings/smtp` + `/test`), Invoice Header (`/settings/invoice-header`), API-Keys (`/settings/api-keys*`), CA-Cert (`/settings/ca-cert`)
+- Sonstiges: `GET /api/testdb`, `GET /api/version`
 
 ## API-Überblick (gekürzt)
 - Auth: `POST /api/auth/login`, `POST /api/auth/register` (mit `createPin`), `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`.
@@ -252,9 +267,11 @@ Node.js Tests laufen mit
 Schwerpunkt sind die DATEV-Helfer (`tests/datev.test.js`). Puppeteer/SMTP werden nicht automatisch angestoßen.
 
 ## Hinweise
-- HTTPS ist Pflicht, weil Cookies `secure` gesetzt werden. Hinter einem Reverse Proxy entweder Zertifikatpfade via `APP_SSL_*` setzen oder den HTTPS-Teil dort terminieren und die App intern per Port weiterreichen.
-- Generierte PDFs liegen unter `pdfs/` und werden beim Versand als Anhang genutzt.
-- Kategorie-spezifische SMTP-Zugänge haben Vorrang vor den globalen SMTP-Env-Variablen.
+- Browserzugriff via NPM: `https://rechnung.intern` (NPM 192.168.50.100 → Host `http://192.200.255.225:3031`), App intern HTTP 3030. Cookies sind `secure` dank `trust proxy` + `X-Forwarded-Proto`.
+- Generierte PDFs liegen unter `backend/pdfs/` und werden beim Versand als Anhang genutzt.
+- Kategorie-spezifische SMTP-Zugänge haben Vorrang vor globalen SMTP-Settings/Env.
+- API Keys: Header `X-API-Key: <key>` (Klartext nur beim Erstellen/Rotieren sichtbar). Optionaler Test-Endpunkt nur im DEV-Modus.
+- UI Sanity Flow: Login → Kunden anlegen → Rechnung anlegen + PDF → Rechnungskopf ändern + Regenerate → SMTP Test (Dry-Run/Redirect) → Stats ansehen (falls Permission).
 
 🧰 Technologien
 
