@@ -13,6 +13,7 @@ import {
   TaxSettings,
   DatevSettings,
   HkformsSettings,
+  InvoiceStatsResponse,
   User,
   Role,
   getInvoiceHeader,
@@ -30,6 +31,7 @@ import {
   getHkformsSettings,
   updateHkformsSettings,
   testHkforms,
+  getInvoiceStats,
   regenerateInvoicePdf,
   listApiKeys,
   createApiKey,
@@ -210,11 +212,13 @@ function ProtectedLayout() {
 function Shell() {
   const { user, logout } = useAuth();
   const isAdmin = user?.role_name === "admin";
+  const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const links = [
     { to: "/dashboard", label: "Dashboard" },
     { to: "/customers", label: "Kunden" },
     { to: "/invoices", label: "Rechnungen" },
+    ...(hasStats ? [{ to: "/stats", label: "Statistiken" }] : []),
     ...(isAdmin
       ? [
           { to: "/categories", label: "Kategorien" },
@@ -265,6 +269,7 @@ function Shell() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/invoices" element={<Invoices />} />
+            <Route path="/stats" element={<StatsPage />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/settings" element={<AdminSettings />} />
             <Route path="/admin/users" element={<AdminUsers />} />
@@ -295,10 +300,11 @@ function NavLink({ href, label }: { href: string; label: string }) {
 function Dashboard() {
   const { user } = useAuth();
   const isAdmin = user?.role_name === "admin";
+  const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
 
   const cards = useMemo(
-    () => ["Rechnungen", "Kunden", "Einstellungen"],
-    [],
+    () => ["Rechnungen", "Kunden", ...(hasStats ? ["Statistiken"] : []), "Einstellungen"],
+    [hasStats],
   );
 
   return (
@@ -313,7 +319,15 @@ function Dashboard() {
         {cards.map((title) => (
           <Link
             key={title}
-            to={title === "Rechnungen" ? "/invoices" : title === "Kunden" ? "/customers" : "/settings"}
+            to={
+              title === "Rechnungen"
+                ? "/invoices"
+                : title === "Kunden"
+                ? "/customers"
+                : title === "Statistiken"
+                ? "/stats"
+                : "/settings"
+            }
             className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:border-blue-300 transition"
           >
             <div className="font-semibold mb-1">{title}</div>
@@ -3435,6 +3449,140 @@ function HkformsSettingsForm() {
     </div>
   );
 }
+
+function StatsPage() {
+  const { user } = useAuth();
+  const canView = user?.role_name === "admin" || (user?.permissions || []).includes("stats.view");
+  const [data, setData] = useState<InvoiceStatsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [year, setYear] = useState<string>("");
+  const [category, setCategory] = useState<string>("all");
+  const [refreshFlag, setRefreshFlag] = useState(0);
+
+  useEffect(() => {
+    if (!canView) return;
+    setLoading(true);
+    setError(null);
+    getInvoiceStats({
+      year: year ? Number(year) : undefined,
+      categories: category !== "all" ? [category] : undefined,
+    })
+      .then((res) => setData(res))
+      .catch((err: ApiError) => {
+        const msg = err.status === 403 ? "Keine Berechtigung für Statistiken." : err.message || "Stats konnten nicht geladen werden.";
+        setError(msg);
+      })
+      .finally(() => setLoading(false));
+  }, [canView, year, category, refreshFlag]);
+
+  const years = useMemo(() => {
+    if (!data?.byYear?.length) return [];
+    const list = Array.from(new Set(data.byYear.map((b) => b.year))).sort((a, b) => b - a);
+    return list;
+  }, [data]);
+
+  if (!canView) {
+    return <Alert type="error">Keine Berechtigung für Statistiken.</Alert>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Statistiken</h1>
+          <p className="text-slate-600 text-sm">Umsätze und Status gefiltert nach Jahr/Kategorie.</p>
+        </div>
+        <Button variant="secondary" onClick={() => setRefreshFlag((v) => v + 1)}>
+          Aktualisieren
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-40">
+          <option value="">Alle Jahre</option>
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </Select>
+        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="w-48">
+          <option value="all">Alle Kategorien</option>
+          {data?.categories?.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.label || c.key}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Statistiken ...
+        </div>
+      )}
+      {error && <Alert type="error">{error}</Alert>}
+
+      {!loading && data && (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatCard title="Summe (Gesamt)" value={formatEuro(data.overall.sum_total)} />
+            <StatCard title="Bezahlt" value={formatEuro(data.overall.paid_sum)} />
+            <StatCard title="Offen" value={formatEuro(data.overall.outstanding_sum)} />
+            <StatCard title="Rechnungen gesamt" value={data.overall.count} />
+            <StatCard title="Bezahlt (Anzahl)" value={data.overall.paid_count} />
+            <StatCard title="Offen (Anzahl)" value={data.overall.unpaid_count} />
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b border-slate-200 bg-slate-50">
+                  <th className="px-3 py-2">Jahr</th>
+                  <th className="px-3 py-2">Summe</th>
+                  <th className="px-3 py-2">Bezahlt</th>
+                  <th className="px-3 py-2">Offen</th>
+                  <th className="px-3 py-2">Anzahl</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byYear.map((b) => (
+                  <tr key={b.year} className="border-b border-slate-100">
+                    <td className="px-3 py-2 font-medium">{b.year}</td>
+                    <td className="px-3 py-2">{formatEuro(b.sum_total)}</td>
+                    <td className="px-3 py-2 text-green-700">{formatEuro(b.paid_sum)}</td>
+                    <td className="px-3 py-2 text-amber-700">{formatEuro(b.outstanding_sum)}</td>
+                    <td className="px-3 py-2">{b.count}</td>
+                  </tr>
+                ))}
+                {!data.byYear.length && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-3 text-center text-slate-500">
+                      Keine Daten vorhanden.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ title, value }: { title: string; value: string | number }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+      <div className="text-sm text-slate-500">{title}</div>
+      <div className="text-xl font-semibold text-slate-900 mt-1">{value}</div>
+    </div>
+  );
+}
+
+const formatEuro = (val: number | null | undefined) =>
+  val == null ? "–" : `${Number(val).toFixed(2)} €`;
 
 function Field({
   label,

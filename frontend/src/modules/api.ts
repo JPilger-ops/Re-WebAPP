@@ -232,6 +232,46 @@ export async function revokeApiKey(id: number) {
   });
 }
 
+// Stats
+export interface InvoiceStatsResponse {
+  overall: {
+    count: number;
+    sum_total: number;
+    sum_net: number;
+    sum_tax: number;
+    paid_count: number;
+    unpaid_count: number;
+    paid_sum: number;
+    unpaid_sum: number;
+    outstanding_sum: number;
+    avg_value: number;
+    currency: string;
+  };
+  byYear: {
+    year: number;
+    count: number;
+    sum_total: number;
+    sum_net: number;
+    sum_tax: number;
+    paid_sum: number;
+    unpaid_sum: number;
+    outstanding_sum: number;
+    paid_count: number;
+    unpaid_count: number;
+    avg_value: number;
+    currency: string;
+  }[];
+  categories: { key: string; label: string }[];
+}
+
+export async function getInvoiceStats(params?: { year?: number; categories?: string[] }) {
+  const qs: string[] = [];
+  if (params?.year) qs.push(`year=${encodeURIComponent(params.year)}`);
+  if (params?.categories?.length) qs.push(`category=${encodeURIComponent(params.categories.join(","))}`);
+  const query = qs.length ? `?${qs.join("&")}` : "";
+  return apiFetch<InvoiceStatsResponse>(`/stats/invoices${query}`);
+}
+
 // Customers / Recipients
 export interface Customer {
   id: number;
