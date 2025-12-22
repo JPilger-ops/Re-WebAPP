@@ -1183,6 +1183,8 @@ function SmtpSettingsForm() {
     has_password: false,
   });
   const [testRecipient, setTestRecipient] = useState("");
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [testResult, setTestResult] = useState<FormStatus>(null);
 
   useEffect(() => {
     setStatus(null);
@@ -1191,25 +1193,27 @@ function SmtpSettingsForm() {
       .then((data) => {
         setForm({
           host: data.host || "",
-          port: data.port ? String(data.port) : "",
-          secure: Boolean(data.secure),
-          user: data.user || "",
-          password: "",
-          from: data.from || "",
-          reply_to: data.reply_to || "",
-          has_password: Boolean((data as any).has_password),
-        });
-      })
-      .catch((err: ApiError) => {
-        setStatus({ type: "error", message: err.message || "Konnte SMTP-Einstellungen nicht laden." });
-      })
-      .finally(() => setLoading(false));
+      port: data.port ? String(data.port) : "",
+      secure: Boolean(data.secure),
+      user: data.user || "",
+      password: "",
+      from: data.from || "",
+      reply_to: data.reply_to || "",
+      has_password: Boolean((data as any).has_password),
+    });
+        setShowPasswordInput(false);
+    })
+    .catch((err: ApiError) => {
+      setStatus({ type: "error", message: err.message || "Konnte SMTP-Einstellungen nicht laden." });
+    })
+    .finally(() => setLoading(false));
   }, []);
 
   const onSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    setStatus(null);
+      setSaving(true);
+      setStatus(null);
+      setTestResult(null);
     try {
       const payload: any = {
         host: form.host || null,
@@ -1229,10 +1233,14 @@ function SmtpSettingsForm() {
         password: "",
       }));
       setStatus({ type: "success", message: "SMTP-Einstellungen gespeichert." });
+      setShowPasswordInput(false);
       await refresh();
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setStatus({ type: "error", message: apiErr.message || "Speichern fehlgeschlagen." });
+      let msg = apiErr.message || "Speichern fehlgeschlagen.";
+      if (apiErr.status === 401 || apiErr.status === 403) msg = "Keine Berechtigung.";
+      else if (apiErr.status === 400) msg = "Ungültige SMTP Daten.";
+      setStatus({ type: "error", message: msg });
     } finally {
       setSaving(false);
     }
@@ -1240,23 +1248,26 @@ function SmtpSettingsForm() {
 
   const onTest = async () => {
     if (!testRecipient.trim()) {
-      setStatus({ type: "error", message: "Bitte Empfänger für Testmail angeben." });
+      setTestResult({ type: "error", message: "Bitte Empfänger für Testmail angeben." });
       return;
     }
     setTesting(true);
-    setStatus(null);
+    setTestResult(null);
     try {
       const res = await testSmtp(testRecipient.trim());
       const msg = res.message || (res.dry_run ? "Dry-Run erfolgreich." : "Testmail gesendet.");
-      setStatus({
-        type: "success",
+      setTestResult({
+        type: res.dry_run ? "info" : "success",
         message: `${msg} Empfänger: ${res.to}${res.redirected ? " (redirected)" : ""}${
           res.dry_run ? " | Versand deaktiviert (EMAIL_SEND_DISABLED=1)" : ""
         }`,
       });
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setStatus({ type: "error", message: apiErr.message || "Test fehlgeschlagen." });
+      let msg = apiErr.message || "Test fehlgeschlagen.";
+      if (apiErr.status === 401 || apiErr.status === 403) msg = "Keine Berechtigung.";
+      else if (apiErr.status === 400) msg = "Ungültige SMTP Daten.";
+      setTestResult({ type: "error", message: msg });
     } finally {
       setTesting(false);
     }
@@ -1303,19 +1314,39 @@ function SmtpSettingsForm() {
             className="input"
           />
         </Field>
-        <Field label="Passwort (write-only)">
-          <input
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            className="input"
-            placeholder={form.has_password ? "******** (gesetzt)" : "Noch nicht gesetzt"}
-          />
-          <p className="text-xs text-slate-500 mt-1">
-            Passwort wird nur gesendet, wenn du es hier eingibst. Aktueller Status:{" "}
-            {form.has_password ? "gesetzt" : "nicht gesetzt"}.
+        <div className="md:col-span-2 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-700 font-medium">Passwort</span>
+            {form.has_password ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-200">
+                gesetzt
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                nicht gesetzt
+              </span>
+            )}
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => setShowPasswordInput((v) => !v)}
+            >
+              {showPasswordInput ? "Abbrechen" : "Passwort ändern"}
+            </Button>
+          </div>
+          {showPasswordInput && (
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              className="input"
+              placeholder="Neues Passwort eingeben"
+            />
+          )}
+          <p className="text-xs text-slate-500">
+            Passwort wird nur gesendet, wenn du es hier eingibst. Nach dem Speichern wird das Feld geleert.
           </p>
-        </Field>
+        </div>
         <Field label="FROM">
           <input
             value={form.from}
@@ -1362,10 +1393,25 @@ function SmtpSettingsForm() {
           className={`mt-4 text-sm rounded-md px-3 py-2 ${
             status.type === "success"
               ? "bg-green-50 text-green-800 border border-green-100"
+              : status.type === "info"
+              ? "bg-blue-50 text-blue-800 border border-blue-100"
               : "bg-red-50 text-red-700 border border-red-100"
           }`}
         >
           {status.message}
+        </div>
+      )}
+      {testResult && (
+        <div
+          className={`mt-3 text-sm rounded-md px-3 py-2 ${
+            testResult.type === "success"
+              ? "bg-green-50 text-green-800 border border-green-100"
+              : testResult.type === "info"
+              ? "bg-blue-50 text-blue-800 border border-blue-100"
+              : "bg-red-50 text-red-700 border border-red-100"
+          }`}
+        >
+          {testResult.message}
         </div>
       )}
     </div>
@@ -1438,6 +1484,9 @@ function InvoiceHeaderForm() {
         <h2 className="text-xl font-semibold">Rechnungskopf / Briefkopf</h2>
         {loading && <span className="text-sm text-slate-500">Lade ...</span>}
       </div>
+      <p className="text-sm text-slate-600 mb-3">
+        Änderungen wirken auf neu generierte PDFs. Für bestehende Rechnungen bitte “PDF neu erstellen” verwenden.
+      </p>
       <form className="grid gap-4 md:grid-cols-2" onSubmit={onSave}>
         <Field label="Firma">
           <input
