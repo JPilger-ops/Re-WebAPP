@@ -105,9 +105,17 @@ export function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/settings" element={<AdminSettings />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route element={<Shell />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/customers" element={<Customers />} />
+              <Route path="/invoices" element={<Invoices />} />
+              <Route path="/stats" element={<StatsPage />} />
+              <Route path="/categories" element={<Categories />} />
+              <Route path="/settings" element={<AdminSettings />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/roles" element={<AdminRoles />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -206,7 +214,7 @@ function ProtectedLayout() {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  return <Shell />;
+  return <Outlet />;
 }
 
 function Shell() {
@@ -265,17 +273,7 @@ function Shell() {
           </nav>
         </aside>
         <main className="flex-1 min-w-0">
-          <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/invoices" element={<Invoices />} />
-            <Route path="/stats" element={<StatsPage />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/settings" element={<AdminSettings />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/roles" element={<AdminRoles />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <Outlet />
         </main>
       </div>
     </div>
