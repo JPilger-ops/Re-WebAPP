@@ -226,6 +226,11 @@ Seed-Idempotenz geprüft: frische DB (compose down -v → up) legt Admin/Rollen/
 - Dev: `npm --prefix frontend run dev` (Proxy für /api zu `http://localhost:3031`, konfigurierbar via `VITE_DEV_PROXY`).
 - API-Client nutzt `credentials: 'include'`, Basis `VITE_API_BASE` (Default `/api`).
 
+### Parity Checks
+- `npm --prefix backend run check:parity`
+- Env: `CHECK_BASE_URL` (oder `CHECK_HOST`/`CHECK_PORT`), `CHECK_USERNAME`, `CHECK_PASSWORD`
+- Ablauf: legt temporär Kategorie+Logo, Kunde, Rechnung an → PDF holen, Regenerate, Email-Preview, optional Email-Send (nur bei `EMAIL_SEND_DISABLED=1` oder `EMAIL_REDIRECT_TO` oder `CHECK_ALLOW_EMAIL=1`), DATEV-Export versuchen, Cleanup am Ende.
+
 ## Feature-Parität (React/Tailwind UI)
 - Login/Logout (Cookie-basiert)
 - Dashboard mit Quick-Links
