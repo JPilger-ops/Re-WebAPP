@@ -37,6 +37,12 @@ import {
   createApiKey,
   rotateApiKey,
   revokeApiKey,
+  listInvoices,
+  getInvoice,
+  getNextInvoiceNumber,
+  createInvoice,
+  updateInvoice,
+  deleteInvoice,
   listCustomers,
   createCustomer,
   updateCustomer,
@@ -1260,6 +1266,7 @@ function InvoiceFormModal({
   onError: (msg: string) => void;
 }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<InvoiceItem[]>([
     { description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 },
   ]);
