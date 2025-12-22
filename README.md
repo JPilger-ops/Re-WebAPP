@@ -242,7 +242,7 @@ Seed-Idempotenz geprüft: frische DB (compose down -v → up) legt Admin/Rollen/
 - HKForms/Reservation: `GET/POST /api/invoices/by-reservation/:reservationId/status` (Header `X-HKFORMS-CRM-TOKEN`), sendet/liest Rechnungsstatus; Reservation-ID ist optional, mehrfach nutzbar.
 - Statistik (Permission `stats.view`): `GET /api/stats/invoices?year=YYYY&category=cat1,cat2` liefert `overall` + `byYear` + verfügbare Kategorien.
 - Kategorien (Permissions `categories.*` oder `settings.general`): CRUD, Logo-Upload (`POST /api/categories/logo`), Template/SMTP je Kategorie (`/api/categories/:id/email|template`), Mail-Test.
-- Einstellungen: `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/datev`, `GET /api/settings/ca-cert` (admin).
+- Einstellungen (admin): `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/tax`, `GET/PUT /api/settings/datev`, `GET/PUT /api/settings/hkforms` (+ `/test`), `GET/PUT /api/settings/smtp`, `GET/PUT /api/settings/invoice-header`, API-Keys (`/api/settings/api-keys*`), `GET /api/settings/ca-cert`.
 - Sonstiges: `GET /api/testdb` (DB-Ping), `GET /api/version`.
 
 ## Tests

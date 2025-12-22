@@ -132,7 +132,11 @@ export const downloadCaCertificate = async (_req, res) => {
 export const getHkformsData = async (_req, res) => {
   try {
     const settings = await getHkformsSettings();
-    return res.json(settings);
+    const { api_key, ...rest } = settings || {};
+    return res.json({
+      ...rest,
+      has_api_key: Boolean(api_key),
+    });
   } catch (err) {
     console.error("HKForms-Einstellungen laden fehlgeschlagen:", err);
     return res.status(500).json({ message: "HKForms-Einstellungen konnten nicht geladen werden." });
@@ -143,7 +147,11 @@ export const updateHkformsData = async (req, res) => {
   try {
     const { base_url, organization, api_key } = req.body || {};
     const saved = await saveHkformsSettings({ base_url, organization, api_key });
-    return res.json(saved);
+    const { api_key: _secret, ...rest } = saved || {};
+    return res.json({
+      ...rest,
+      has_api_key: Boolean(saved?.api_key),
+    });
   } catch (err) {
     console.error("HKForms-Einstellungen speichern fehlgeschlagen:", err);
     const message = err?.userMessage || "HKForms-Einstellungen konnten nicht gespeichert werden.";

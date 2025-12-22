@@ -9,6 +9,10 @@ import {
   InvoiceDetail,
   InvoiceItem,
   InvoiceListItem,
+  BankSettings,
+  TaxSettings,
+  DatevSettings,
+  HkformsSettings,
   User,
   Role,
   getInvoiceHeader,
@@ -17,6 +21,15 @@ import {
   testSmtp,
   updateInvoiceHeader,
   updateSmtpSettings,
+  getBankSettings,
+  updateBankSettings,
+  getTaxSettings,
+  updateTaxSettings,
+  getDatevSettings,
+  updateDatevSettings,
+  getHkformsSettings,
+  updateHkformsSettings,
+  testHkforms,
   regenerateInvoicePdf,
   listApiKeys,
   createApiKey,
@@ -1928,6 +1941,9 @@ function AdminSettings() {
           SMTP- und Briefkopf-Einstellungen werden hier verwaltet. Änderungen gelten sofort für neue E-Mails/PDFs.
         </p>
       </div>
+      <BankTaxSettingsForm />
+      <DatevSettingsForm />
+      <HkformsSettingsForm />
       <SmtpSettingsForm />
       <InvoiceHeaderForm />
       <ApiKeysSection />
@@ -3076,6 +3092,347 @@ function RoleModal({
         </form>
       )}
     </Modal>
+  );
+}
+
+function BankTaxSettingsForm() {
+  const [loading, setLoading] = useState(true);
+  const [savingBank, setSavingBank] = useState(false);
+  const [savingTax, setSavingTax] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [bank, setBank] = useState<BankSettings>({
+    account_holder: "",
+    bank_name: "",
+    iban: "",
+    bic: "",
+  });
+  const [tax, setTax] = useState<TaxSettings>({ tax_number: "", vat_id: "" });
+
+  useEffect(() => {
+    setStatus(null);
+    setLoading(true);
+    Promise.all([getBankSettings(), getTaxSettings()])
+      .then(([b, t]) => {
+        setBank({
+          account_holder: b.account_holder || "",
+          bank_name: b.bank_name || "",
+          iban: b.iban || "",
+          bic: b.bic || "",
+        });
+        setTax({
+          tax_number: t.tax_number || "",
+          vat_id: t.vat_id || "",
+        });
+      })
+      .catch((err: ApiError) => {
+        setStatus({ type: "error", message: err.message || "Konnte Bank-/Steuer-Daten nicht laden." });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const saveBank = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBank(true);
+    setStatus(null);
+    try {
+      await updateBankSettings({
+        account_holder: bank.account_holder,
+        bank_name: bank.bank_name,
+        iban: bank.iban,
+        bic: bank.bic,
+      });
+      setStatus({ type: "success", message: "Bankdaten gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Bankdaten konnten nicht gespeichert werden." });
+    } finally {
+      setSavingBank(false);
+    }
+  };
+
+  const saveTax = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingTax(true);
+    setStatus(null);
+    try {
+      await updateTaxSettings({
+        tax_number: tax.tax_number || null,
+        vat_id: tax.vat_id || null,
+      });
+      setStatus({ type: "success", message: "Steuerdaten gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Steuerdaten konnten nicht gespeichert werden." });
+    } finally {
+      setSavingTax(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Bank & Steuer</h2>
+        {loading && <span className="text-sm text-slate-500">Lade ...</span>}
+      </div>
+
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={saveBank}>
+        <Field label="Kontoinhaber">
+          <Input
+            value={bank.account_holder}
+            onChange={(e) => setBank((f) => ({ ...f, account_holder: e.target.value }))}
+            required
+          />
+        </Field>
+        <Field label="Bankname">
+          <Input
+            value={bank.bank_name}
+            onChange={(e) => setBank((f) => ({ ...f, bank_name: e.target.value }))}
+            required
+          />
+        </Field>
+        <Field label="IBAN">
+          <Input
+            value={bank.iban}
+            onChange={(e) => setBank((f) => ({ ...f, iban: e.target.value }))}
+            required
+          />
+        </Field>
+        <Field label="BIC">
+          <Input
+            value={bank.bic}
+            onChange={(e) => setBank((f) => ({ ...f, bic: e.target.value }))}
+            required
+          />
+        </Field>
+        <div className="md:col-span-2 flex justify-end">
+          <Button type="submit" disabled={savingBank || loading}>
+            {savingBank ? "Speichert ..." : "Bankdaten speichern"}
+          </Button>
+        </div>
+      </form>
+
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={saveTax}>
+        <Field label="Steuernummer">
+          <Input value={tax.tax_number || ""} onChange={(e) => setTax((f) => ({ ...f, tax_number: e.target.value }))} />
+        </Field>
+        <Field label="USt-IdNr.">
+          <Input value={tax.vat_id || ""} onChange={(e) => setTax((f) => ({ ...f, vat_id: e.target.value }))} />
+        </Field>
+        <div className="md:col-span-2 flex justify-end">
+          <Button type="submit" disabled={savingTax || loading}>
+            {savingTax ? "Speichert ..." : "Steuerdaten speichern"}
+          </Button>
+        </div>
+      </form>
+
+      {status && (
+        <Alert type={status.type === "success" ? "success" : status.type === "info" ? "info" : "error"}>
+          {status.message}
+        </Alert>
+      )}
+    </div>
+  );
+}
+
+function DatevSettingsForm() {
+  const [form, setForm] = useState<DatevSettings>({ email: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setStatus(null);
+    getDatevSettings()
+      .then((d) => setForm({ email: d.email || "" }))
+      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "DATEV konnte nicht geladen werden." }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      await updateDatevSettings({ email: form.email || null });
+      setStatus({ type: "success", message: "DATEV-Einstellungen gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "DATEV-Einstellungen konnten nicht gespeichert werden." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">DATEV</h2>
+        {loading && <span className="text-sm text-slate-500">Lade ...</span>}
+      </div>
+      <p className="text-sm text-slate-600">
+        Hinterlege die DATEV-E-Mail, die für Exporte genutzt werden soll.
+      </p>
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={onSave}>
+        <Field label="DATEV E-Mail">
+          <Input
+            type="email"
+            value={form.email || ""}
+            onChange={(e) => setForm({ email: e.target.value })}
+            required
+          />
+        </Field>
+        <div className="md:col-span-2 flex justify-end">
+          <Button type="submit" disabled={saving || loading}>
+            {saving ? "Speichert ..." : "Speichern"}
+          </Button>
+        </div>
+      </form>
+      {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
+    </div>
+  );
+}
+
+function HkformsSettingsForm() {
+  const [form, setForm] = useState<HkformsSettings & { api_key?: string }>({
+    base_url: "",
+    organization: "",
+    has_api_key: false,
+    api_key: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [testResult, setTestResult] = useState<FormStatus>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setStatus(null);
+    getHkformsSettings()
+      .then((d) =>
+        setForm({
+          base_url: d.base_url || "",
+          organization: d.organization || "",
+          has_api_key: Boolean(d.has_api_key),
+          api_key: "",
+        })
+      )
+      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "HKForms konnte nicht geladen werden." }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    setTestResult(null);
+    try {
+      const payload: any = {
+        base_url: form.base_url,
+        organization: form.organization || null,
+      };
+      if (form.api_key) payload.api_key = form.api_key;
+      const saved = await updateHkformsSettings(payload);
+      setForm((prev) => ({
+        ...prev,
+        base_url: saved.base_url || prev.base_url,
+        organization: saved.organization || "",
+        has_api_key: Boolean(saved.has_api_key),
+        api_key: "",
+      }));
+      setStatus({ type: "success", message: "HKForms-Einstellungen gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "HKForms-Einstellungen konnten nicht gespeichert werden." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await testHkforms({
+        base_url: form.base_url,
+        organization: form.organization || undefined,
+        api_key: form.api_key || undefined,
+      });
+      setTestResult({
+        type: res.ok ? "success" : "info",
+        message: res.message || "Test abgeschlossen.",
+      });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setTestResult({ type: "error", message: apiErr.message || "Test fehlgeschlagen." });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">HKForms</h2>
+        {loading && <span className="text-sm text-slate-500">Lade ...</span>}
+      </div>
+      <p className="text-sm text-slate-600">
+        Basis für Status-Sync und Overdue-Job. API-Schlüssel wird nur einmalig gesendet (write-only).
+      </p>
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={onSave}>
+        <Field label="Base URL">
+          <Input
+            value={form.base_url}
+            onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
+            required
+          />
+        </Field>
+        <Field label="Organisation (optional)">
+          <Input
+            value={form.organization || ""}
+            onChange={(e) => setForm((f) => ({ ...f, organization: e.target.value }))}
+          />
+        </Field>
+        <div className="md:col-span-2 space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-700 font-medium">API Key</span>
+            {form.has_api_key ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800 border border-green-200">
+                hinterlegt
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                fehlt
+              </span>
+            )}
+          </div>
+          <Input
+            type="password"
+            value={form.api_key || ""}
+            onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+            placeholder="Nur ausfüllen, wenn du den Key setzen/ändern willst"
+          />
+          <p className="text-xs text-slate-500">
+            Der API-Key wird nicht im Klartext angezeigt. Nach dem Speichern wird das Feld geleert.
+          </p>
+        </div>
+        <div className="md:col-span-2 flex flex-wrap gap-3">
+          <Button type="submit" disabled={saving || loading}>
+            {saving ? "Speichert ..." : "Speichern"}
+          </Button>
+          <Button type="button" variant="secondary" onClick={onTest} disabled={testing || loading}>
+            {testing ? "Testet ..." : "Verbindung testen"}
+          </Button>
+        </div>
+      </form>
+      {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
+      {testResult && (
+        <Alert type={testResult.type === "success" ? "success" : testResult.type === "info" ? "info" : "error"}>
+          {testResult.message}
+        </Alert>
+      )}
+    </div>
   );
 }
 

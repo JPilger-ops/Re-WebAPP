@@ -122,11 +122,74 @@ async function seedInvoiceHeader() {
   });
 }
 
+async function seedBank() {
+  const fallbackName = process.env.SEPA_CREDITOR_NAME || "Waldwirtschaft Heidekönig";
+  const fallbackBank = process.env.BANK_NAME || "VR-Bank Bonn Rhein-Sieg eG";
+  const fallbackIban = (process.env.SEPA_CREDITOR_IBAN || "DE48370695201104185025").replace(/\s+/g, "");
+  const fallbackBic = (process.env.SEPA_CREDITOR_BIC || "GENODED1RST").replace(/\s+/g, "").toUpperCase();
+
+  await prisma.bank_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      account_holder: fallbackName,
+      bank_name: fallbackBank,
+      iban: fallbackIban,
+      bic: fallbackBic,
+    },
+  });
+}
+
+async function seedTax() {
+  await prisma.tax_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      tax_number: null,
+      vat_id: null,
+    },
+  });
+}
+
+async function seedDatev() {
+  await prisma.datev_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      email: null,
+    },
+  });
+}
+
+async function seedHkforms() {
+  const DEFAULT_BASE_URL = "https://app.bistrottelegraph.de/api";
+  const base_url = (process.env.HKFORMS_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "") || DEFAULT_BASE_URL;
+  const organization = process.env.HKFORMS_ORGANIZATION || null;
+
+  await prisma.hkforms_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      base_url,
+      organization,
+      api_key: null,
+    },
+  });
+}
+
 async function main() {
   const adminRoleId = await seedRoles();
   await seedAdmin(adminRoleId);
   await seedSmtpSettings();
   await seedInvoiceHeader();
+  await seedBank();
+  await seedTax();
+  await seedDatev();
+  await seedHkforms();
 }
 
 main()

@@ -80,6 +80,32 @@ export interface InvoiceHeaderSettings {
   updated_at?: string | null;
 }
 
+export interface BankSettings {
+  account_holder: string;
+  bank_name: string;
+  iban: string;
+  bic: string;
+  updated_at?: string | null;
+}
+
+export interface TaxSettings {
+  tax_number: string | null;
+  vat_id: string | null;
+  updated_at?: string | null;
+}
+
+export interface DatevSettings {
+  email: string | null;
+  updated_at?: string | null;
+}
+
+export interface HkformsSettings {
+  base_url: string;
+  organization: string | null;
+  has_api_key?: boolean;
+  updated_at?: string | null;
+}
+
 export async function getSmtpSettings() {
   return apiFetch<SmtpSettings>("/settings/smtp");
 }
@@ -110,6 +136,60 @@ export async function updateInvoiceHeader(payload: Partial<InvoiceHeaderSettings
     method: "PUT",
     body: JSON.stringify(payload),
   });
+}
+
+export async function getBankSettings() {
+  return apiFetch<BankSettings>("/settings/bank");
+}
+
+export async function updateBankSettings(payload: BankSettings) {
+  return apiFetch<BankSettings>("/settings/bank", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getTaxSettings() {
+  return apiFetch<TaxSettings>("/settings/tax");
+}
+
+export async function updateTaxSettings(payload: TaxSettings) {
+  return apiFetch<TaxSettings>("/settings/tax", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getDatevSettings() {
+  return apiFetch<DatevSettings>("/settings/datev");
+}
+
+export async function updateDatevSettings(payload: DatevSettings) {
+  return apiFetch<DatevSettings>("/settings/datev", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getHkformsSettings() {
+  return apiFetch<HkformsSettings>("/settings/hkforms");
+}
+
+export async function updateHkformsSettings(payload: { base_url?: string; organization?: string | null; api_key?: string }) {
+  return apiFetch<HkformsSettings>("/settings/hkforms", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testHkforms(payload: { base_url?: string; organization?: string | null; api_key?: string }) {
+  return apiFetch<{ ok: boolean; status?: number; url?: string; message?: string; details?: any }>(
+    "/settings/hkforms/test",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export async function regenerateInvoicePdf(id: number) {
