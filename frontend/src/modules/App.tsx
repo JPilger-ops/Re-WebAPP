@@ -1965,20 +1965,90 @@ function AdminSettings() {
     );
   }
 
+  const tabs = [
+    { key: "pdf", label: "PDF", content: <PdfSettingsInfo /> },
+    { key: "mail", label: "Mail / SMTP", content: <SmtpSettingsForm /> },
+    { key: "header", label: "Rechnungskopf", content: <InvoiceHeaderForm /> },
+    { key: "bank", label: "Bank / Steuer", content: <BankTaxSettingsForm /> },
+    { key: "datev", label: "DATEV", content: <DatevSettingsForm /> },
+    { key: "hkforms", label: "HKForms", content: <HkformsSettingsForm /> },
+    { key: "network", label: "Netzwerk", content: <NetworkSettingsInfo /> },
+    { key: "security", label: "Sicherheit", content: <SecuritySettingsInfo /> },
+    { key: "apikeys", label: "API Keys", content: <ApiKeysSection /> },
+  ];
+
+  const [active, setActive] = useState(tabs[0].key);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-2">Einstellungen</h1>
-        <p className="text-slate-700">
-          SMTP- und Briefkopf-Einstellungen werden hier verwaltet. Änderungen gelten sofort für neue E-Mails/PDFs.
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold mb-1">Einstellungen</h1>
+        <p className="text-slate-700 text-sm">
+          Einstellungen sind pro Bereich in Tabs gruppiert. Änderungen gelten sofort für neue Vorgänge.
         </p>
+      </header>
+
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 px-3 py-2">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium ${
+                active === t.key ? "bg-blue-50 text-blue-700 border border-blue-200" : "text-slate-700 hover:bg-slate-100"
+              }`}
+              onClick={() => setActive(t.key)}
+              type="button"
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="p-4 space-y-4">
+          {tabs.map((t) => (
+            <div key={t.key} className={active === t.key ? "block" : "hidden"}>
+              {t.content}
+            </div>
+          ))}
+        </div>
       </div>
-      <BankTaxSettingsForm />
-      <DatevSettingsForm />
-      <HkformsSettingsForm />
-      <SmtpSettingsForm />
-      <InvoiceHeaderForm />
-      <ApiKeysSection />
+    </div>
+  );
+}
+
+function PdfSettingsInfo() {
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">PDF Hinweise</h2>
+      <div className="text-sm text-slate-700 space-y-2">
+        <p>Der Briefkopf (Rechnungskopf) wirkt auf neu generierte PDFs. Für bestehende Rechnungen bitte “PDF neu erstellen” nutzen.</p>
+        <p>Logo und Footer werden aus dem Rechnungskopf übernommen. Kategorie-Logos werden pro Rechnungskategorie eingebettet.</p>
+      </div>
+    </div>
+  );
+}
+
+function NetworkSettingsInfo() {
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">Netzwerk</h2>
+      <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
+        <li>Interner HTTP-Port: Container 3030, Host 192.200.255.225:3031.</li>
+        <li>NPM Forward: https://rechnung.intern → http://192.200.255.225:3031</li>
+        <li>TRUST_PROXY=1, CORS_ORIGINS: https://rechnung.intern (weitere Origins per ENV).</li>
+      </ul>
+    </div>
+  );
+}
+
+function SecuritySettingsInfo() {
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold">Sicherheit</h2>
+      <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
+        <li>Rate Limits aktivierbar per RATE_LIMIT_ENABLED (Login-Limit strenger).</li>
+        <li>Cookies: HttpOnly, SameSite=Lax, Secure automatisch bei HTTPS (NPM).</li>
+        <li>API Keys (X-API-Key) in eigenem Tab verwalten.</li>
+      </ul>
     </div>
   );
 }
