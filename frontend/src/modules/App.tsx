@@ -35,6 +35,11 @@ import {
   getCategoryEmailApi,
   saveCategoryEmailApi,
   testCategoryEmailApi,
+  markInvoicePaid,
+  markInvoiceSent,
+  getInvoiceEmailPreview,
+  sendInvoiceEmailApi,
+  exportInvoiceDatev,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge } from "./ui";
@@ -597,12 +602,16 @@ function Invoices() {
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "sent" | "paid">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: "create" | "edit"; id?: number } | null>(null);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [toast, setToast] = useState<FormStatus>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
+  const [sendModal, setSendModal] = useState<{ open: boolean; id?: number; to?: string; subject?: string; message?: string; includeDatev?: boolean }>({ open: false });
 
   const computeStatus = (inv: InvoiceListItem) => {
     if (inv.status_paid_at) return "paid";
@@ -610,7 +619,7 @@ function Invoices() {
     return "open";
   };
 
-  const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter) => {
+  const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter, categoryKey: string) => {
     const t = term.toLowerCase();
     return list.filter((inv) => {
       const matchesTerm =
@@ -619,7 +628,8 @@ function Invoices() {
         (inv.recipient_name || "").toLowerCase().includes(t);
       const st = computeStatus(inv);
       const matchesStatus = status === "all" || st === status;
-      return matchesTerm && matchesStatus;
+      const matchesCategory = categoryKey === "all" || inv.category_label === categoryKey;
+      return matchesTerm && matchesStatus && matchesCategory;
     });
   };
 
@@ -627,9 +637,10 @@ function Invoices() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listInvoices();
+      const [res, cats] = await Promise.all([listInvoices(), listCategories().catch(() => [])]);
       setInvoices(res);
-      setFiltered(applyFilter(res, search, statusFilter));
+      setCategories(cats);
+      setFiltered(applyFilter(res, search, statusFilter, categoryFilter));
     } catch (err: any) {
       const apiErr = err as ApiError;
       setError(apiErr.message || "Rechnungen konnten nicht geladen werden.");
@@ -643,8 +654,8 @@ function Invoices() {
   }, []);
 
   useEffect(() => {
-    setFiltered(applyFilter(invoices, search, statusFilter));
-  }, [invoices, search, statusFilter]);
+    setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter));
+  }, [invoices, search, statusFilter, categoryFilter]);
 
   const openDetail = async (id: number) => {
     try {
@@ -654,6 +665,23 @@ function Invoices() {
       const apiErr = err as ApiError;
       setToast({ type: "error", message: apiErr.message || "Rechnung konnte nicht geladen werden." });
     }
+  };
+
+  const loadPreview = async (id: number) => {
+    setPreview({ loading: true, data: null, error: null });
+    try {
+      const data = await getInvoiceEmailPreview(id);
+      setPreview({ loading: false, data, error: null });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      let msg = apiErr.message || "Vorschau konnte nicht geladen werden.";
+      if (apiErr.status === 401 || apiErr.status === 403) msg = "Keine Berechtigung.";
+      setPreview({ loading: false, data: null, error: msg });
+    }
+  };
+
+  const openSend = (id: number, toDefault?: string) => {
+    setSendModal({ open: true, id, to: toDefault || "" });
   };
 
   const onRegenerate = async (id: number) => {
@@ -677,6 +705,106 @@ function Invoices() {
   const onDeleted = (id: number) => {
     setInvoices((prev) => prev.filter((inv) => inv.id !== id));
     setToast({ type: "success", message: "Rechnung gelöscht." });
+  };
+
+  const onSendEmail = async () => {
+    if (!sendModal.id) return;
+    if (!sendModal.to || !sendModal.to.trim()) {
+      setToast({ type: "error", message: "Bitte Empfänger-E-Mail angeben." });
+      return;
+    }
+    setBusyId(sendModal.id);
+    setToast(null);
+    try {
+      const res = await sendInvoiceEmailApi(sendModal.id, {
+        to: sendModal.to.trim(),
+        subject: sendModal.subject || undefined,
+        message: sendModal.message || undefined,
+        include_datev: sendModal.includeDatev,
+      });
+      setToast({ type: "success", message: res.message || "E-Mail gesendet." });
+      setSendModal({ open: false });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      let msg = apiErr.message || "E-Mail konnte nicht gesendet werden.";
+      if (apiErr.status === 401 || apiErr.status === 403) msg = "Keine Berechtigung.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onDatevExport = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      const res = await exportInvoiceDatev(id);
+      setToast({ type: "success", message: res.message || "DATEV Export gestartet." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "DATEV Export fehlgeschlagen.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const markAsSent = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      await markInvoiceSent(id);
+      setInvoices((prev) =>
+        prev.map((inv) => (inv.id === id ? { ...inv, status_sent: true, status_sent_at: new Date().toISOString() } : inv))
+      );
+      if (detail && detail.invoice.id === id) {
+        setDetail({
+          ...detail,
+          invoice: { ...detail.invoice, status_sent: true, status_sent_at: new Date().toISOString() },
+        });
+      }
+      setToast({ type: "success", message: "Als gesendet markiert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg =
+        apiErr.status === 401 || apiErr.status === 403
+          ? "Keine Berechtigung."
+          : apiErr.status === 429
+          ? "Zu viele Versuche. Bitte kurz warten."
+          : apiErr.message || "Konnte nicht markieren.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const markAsPaid = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      await markInvoicePaid(id);
+      setInvoices((prev) =>
+        prev.map((inv) => (inv.id === id ? { ...inv, status_paid_at: new Date().toISOString() } : inv))
+      );
+      if (detail && detail.invoice.id === id) {
+        setDetail({
+          ...detail,
+          invoice: { ...detail.invoice, status_paid_at: new Date().toISOString() },
+        });
+      }
+      setToast({ type: "success", message: "Als bezahlt markiert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg =
+        apiErr.status === 401 || apiErr.status === 403
+          ? "Keine Berechtigung."
+          : apiErr.status === 429
+          ? "Zu viele Versuche. Bitte kurz warten."
+          : apiErr.message || "Konnte nicht markieren.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -705,6 +833,18 @@ function Invoices() {
           <option value="open">Offen</option>
           <option value="sent">Gesendet</option>
           <option value="paid">Bezahlt</option>
+        </Select>
+        <Select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="w-48"
+        >
+          <option value="all">Alle Kategorien</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.label}>
+              {c.label}
+            </option>
+          ))}
         </Select>
         <Button variant="secondary" onClick={load}>Aktualisieren</Button>
       </div>
@@ -773,6 +913,21 @@ function Invoices() {
                       >
                         {busyId === inv.id ? "…" : "PDF neu"}
                       </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          loadPreview(inv.id);
+                          setDetail(null);
+                        }}
+                      >
+                        Preview
+                      </Button>
+                      <Button variant="secondary" onClick={() => openSend(inv.id, inv.recipient_email || "")}>
+                        Mail
+                      </Button>
+                      <Button variant="secondary" onClick={() => onDatevExport(inv.id)}>
+                        DATEV
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -802,7 +957,91 @@ function Invoices() {
           detail={detail}
           onClose={() => setDetail(null)}
           onRegenerate={() => onRegenerate(detail.invoice.id)}
+          onMarkSent={() => markAsSent(detail.invoice.id)}
+          onMarkPaid={() => markAsPaid(detail.invoice.id)}
+          onEmailPreview={() => loadPreview(detail.invoice.id)}
+          onEmailSend={() => openSend(detail.invoice.id, detail.invoice.recipient.email || "")}
+          onDatevExport={() => onDatevExport(detail.invoice.id)}
         />
+      )}
+
+      {(preview.loading || preview.data || preview.error) && (
+        <Modal title="E-Mail Vorschau" onClose={() => setPreview({ loading: false, data: null, error: null })}>
+          {preview.loading && (
+            <div className="flex items-center gap-2 text-slate-600">
+              <Spinner /> Lade Vorschau ...
+            </div>
+          )}
+          {preview.error && <Alert type="error">{preview.error}</Alert>}
+          {preview.data && (
+            <div className="space-y-3 text-sm">
+              <div>
+                <div className="font-semibold">Betreff</div>
+                <div>{preview.data.subject}</div>
+              </div>
+              <div>
+                <div className="font-semibold">HTML</div>
+                <div
+                  className="border border-slate-200 rounded p-3 prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: preview.data.body_html || "<em>(leer)</em>" }}
+                />
+              </div>
+              <div>
+                <div className="font-semibold">Text</div>
+                <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap">{preview.data.body_text}</pre>
+              </div>
+              <div className="text-xs text-slate-600">
+                Von: {preview.data.from || "n/a"} | SMTP: {preview.data.smtp_ready ? "konfiguriert" : "fehlt"}
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {sendModal.open && (
+        <Modal title="Rechnung per E-Mail senden" onClose={() => setSendModal({ open: false })}>
+          <div className="space-y-3">
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Empfänger</span>
+              <Input
+                value={sendModal.to || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, to: e.target.value }))}
+                placeholder="kunde@example.com"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Betreff (optional)</span>
+              <Input
+                value={sendModal.subject || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, subject: e.target.value }))}
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Nachricht (optional)</span>
+              <Textarea
+                value={sendModal.message || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, message: e.target.value }))}
+                className="min-h-[100px]"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={sendModal.includeDatev || false}
+                onChange={(e) => setSendModal((s) => ({ ...s, includeDatev: e.target.checked }))}
+              />
+              <span>DATEV-Adresse (falls hinterlegt) einbeziehen</span>
+            </label>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setSendModal({ open: false })}>
+                Abbrechen
+              </Button>
+              <Button onClick={onSendEmail} disabled={busyId === sendModal.id}>
+                {busyId === sendModal.id ? "Sendet..." : "Senden"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
@@ -1272,10 +1511,20 @@ function InvoiceDetailModal({
   detail,
   onClose,
   onRegenerate,
+  onMarkSent,
+  onMarkPaid,
+  onEmailPreview,
+  onEmailSend,
+  onDatevExport,
 }: {
   detail: InvoiceDetail;
   onClose: () => void;
   onRegenerate: () => void;
+  onMarkSent: () => void;
+  onMarkPaid: () => void;
+  onEmailPreview: () => void;
+  onEmailSend: () => void;
+  onDatevExport: () => void;
 }) {
   const inv = detail.invoice;
   return (
@@ -1302,8 +1551,24 @@ function InvoiceDetailModal({
         </div>
         <div className="grid md:grid-cols-2 gap-2">
           <div><span className="text-slate-500">Datum:</span> {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
-          <div><span className="text-slate-500">Status:</span> {inv.status_paid_at ? "Bezahlt" : inv.status_sent ? "Gesendet" : "Offen"}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">Status:</span>
+            {inv.status_paid_at ? (
+              <Badge tone="green">Bezahlt</Badge>
+            ) : inv.status_sent ? (
+              <Badge tone="blue">Gesendet</Badge>
+            ) : (
+              <Badge tone="amber">Offen</Badge>
+            )}
+          </div>
           <div><span className="text-slate-500">Kategorie:</span> {inv.category || "–"}</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={onMarkSent}>Als gesendet markieren</Button>
+          <Button variant="secondary" onClick={onMarkPaid}>Als bezahlt markieren</Button>
+          <Button variant="secondary" onClick={onEmailPreview}>E-Mail Vorschau</Button>
+          <Button variant="secondary" onClick={onEmailSend}>E-Mail senden</Button>
+          <Button variant="secondary" onClick={onDatevExport}>DATEV Export</Button>
         </div>
         <div className="border border-slate-200 rounded-md">
           <table className="w-full text-sm">
