@@ -1392,6 +1392,8 @@ function generateInvoiceHtml(
   `;
 }
 
+export { generateInvoiceHtml };
+
 /**
  * POST /api/invoices/:id/status/sent
  * Rechnung als versendet markieren
