@@ -37,7 +37,7 @@ import {
   testCategoryEmailApi,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
-import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea } from "./ui";
+import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge } from "./ui";
 
 type FormStatus = { type: "success" | "error"; message: string } | null;
 

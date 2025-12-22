@@ -281,6 +281,40 @@ export async function deleteInvoice(id: number) {
   });
 }
 
+export async function markInvoiceSent(id: number) {
+  return apiFetch<{ message?: string }>(`/invoices/${id}/status/sent`, { method: "POST" });
+}
+
+export async function markInvoicePaid(id: number) {
+  return apiFetch<{ message?: string }>(`/invoices/${id}/status/paid`, { method: "POST" });
+}
+
+export async function getInvoiceEmailPreview(id: number) {
+  return apiFetch<{
+    subject: string;
+    body_html: string;
+    body_text: string;
+    from: string | null;
+    smtp_ready: boolean;
+    using_category_account: boolean;
+    datev_email?: string | null;
+    datev_configured?: boolean;
+  }>(`/invoices/${id}/email-preview`);
+}
+
+export async function sendInvoiceEmailApi(id: number, payload: { to: string; subject?: string; message?: string; html?: string; include_datev?: boolean }) {
+  return apiFetch<{ message: string }>(`/invoices/${id}/send-email`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function exportInvoiceDatev(id: number) {
+  return apiFetch<{ message: string }>(`/invoices/${id}/datev-export`, {
+    method: "POST",
+  });
+}
+
 // Categories
 export interface Category {
   id: number;
