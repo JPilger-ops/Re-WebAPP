@@ -151,3 +151,38 @@ export async function revokeApiKey(id: number) {
     method: "POST",
   });
 }
+
+// Customers / Recipients
+export interface Customer {
+  id: number;
+  name: string;
+  street?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
+export async function listCustomers() {
+  return apiFetch<Customer[]>("/customers");
+}
+
+export async function createCustomer(payload: Omit<Customer, "id">) {
+  return apiFetch<{ id: number }>("/customers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCustomer(id: number, payload: Omit<Customer, "id">) {
+  return apiFetch<{ message: string }>(`/customers/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCustomer(id: number) {
+  return apiFetch<{ message: string }>(`/customers/${id}`, {
+    method: "DELETE",
+  });
+}

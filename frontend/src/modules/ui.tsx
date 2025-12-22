@@ -103,3 +103,51 @@ export function TopbarUser({ name, role, onLogout }: { name: string; role?: stri
     </div>
   );
 }
+
+export function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-xl border border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+          <h3 className="text-lg font-semibold">{title}</h3>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+export function Confirm({
+  title,
+  description,
+  onConfirm,
+  onCancel,
+  busy,
+}: {
+  title: string;
+  description?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy?: boolean;
+}) {
+  return (
+    <Modal title={title} onClose={onCancel}>
+      {description && <p className="text-sm text-slate-700 mb-4">{description}</p>}
+      <div className="flex justify-end gap-3">
+        <Button variant="secondary" onClick={onCancel}>Abbrechen</Button>
+        <Button variant="danger" onClick={onConfirm} disabled={busy}>
+          {busy ? "Bitte warten..." : "Löschen"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}

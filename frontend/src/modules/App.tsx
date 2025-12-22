@@ -4,6 +4,7 @@ import {
   ApiError,
   AuthUser,
   ApiKeyInfo,
+  Customer,
   getInvoiceHeader,
   getSmtpSettings,
   login as apiLogin,
@@ -15,9 +16,13 @@ import {
   createApiKey,
   rotateApiKey,
   revokeApiKey,
+  listCustomers,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
-import { Alert, Button, Checkbox, EmptyState, Input, Spinner, Textarea } from "./ui";
+import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea } from "./ui";
 
 type FormStatus = { type: "success" | "error"; message: string } | null;
 
@@ -258,12 +263,160 @@ function PlaceholderCard({ title }: { title: string }) {
 }
 
 function Customers() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [filtered, setFiltered] = useState<Customer[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; customer?: Customer } | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
+  const [busyDelete, setBusyDelete] = useState(false);
+  const [toast, setToast] = useState<FormStatus>(null);
+
+  const applyFilter = (list: Customer[], term: string) => {
+    const t = term.toLowerCase();
+    if (!t) return list;
+    return list.filter((c) =>
+      [c.name, c.email, c.city, c.zip].some((v) => (v || "").toLowerCase().includes(t))
+    );
+  };
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await listCustomers();
+      setCustomers(res);
+      setFiltered(applyFilter(res, search));
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || "Kunden konnten nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    setFiltered(applyFilter(customers, search));
+  }, [customers, search]);
+
+  const onDelete = async (id: number) => {
+    setBusyDelete(true);
+    setToast(null);
+    try {
+      await deleteCustomer(id);
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+      setToast({ type: "success", message: "Kunde gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg =
+        apiErr?.message?.includes("existieren noch Rechnungen")
+          ? "Löschen nicht möglich: Es existieren noch Rechnungen für diesen Kunden."
+          : apiErr.message || "Kunde konnte nicht gelöscht werden.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyDelete(false);
+      setConfirmId(null);
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Kunden</h1>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Kunden</h1>
+          <p className="text-slate-600 text-sm">Empfänger verwalten (Name erforderlich, sonst optional).</p>
+        </div>
+        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
       </div>
-      <EmptyState title="Kunden-Liste" description="Wird in der neuen SPA Schritt für Schritt migriert." />
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <Input
+          placeholder="Suchen..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-64"
+        />
+        <Button variant="secondary" onClick={load}>Aktualisieren</Button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Kunden ...
+        </div>
+      )}
+
+      {error && <Alert type="error">{error}</Alert>}
+
+      {!loading && !filtered.length && !error && (
+        <EmptyState title="Keine Kunden gefunden" description="Lege einen neuen Kunden an, um zu starten." />
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-slate-200 bg-slate-50">
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Email</th>
+                <th className="px-3 py-2">Ort</th>
+                <th className="px-3 py-2 w-32 text-right">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-3 py-2 font-medium">{c.name}</td>
+                  <td className="px-3 py-2 text-slate-600">{c.email || "–"}</td>
+                  <td className="px-3 py-2 text-slate-600">{[c.zip, c.city].filter(Boolean).join(" ") || "–"}</td>
+                  <td className="px-3 py-2 text-right space-x-2">
+                    <Button variant="secondary" onClick={() => setModal({ mode: "edit", customer: c })}>
+                      Edit
+                    </Button>
+                    <Button variant="danger" onClick={() => setConfirmId(c.id)}>
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
+
+      {modal && (
+        <CustomerFormModal
+          mode={modal.mode}
+          customer={modal.customer}
+          onClose={() => setModal(null)}
+          onSaved={(saved) => {
+            setModal(null);
+            if (modal.mode === "edit" && saved) {
+              setCustomers((prev) => prev.map((c) => (c.id === saved.id ? saved : c)));
+            } else if (saved) {
+              setCustomers((prev) => [...prev, saved]);
+            }
+            setToast({ type: "success", message: "Kunde gespeichert." });
+          }}
+          onError={(msg) => setToast({ type: "error", message: msg })}
+        />
+      )}
+
+      {confirmId !== null && (
+        <Confirm
+          title="Kunde löschen?"
+          description="Wenn zu diesem Kunden Rechnungen existieren, kann er nicht gelöscht werden."
+          onConfirm={() => onDelete(confirmId)}
+          onCancel={() => setConfirmId(null)}
+          busy={busyDelete}
+        />
+      )}
     </div>
   );
 }
@@ -331,6 +484,120 @@ function RegeneratePdfCard() {
   );
 }
 
+function CustomerFormModal({
+  mode,
+  customer,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  mode: "create" | "edit";
+  customer?: Customer;
+  onClose: () => void;
+  onSaved: (c: Customer) => void;
+  onError: (msg: string) => void;
+}) {
+  const [form, setForm] = useState({
+    name: customer?.name || "",
+    street: customer?.street || "",
+    zip: customer?.zip || "",
+    city: customer?.city || "",
+    email: customer?.email || "",
+    phone: customer?.phone || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.name.trim()) {
+      setError("Name ist erforderlich.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        street: form.street.trim() || null,
+        zip: form.zip.trim() || null,
+        city: form.city.trim() || null,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+      };
+      if (mode === "create") {
+        const res = await createCustomer(payload as any);
+        onSaved({ id: res.id, ...payload } as Customer);
+      } else if (customer) {
+        await updateCustomer(customer.id, payload as any);
+        onSaved({ id: customer.id, ...payload } as Customer);
+      }
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "Speichern fehlgeschlagen.";
+      setError(msg);
+      onError(msg);
+      return;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={mode === "create" ? "Neuer Kunde" : "Kunde bearbeiten"} onClose={onClose}>
+      <form className="space-y-3" onSubmit={onSubmit}>
+        <div className="grid md:grid-cols-2 gap-3">
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">Name *</span>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">E-Mail</span>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">Straße</span>
+            <Input
+              value={form.street}
+              onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))}
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">PLZ</span>
+            <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">Ort</span>
+            <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">Telefon</span>
+            <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+          </label>
+        </div>
+
+        {error && <Alert type="error">{error}</Alert>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={onClose} type="button">
+            Abbrechen
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Speichern ..." : "Speichern"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 function AdminSettings() {
   const { user } = useAuth();
   if (user?.role_name !== "admin") {
