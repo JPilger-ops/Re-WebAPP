@@ -18,7 +18,8 @@
     "check:parity": "node scripts/check-parity.mjs",
     "check:pdf-parity": "node scripts/check-pdf-parity.mjs",
     "check:mail-parity": "node scripts/check-mail-parity.mjs",
-    "check:datev-parity": "node scripts/check-datev-parity.mjs"
+    "check:datev-parity": "node scripts/check-datev-parity.mjs",
+    "check:hkforms-parity": "node scripts/check-hkforms-parity.mjs"
   },
   "keywords": [],
   "author": "",
