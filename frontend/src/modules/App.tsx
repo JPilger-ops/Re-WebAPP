@@ -68,7 +68,7 @@ import {
   deleteRoleApi,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
-import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge } from "./ui";
+import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink } from "./ui";
 
 type FormStatus = { type: "success" | "error"; message: string } | null;
 
@@ -260,7 +260,7 @@ function Shell() {
         >
           <nav className="flex flex-col gap-1">
             {links.map((l) => (
-              <NavLink key={l.to} href={l.to} label={l.label} />
+              <SidebarLink key={l.to} to={l.to} label={l.label} />
             ))}
           </nav>
         </aside>
@@ -279,21 +279,6 @@ function Shell() {
         </main>
       </div>
     </div>
-  );
-}
-
-function NavLink({ href, label }: { href: string; label: string }) {
-  const location = useLocation();
-  const active = location.pathname === href;
-  return (
-    <Link
-      to={href}
-      className={`px-2 py-1 rounded-md text-sm ${
-        active ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100"
-      }`}
-    >
-      {label}
-    </Link>
   );
 }
 
