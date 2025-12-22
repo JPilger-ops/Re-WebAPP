@@ -232,6 +232,12 @@ export async function revokeApiKey(id: number) {
   });
 }
 
+export async function deleteApiKey(id: number) {
+  return apiFetch<{ message: string }>(`/settings/api-keys/${id}`, {
+    method: "DELETE",
+  });
+}
+
 // Stats
 export interface InvoiceStatsResponse {
   overall: {

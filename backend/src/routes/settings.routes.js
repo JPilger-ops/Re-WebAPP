@@ -20,6 +20,7 @@ import {
   createApiKey,
   rotateApiKey,
   revokeApiKey,
+  deleteApiKey,
 } from "../controllers/settings.controller.js";
 
 const router = Router();
@@ -138,6 +139,12 @@ router.post(
   "/api-keys/:id/revoke",
   requireRole("admin"),
   revokeApiKey
+);
+
+router.delete(
+  "/api-keys/:id",
+  requireRole("admin"),
+  deleteApiKey
 );
 
 export default router;

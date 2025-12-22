@@ -508,3 +508,18 @@ export const revokeApiKey = async (req, res) => {
     return res.status(500).json({ message: "API-Key konnte nicht widerrufen werden." });
   }
 };
+
+export const deleteApiKey = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige ID." });
+  try {
+    const existing = await prisma.api_keys.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ message: "API-Key nicht gefunden." });
+
+    await prisma.api_keys.delete({ where: { id } });
+    return res.json({ message: "API-Key gelöscht." });
+  } catch (err) {
+    console.error("API-Key löschen fehlgeschlagen:", err);
+    return res.status(500).json({ message: "API-Key konnte nicht gelöscht werden." });
+  }
+};

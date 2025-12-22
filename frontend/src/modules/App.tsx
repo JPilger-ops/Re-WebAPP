@@ -37,6 +37,7 @@ import {
   createApiKey,
   rotateApiKey,
   revokeApiKey,
+  deleteApiKey,
   listInvoices,
   getInvoice,
   getNextInvoiceNumber,
@@ -1971,10 +1972,18 @@ function AdminSettings() {
     { key: "header", label: "Rechnungskopf", content: <InvoiceHeaderForm /> },
     { key: "bank", label: "Bank / Steuer", content: <BankTaxSettingsForm /> },
     { key: "datev", label: "DATEV", content: <DatevSettingsForm /> },
-    { key: "hkforms", label: "HKForms", content: <HkformsSettingsForm /> },
+    {
+      key: "hkforms",
+      label: "HKForms",
+      content: (
+        <div className="space-y-6">
+          <HkformsSettingsForm />
+          <ApiKeysSection />
+        </div>
+      ),
+    },
     { key: "network", label: "Netzwerk", content: <NetworkSettingsInfo /> },
     { key: "security", label: "Sicherheit", content: <SecuritySettingsInfo /> },
-    { key: "apikeys", label: "API Keys", content: <ApiKeysSection /> },
   ];
 
   const [active, setActive] = useState(tabs[0].key);
@@ -2488,6 +2497,7 @@ function ApiKeysSection() {
   const [creating, setCreating] = useState(false);
   const [rotatingId, setRotatingId] = useState<number | null>(null);
   const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [lastPlain, setLastPlain] = useState<{ api_key: string; prefix: string } | null>(null);
 
@@ -2555,6 +2565,22 @@ function ApiKeysSection() {
       setStatus({ type: "error", message: apiErr.message || "Widerruf fehlgeschlagen." });
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const onDelete = async (id: number) => {
+    if (!confirm("API-Key wirklich löschen? (Aktion kann nicht rückgängig gemacht werden)")) return;
+    setDeletingId(id);
+    setStatus(null);
+    try {
+      await deleteApiKey(id);
+      await load();
+      setStatus({ type: "success", message: "API-Key gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Löschen fehlgeschlagen." });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -2641,6 +2667,13 @@ function ApiKeysSection() {
                       disabled={revokingId === k.id || revoked}
                     >
                       {revokingId === k.id ? "widerrufe..." : "Widerrufen"}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => onDelete(k.id)}
+                      disabled={deletingId === k.id}
+                    >
+                      {deletingId === k.id ? "lösche..." : "Löschen"}
                     </button>
                   </td>
                 </tr>
