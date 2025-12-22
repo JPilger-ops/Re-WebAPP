@@ -216,14 +216,22 @@ const fetchBuffer = async (url, opts = {}) => {
   }
 
   // I) DATEV export
-  const { res: datevRes } = await fetchJson(`${baseUrl}/api/invoices/${invoiceId}/datev-export`, {
+  const datevEmail = process.env.CHECK_DATEV_EMAIL;
+  if (datevEmail) {
+    await fetchJson(`${baseUrl}/api/settings/datev`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ email: datevEmail }),
+    });
+  }
+  const { res: datevRes, data: datevData } = await fetchJson(`${baseUrl}/api/invoices/${invoiceId}/datev-export`, {
     method: "POST",
     headers: { Cookie: cookie },
   });
   if (datevRes.status === 200) {
     log("DATEV export OK");
   } else {
-    log(`DATEV export skipped/warn (status ${datevRes.status})`);
+    log(`DATEV export skipped (${datevRes.status}): ${JSON.stringify(datevData)}`);
   }
 
   // J) Cleanup
