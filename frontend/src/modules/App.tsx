@@ -76,7 +76,7 @@ import {
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select } from "./ui";
 
-type FormStatus = { type: "success" | "error"; message: string } | null;
+type FormStatus = { type: "success" | "error" | "info"; message: string } | null;
 
 const PERMISSION_OPTIONS: { key: string; label: string }[] = [
   { key: "invoices.read", label: "Rechnungen lesen" },
