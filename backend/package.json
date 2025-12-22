@@ -16,7 +16,8 @@
     "check:pdf": "node scripts/check-pdf.mjs",
     "check:invoice": "node scripts/check-invoice.mjs",
     "check:parity": "node scripts/check-parity.mjs",
-    "check:pdf-parity": "node scripts/check-pdf-parity.mjs"
+    "check:pdf-parity": "node scripts/check-pdf-parity.mjs",
+    "check:mail-parity": "node scripts/check-mail-parity.mjs"
   },
   "keywords": [],
   "author": "",
