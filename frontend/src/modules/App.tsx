@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   AuthUser,
@@ -68,7 +68,7 @@ import {
   deleteRoleApi,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
-import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink } from "./ui";
+import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select } from "./ui";
 
 type FormStatus = { type: "success" | "error"; message: string } | null;
 
@@ -98,28 +98,56 @@ const PERMISSION_OPTIONS: { key: string; label: string }[] = [
   { key: "categories.delete", label: "Kategorien löschen" },
 ];
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(err: any) {
+    console.error("UI ErrorBoundary caught", err);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+          <div className="bg-white border border-red-200 text-red-700 rounded-lg shadow p-6 max-w-lg text-center">
+            <h1 className="text-xl font-semibold mb-2">Es ist ein Fehler aufgetreten.</h1>
+            <p className="text-sm">Bitte laden Sie die Seite neu. Sollte der Fehler bleiben, wenden Sie sich an den Admin.</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route element={<ProtectedLayout />}>
-            <Route element={<Shell />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/customers" element={<Customers />} />
-              <Route path="/invoices" element={<Invoices />} />
-              <Route path="/stats" element={<StatsPage />} />
-              <Route path="/categories" element={<Categories />} />
-              <Route path="/settings" element={<AdminSettings />} />
-              <Route path="/admin/users" element={<AdminUsers />} />
-              <Route path="/admin/roles" element={<AdminRoles />} />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <ErrorBoundary>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<ProtectedLayout />}>
+              <Route element={<Shell />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/customers" element={<Customers />} />
+                <Route path="/invoices" element={<Invoices />} />
+                <Route path="/stats" element={<StatsPage />} />
+                <Route path="/categories" element={<Categories />} />
+                <Route path="/settings" element={<AdminSettings />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/roles" element={<AdminRoles />} />
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              </Route>
             </Route>
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
