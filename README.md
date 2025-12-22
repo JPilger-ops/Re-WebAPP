@@ -160,6 +160,16 @@ npm --prefix backend run check:invoice
 # CHECK_HOST=127.0.0.1 CHECK_PORT=3030 npm --prefix backend run check:invoice
 ```
 
+### UI Sanity Flow (manuell, Browser)
+1) Login via https://rechnung.intern
+2) Kunde anlegen (/customers)
+3) Rechnung anlegen (/invoices) inkl. Position
+4) PDF öffnen (Button “PDF”)
+5) Rechnungskopf in /settings anpassen, dann in /invoices “PDF neu” für eine Rechnung → neues PDF prüfen
+6) SMTP Testmail in /settings (zeigt Dry-Run/Redirect-Hinweis, wenn EMAIL_SEND_DISABLED/EMAIL_REDIRECT_TO gesetzt)
+
+Fixdaten: Host 192.200.255.225 Port 3031, NPM 192.168.50.100, Domain rechnung.intern.
+
 ### 4) DB-Init & Idempotenz
 `npm run start:docker` ruft `scripts/bootstrap-db.mjs` auf und führt immer:
 - `npx prisma migrate deploy`

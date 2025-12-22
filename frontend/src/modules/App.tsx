@@ -217,15 +217,8 @@ function Dashboard() {
   const isAdmin = user?.role_name === "admin";
 
   const cards = useMemo(
-    () => [
-      "Rechnungen",
-      "Kunden",
-      "Kategorien",
-      "Rollen & Benutzer",
-      "Statistiken",
-      "Einstellungen",
-    ],
-    []
+    () => ["Rechnungen", "Kunden", "Einstellungen"],
+    [],
   );
 
   return (
@@ -233,21 +226,21 @@ function Dashboard() {
       <div>
         <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
         <p className="text-slate-700">
-          Du bist eingeloggt. Nicht migrierte Bereiche sind vorübergehend als Platzhalter markiert.
+          Schnelle Navigation zu den wichtigsten Bereichen.
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {cards.map((title) => (
-          <PlaceholderCard key={title} title={title} />
+          <Link
+            key={title}
+            to={title === "Rechnungen" ? "/invoices" : title === "Kunden" ? "/customers" : "/settings"}
+            className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:border-blue-300 transition"
+          >
+            <div className="font-semibold mb-1">{title}</div>
+            <div className="text-sm text-slate-600">Öffnen</div>
+          </Link>
         ))}
       </div>
-      {isAdmin && (
-        <div className="mt-2 space-y-4">
-          <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-900">
-            Admin: Einstellungen findest du unter <Link className="underline" to="/settings">/settings</Link>.
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -256,7 +249,7 @@ function PlaceholderCard({ title }: { title: string }) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
       <h2 className="font-semibold mb-2">{title}</h2>
-      <p className="text-sm text-slate-600">Noch nicht migriert. Funktionalität folgt in der neuen SPA.</p>
+      <p className="text-sm text-slate-600">Öffnen oder Aktion ausführen.</p>
     </div>
   );
 }
