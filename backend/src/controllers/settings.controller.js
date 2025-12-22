@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { getBankSettings, saveBankSettings } from "../utils/bankSettings.js";
 import { getDatevSettings, saveDatevSettings, isValidEmail } from "../utils/datevSettings.js";
-import { getHkformsSettings, saveHkformsSettings } from "../utils/hkformsSettings.js";
+import { getHkformsSettings, saveHkformsSettings, resetHkformsSettingsCache } from "../utils/hkformsSettings.js";
 import { getTaxSettings, saveTaxSettings } from "../utils/taxSettings.js";
 import {
   getSmtpSettings,
@@ -147,6 +147,7 @@ export const updateHkformsData = async (req, res) => {
   try {
     const { base_url, organization, api_key } = req.body || {};
     const saved = await saveHkformsSettings({ base_url, organization, api_key });
+    resetHkformsSettingsCache();
     const { api_key: _secret, ...rest } = saved || {};
     return res.json({
       ...rest,

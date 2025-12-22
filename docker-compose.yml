@@ -33,6 +33,7 @@ services:
       DB_PORT: 5432
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
+      HKFORMS_MOCK_ENABLE: "1"
     depends_on:
       db:
         condition: service_healthy

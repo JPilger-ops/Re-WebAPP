@@ -14,8 +14,7 @@ const username = process.env.CHECK_USERNAME || "admin";
 const password = process.env.CHECK_PASSWORD || "admin";
 
 const stripTrailingSlash = (v) => v.replace(/\/$/, "");
-const internalBase = process.env.CHECK_INTERNAL_BASE_URL || "http://127.0.0.1:3030";
-const mockBase = `${stripTrailingSlash(internalBase)}/api/test/hkforms-mock/reservations`;
+const mockBase = `${stripTrailingSlash(baseUrl)}/api/test/hkforms-mock`;
 const mockLog = `${stripTrailingSlash(baseUrl)}/api/test/hkforms-mock/log`;
 
 const log = (...args) => console.log("[check:hkforms-parity]", ...args);

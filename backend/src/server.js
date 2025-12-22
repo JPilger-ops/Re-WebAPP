@@ -121,6 +121,34 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/version", versionRoutes);
 
+// DEV-only HKForms Mock (bypass auth), can be enabled in prod via HKFORMS_MOCK_ENABLE=1 for tests
+const enableHkformsMock =
+  (process.env.NODE_ENV || "development") !== "production" ||
+  ["1", "true", "yes"].includes((process.env.HKFORMS_MOCK_ENABLE || "").toLowerCase());
+if (enableHkformsMock) {
+  let hkformsLog = [];
+  const MAX_LOG = 50;
+
+  app.post(/^\/api\/test\/hkforms-mock\/.*$/, (req, res) => {
+    const entry = {
+      time: new Date().toISOString(),
+      path: req.path,
+      headers: {
+        "x-hkforms-crm-token": req.headers["x-hkforms-crm-token"] || null,
+        "x-hkforms-org": req.headers["x-hkforms-org"] || null,
+      },
+      body: req.body || null,
+    };
+    hkformsLog.unshift(entry);
+    if (hkformsLog.length > MAX_LOG) hkformsLog = hkformsLog.slice(0, MAX_LOG);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/test/hkforms-mock/log", (_req, res) => {
+    res.json(hkformsLog);
+  });
+}
+
 /* -------------------------
    🌐 FRONTEND ROUTE
 -------------------------- */
