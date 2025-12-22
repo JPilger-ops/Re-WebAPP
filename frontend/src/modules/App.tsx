@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
