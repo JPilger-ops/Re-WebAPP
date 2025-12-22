@@ -186,3 +186,97 @@ export async function deleteCustomer(id: number) {
     method: "DELETE",
   });
 }
+
+// Invoices
+export interface InvoiceListItem {
+  id: number;
+  invoice_number: string;
+  date: string;
+  recipient_name: string | null;
+  recipient_email: string | null;
+  category_id: number | null;
+  category_label: string | null;
+  status_sent?: boolean | null;
+  status_sent_at?: string | null;
+  status_paid_at?: string | null;
+  gross_total?: number | null;
+}
+
+export interface InvoiceDetail {
+  invoice: {
+    id: number;
+    invoice_number: string;
+    date: string;
+    category: string | null;
+    reservation_request_id?: string | null;
+    external_reference?: string | null;
+    receipt_date?: string | null;
+    status_sent?: boolean | null;
+    status_sent_at?: string | null;
+    status_paid_at?: string | null;
+    overdue_since?: string | null;
+    datev_export_status?: string | null;
+    datev_exported_at?: string | null;
+    datev_export_error?: string | null;
+    net_19?: number | null;
+    vat_19?: number | null;
+    gross_19?: number | null;
+    net_7?: number | null;
+    vat_7?: number | null;
+    gross_7?: number | null;
+    gross_total?: number | null;
+    b2b?: boolean | null;
+    ust_id?: string | null;
+    recipient: Customer & { id: number | null };
+  };
+  items: InvoiceItem[];
+}
+
+export interface InvoiceItem {
+  id?: number;
+  description: string;
+  quantity: number;
+  unit_price_gross: number;
+  vat_key: number;
+  line_total_gross?: number;
+}
+
+export async function listInvoices() {
+  return apiFetch<InvoiceListItem[]>("/invoices");
+}
+
+export async function getInvoice(id: number) {
+  return apiFetch<InvoiceDetail>(`/invoices/${id}`);
+}
+
+export async function getNextInvoiceNumber() {
+  return apiFetch<{ next_number: string }>("/invoices/next-number");
+}
+
+export async function createInvoice(payload: {
+  recipient: Partial<Customer>;
+  invoice: any;
+  items: InvoiceItem[];
+}) {
+  return apiFetch<{ invoice_id: number }>(`/invoices`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInvoice(id: number, payload: {
+  recipient: Partial<Customer>;
+  invoice: any;
+  items: InvoiceItem[];
+}) {
+  return apiFetch<{ message: string }>(`/invoices/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteInvoice(id: number) {
+  return apiFetch<{ message: string }>(`/invoices/${id}`, {
+    method: "DELETE",
+  });
+}

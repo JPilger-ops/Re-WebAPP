@@ -246,7 +246,6 @@ function Dashboard() {
           <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-900">
             Admin: Einstellungen findest du unter <Link className="underline" to="/settings">/settings</Link>.
           </div>
-          <RegeneratePdfCard />
         </div>
       )}
     </div>
@@ -422,63 +421,214 @@ function Customers() {
 }
 
 function Invoices() {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Rechnungen</h1>
-      </div>
-      <EmptyState title="Rechnungen" description="Funktionalität folgt. PDF-Neuerstellung im Admin-Bereich möglich." />
-    </div>
-  );
-}
+  const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
+  const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "sent" | "paid">("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; id?: number } | null>(null);
+  const [detail, setDetail] = useState<InvoiceDetail | null>(null);
+  const [toast, setToast] = useState<FormStatus>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-function RegeneratePdfCard() {
-  const [invoiceId, setInvoiceId] = useState("");
-  const [status, setStatus] = useState<FormStatus>(null);
-  const [busy, setBusy] = useState(false);
+  const computeStatus = (inv: InvoiceListItem) => {
+    if (inv.status_paid_at) return "paid";
+    if (inv.status_sent) return "sent";
+    return "open";
+  };
 
-  const onRegenerate = async () => {
-    const id = Number(invoiceId);
-    if (!id) {
-      setStatus({ type: "error", message: "Bitte eine gültige Rechnungs-ID angeben." });
-      return;
-    }
-    setBusy(true);
-    setStatus(null);
+  const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter) => {
+    const t = term.toLowerCase();
+    return list.filter((inv) => {
+      const matchesTerm =
+        !t ||
+        inv.invoice_number.toLowerCase().includes(t) ||
+        (inv.recipient_name || "").toLowerCase().includes(t);
+      const st = computeStatus(inv);
+      const matchesStatus = status === "all" || st === status;
+      return matchesTerm && matchesStatus;
+    });
+  };
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await regenerateInvoicePdf(id);
-      setStatus({
-        type: "success",
-        message: `PDF neu erstellt (${res.filename})${res.size ? `, Größe ${res.size} Bytes` : ""}.`,
-      });
+      const res = await listInvoices();
+      setInvoices(res);
+      setFiltered(applyFilter(res, search, statusFilter));
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setStatus({ type: "error", message: apiErr.message || "PDF konnte nicht neu erstellt werden." });
+      setError(apiErr.message || "Rechnungen konnten nicht geladen werden.");
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    setFiltered(applyFilter(invoices, search, statusFilter));
+  }, [invoices, search, statusFilter]);
+
+  const openDetail = async (id: number) => {
+    try {
+      const data = await getInvoice(id);
+      setDetail(data);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Rechnung konnte nicht geladen werden." });
+    }
+  };
+
+  const onRegenerate = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      const res = await regenerateInvoicePdf(id);
+      setToast({
+        type: "success",
+        message: `PDF neu erstellt (${res.filename})${res.size ? `, ${res.size} Bytes` : ""}.`,
+      });
+      window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "PDF konnte nicht neu erstellt werden." });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onDeleted = (id: number) => {
+    setInvoices((prev) => prev.filter((inv) => inv.id !== id));
+    setToast({ type: "success", message: "Rechnung gelöscht." });
+  };
+
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-      <h3 className="font-semibold mb-2">PDF neu erstellen (Admin)</h3>
-      <p className="text-sm text-slate-600 mb-3">
-        Falls Briefkopf geändert wurde oder das PDF veraltet ist, kannst du es hier neu erzeugen.
-      </p>
-      <div className="flex items-center gap-3 flex-wrap">
-        <input
-          className="input w-40"
-          placeholder="Rechnungs-ID"
-          value={invoiceId}
-          onChange={(e) => setInvoiceId(e.target.value)}
-          inputMode="numeric"
-        />
-        <button className="btn-secondary" onClick={onRegenerate} disabled={busy}>
-          {busy ? "Erzeuge ..." : "PDF neu erstellen"}
-        </button>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Rechnungen</h1>
+          <p className="text-slate-600 text-sm">PDF-Aktionen direkt an der Rechnung.</p>
+        </div>
+        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
       </div>
-      {status && (
-        <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <Input
+          placeholder="Suche nach Nummer oder Kunde"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-64"
+        />
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as any)}
+          className="w-40"
+        >
+          <option value="all">Alle Status</option>
+          <option value="open">Offen</option>
+          <option value="sent">Gesendet</option>
+          <option value="paid">Bezahlt</option>
+        </Select>
+        <Button variant="secondary" onClick={load}>Aktualisieren</Button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Rechnungen ...
+        </div>
+      )}
+      {error && <Alert type="error">{error}</Alert>}
+      {!loading && !filtered.length && !error && (
+        <EmptyState title="Keine Rechnungen" description="Lege eine neue Rechnung an." />
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-slate-200 bg-slate-50">
+                <th className="px-3 py-2">Nr.</th>
+                <th className="px-3 py-2">Datum</th>
+                <th className="px-3 py-2">Kunde</th>
+                <th className="px-3 py-2">Betrag</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2 text-right">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((inv) => {
+                const st = computeStatus(inv);
+                return (
+                  <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 font-semibold">{inv.invoice_number}</td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {st === "paid" ? (
+                        <span className="text-green-700">Bezahlt</span>
+                      ) : st === "sent" ? (
+                        <span className="text-blue-700">Gesendet</span>
+                      ) : (
+                        <span className="text-amber-700">Offen</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right flex gap-2 justify-end">
+                      <Button variant="secondary" onClick={() => openDetail(inv.id)}>
+                        Öffnen
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
+                      >
+                        PDF
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => onRegenerate(inv.id)}
+                        disabled={busyId === inv.id}
+                      >
+                        {busyId === inv.id ? "…" : "PDF neu"}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
+
+      {modal && (
+        <InvoiceFormModal
+          mode={modal.mode}
+          id={modal.id}
+          onClose={() => setModal(null)}
+          onSaved={(invNumber) => {
+            setToast({ type: "success", message: `Rechnung ${invNumber} gespeichert.` });
+            load();
+          }}
+          onError={(msg) => setToast({ type: "error", message: msg })}
+        />
+      )}
+
+      {detail && (
+        <InvoiceDetailModal
+          detail={detail}
+          onClose={() => setDetail(null)}
+          onRegenerate={() => onRegenerate(detail.invoice.id)}
+        />
       )}
     </div>
   );
@@ -595,6 +745,399 @@ function CustomerFormModal({
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function InvoiceFormModal({
+  mode,
+  id,
+  onClose,
+  onSaved,
+  onError,
+}: {
+  mode: "create" | "edit";
+  id?: number;
+  onClose: () => void;
+  onSaved: (invoiceNumber: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [items, setItems] = useState<InvoiceItem[]>([
+    { description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 },
+  ]);
+  const [form, setForm] = useState({
+    recipient_id: "",
+    name: "",
+    street: "",
+    zip: "",
+    city: "",
+    email: "",
+    invoice_number: "",
+    date: new Date().toISOString().slice(0, 10),
+    b2b: false,
+    ust_id: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadBase = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [custs, nextNr] = await Promise.all([
+        listCustomers(),
+        mode === "create" ? getNextInvoiceNumber() : Promise.resolve({ next_number: "" }),
+      ]);
+      setCustomers(custs);
+      if (mode === "create") {
+        setForm((f) => ({ ...f, invoice_number: nextNr.next_number || f.invoice_number }));
+      }
+      if (mode === "edit" && id) {
+        const data = await getInvoice(id);
+        setForm({
+          recipient_id: data.invoice.recipient.id ? String(data.invoice.recipient.id) : "",
+          name: data.invoice.recipient.name || "",
+          street: data.invoice.recipient.street || "",
+          zip: data.invoice.recipient.zip || "",
+          city: data.invoice.recipient.city || "",
+          email: data.invoice.recipient.email || "",
+          invoice_number: data.invoice.invoice_number,
+          date: data.invoice.date?.slice(0, 10) || "",
+          b2b: data.invoice.b2b === true,
+          ust_id: data.invoice.ust_id || "",
+        });
+        setItems(
+          data.items.map((i) => ({
+            id: i.id,
+            description: i.description,
+            quantity: Number(i.quantity),
+            unit_price_gross: Number(i.unit_price_gross),
+            vat_key: Number(i.vat_key),
+          }))
+        );
+      }
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "Daten konnten nicht geladen werden.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBase();
+  }, []);
+
+  const selectRecipient = (idStr: string) => {
+    setForm((f) => ({ ...f, recipient_id: idStr }));
+    const idNum = Number(idStr);
+    const found = customers.find((c) => c.id === idNum);
+    if (found) {
+      setForm((f) => ({
+        ...f,
+        name: found.name || "",
+        street: found.street || "",
+        zip: found.zip || "",
+        city: found.city || "",
+        email: found.email || "",
+      }));
+    }
+  };
+
+  const updateItem = (idx: number, field: keyof InvoiceItem, value: any) => {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
+  };
+
+  const addItem = () => setItems((prev) => [...prev, { description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
+  const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!form.name.trim()) {
+      setError("Empfängername ist erforderlich.");
+      return;
+    }
+    if (!form.invoice_number.trim()) {
+      setError("Rechnungsnummer fehlt.");
+      return;
+    }
+    if (!form.date) {
+      setError("Rechnungsdatum fehlt.");
+      return;
+    }
+    if (!items.length) {
+      setError("Mindestens eine Position ist erforderlich.");
+      return;
+    }
+    if (items.some((i) => !i.description.trim() || Number(i.quantity) <= 0 || Number(i.unit_price_gross) <= 0)) {
+      setError("Bitte alle Positionen ausfüllen (Beschreibung, Menge > 0, Preis > 0).");
+      return;
+    }
+    if (form.b2b && !form.ust_id.trim()) {
+      setError("Für B2B ist eine USt-ID erforderlich.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        recipient: {
+          name: form.name.trim(),
+          street: form.street.trim(),
+          zip: form.zip.trim(),
+          city: form.city.trim(),
+          email: form.email.trim() || null,
+        },
+        invoice: {
+          invoice_number: form.invoice_number.trim(),
+          date: form.date,
+          b2b: form.b2b,
+          ust_id: form.ust_id.trim() || null,
+          category: null,
+        },
+        items: items.map((i) => ({
+          description: i.description.trim(),
+          quantity: Number(i.quantity),
+          unit_price_gross: Number(i.unit_price_gross),
+          vat_key: Number(i.vat_key),
+        })),
+      };
+
+      if (mode === "create") {
+        const res = await createInvoice(payload);
+        onSaved(payload.invoice.invoice_number);
+        // Reset
+        setItems([{ description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
+      } else if (id) {
+        await updateInvoice(id, payload);
+        onSaved(payload.invoice.invoice_number);
+      }
+      onClose();
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "Rechnung konnte nicht gespeichert werden.";
+      setError(msg);
+      onError(msg);
+      return;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={mode === "create" ? "Neue Rechnung" : "Rechnung bearbeiten"} onClose={onClose}>
+      {loading ? (
+        <div className="flex items-center gap-2 text-slate-600">
+          <Spinner /> Lade Daten ...
+        </div>
+      ) : (
+        <form className="space-y-3" onSubmit={onSubmit}>
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Empfänger auswählen</span>
+              <Select value={form.recipient_id} onChange={(e) => selectRecipient(e.target.value)}>
+                <option value="">— Manuell erfassen —</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Rechnungsnummer</span>
+              <Input
+                value={form.invoice_number}
+                onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Datum</span>
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700 mt-6">
+              <input
+                type="checkbox"
+                checked={form.b2b}
+                onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
+              />
+              <span>B2B (USt-ID Pflicht)</span>
+            </label>
+            {form.b2b && (
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">USt-ID</span>
+                <Input
+                  value={form.ust_id}
+                  onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Name *</span>
+              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">E-Mail</span>
+              <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Straße *</span>
+              <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">PLZ *</span>
+              <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Ort *</span>
+              <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">Positionen</h4>
+              <Button variant="secondary" type="button" onClick={addItem}>
+                Position hinzufügen
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {items.map((item, idx) => (
+                <div key={idx} className="grid md:grid-cols-4 gap-2 items-center border border-slate-200 rounded-md p-3">
+                  <input
+                    className="input md:col-span-2"
+                    placeholder="Beschreibung"
+                    value={item.description}
+                    onChange={(e) => updateItem(idx, "description", e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(idx, "quantity", Number(e.target.value))}
+                  />
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={item.unit_price_gross}
+                    onChange={(e) => updateItem(idx, "unit_price_gross", Number(e.target.value))}
+                  />
+                  <select
+                    className="input"
+                    value={item.vat_key}
+                    onChange={(e) => updateItem(idx, "vat_key", Number(e.target.value))}
+                  >
+                    <option value={1}>19% MwSt</option>
+                    <option value={2}>7% MwSt</option>
+                  </select>
+                  <div className="flex justify-end">
+                    {items.length > 1 && (
+                      <Button variant="ghost" type="button" onClick={() => removeItem(idx)}>
+                        Entfernen
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {error && <Alert type="error">{error}</Alert>}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" type="button" onClick={onClose}>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Speichern ..." : "Speichern"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+function InvoiceDetailModal({
+  detail,
+  onClose,
+  onRegenerate,
+}: {
+  detail: InvoiceDetail;
+  onClose: () => void;
+  onRegenerate: () => void;
+}) {
+  const inv = detail.invoice;
+  return (
+    <Modal title={`Rechnung ${inv.invoice_number}`} onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <div className="flex justify-between items-center">
+          <div>
+            <div className="font-semibold">{inv.recipient.name}</div>
+            <div className="text-slate-600">
+              {[inv.recipient.street, inv.recipient.zip, inv.recipient.city].filter(Boolean).join(" ")}
+            </div>
+          </div>
+          <div className="space-x-2">
+            <Button
+              variant="secondary"
+              onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
+            >
+              PDF
+            </Button>
+            <Button variant="secondary" onClick={onRegenerate}>
+              PDF neu
+            </Button>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-2 gap-2">
+          <div><span className="text-slate-500">Datum:</span> {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
+          <div><span className="text-slate-500">Status:</span> {inv.status_paid_at ? "Bezahlt" : inv.status_sent ? "Gesendet" : "Offen"}</div>
+        </div>
+        <div className="border border-slate-200 rounded-md">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-left border-b border-slate-200">
+                <th className="px-3 py-2">Beschreibung</th>
+                <th className="px-3 py-2">Menge</th>
+                <th className="px-3 py-2">Preis</th>
+                <th className="px-3 py-2">MwSt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.items.map((it) => (
+                <tr key={it.id} className="border-b border-slate-100">
+                  <td className="px-3 py-2">{it.description}</td>
+                  <td className="px-3 py-2">{Number(it.quantity).toLocaleString("de-DE")}</td>
+                  <td className="px-3 py-2">{Number(it.unit_price_gross).toFixed(2)} €</td>
+                  <td className="px-3 py-2">{it.vat_key === 2 ? "7%" : "19%"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="text-right font-semibold">
+          Summe: {inv.gross_total != null ? `${Number(inv.gross_total).toFixed(2)} €` : "–"}
+        </div>
+      </div>
     </Modal>
   );
 }
