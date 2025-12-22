@@ -21,6 +21,9 @@ import {
   rotateApiKey,
   revokeApiKey,
   deleteApiKey,
+  getPdfSettingsData,
+  updatePdfSettingsData,
+  testPdfPath,
 } from "../controllers/settings.controller.js";
 
 const router = Router();
@@ -115,6 +118,24 @@ router.put(
   "/invoice-header",
   requireRole("admin"),
   updateInvoiceHeaderData
+);
+
+router.get(
+  "/pdf",
+  requireRole("admin"),
+  getPdfSettingsData
+);
+
+router.put(
+  "/pdf",
+  requireRole("admin"),
+  updatePdfSettingsData
+);
+
+router.post(
+  "/pdf/test-path",
+  requireRole("admin"),
+  testPdfPath
 );
 
 router.get(

@@ -181,6 +181,18 @@ async function seedHkforms() {
   });
 }
 
+async function seedPdfSettings() {
+  const fallback = process.env.PDF_STORAGE_PATH || "/app/pdfs";
+  await prisma.pdf_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      storage_path: fallback,
+    },
+  });
+}
+
 async function main() {
   const adminRoleId = await seedRoles();
   await seedAdmin(adminRoleId);
@@ -190,6 +202,7 @@ async function main() {
   await seedTax();
   await seedDatev();
   await seedHkforms();
+  await seedPdfSettings();
 }
 
 main()

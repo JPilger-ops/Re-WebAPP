@@ -38,6 +38,9 @@ import {
   rotateApiKey,
   revokeApiKey,
   deleteApiKey,
+  getPdfSettings,
+  updatePdfSettings,
+  testPdfPath,
   listInvoices,
   getInvoice,
   getNextInvoiceNumber,
@@ -2025,13 +2028,93 @@ function AdminSettings() {
 }
 
 function PdfSettingsInfo() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [testStatus, setTestStatus] = useState<FormStatus>(null);
+  const [form, setForm] = useState<{ storage_path: string; default_path?: string }>({ storage_path: "" });
+
+  useEffect(() => {
+    setStatus(null);
+    getPdfSettings()
+      .then((data) => setForm({ storage_path: data.storage_path || "", default_path: data.default_path }))
+      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "Konnte PDF-Einstellungen nicht laden." }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      const saved = await updatePdfSettings({ storage_path: form.storage_path });
+      setForm((f) => ({ ...f, storage_path: saved.storage_path }));
+      setStatus({ type: "success", message: "PDF-Pfad gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Speichern fehlgeschlagen." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onTest = async () => {
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      const res = await testPdfPath({ path: form.storage_path });
+      setTestStatus({ type: "success", message: `Pfad ist schreibbar: ${res.path}` });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setTestStatus({ type: "error", message: apiErr.message || "Pfad-Test fehlgeschlagen." });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const resetDefault = () => {
+    if (form.default_path) setForm((f) => ({ ...f, storage_path: form.default_path || "" }));
+  };
+
   return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-semibold">PDF Hinweise</h2>
-      <div className="text-sm text-slate-700 space-y-2">
-        <p>Der Briefkopf (Rechnungskopf) wirkt auf neu generierte PDFs. Für bestehende Rechnungen bitte “PDF neu erstellen” nutzen.</p>
-        <p>Logo und Footer werden aus dem Rechnungskopf übernommen. Kategorie-Logos werden pro Rechnungskategorie eingebettet.</p>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">PDF Speicherort</h2>
+        <p className="text-sm text-slate-600">
+          Pfad, in dem PDFs gespeichert werden. Bei Docker als Volume/Bind-Mount bereitstellen. Default: {form.default_path || "/app/pdfs"}.
+        </p>
       </div>
+      <form className="space-y-3" onSubmit={onSave}>
+        <label className="text-sm text-slate-700 block">
+          <span className="font-medium">Pfad</span>
+          <input
+            className="input mt-1"
+            value={form.storage_path}
+            onChange={(e) => setForm((f) => ({ ...f, storage_path: e.target.value }))}
+            disabled={loading}
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-primary" type="submit" disabled={saving || loading}>
+            {saving ? "Speichere ..." : "Speichern"}
+          </button>
+          <button className="btn-secondary" type="button" onClick={onTest} disabled={testing || loading}>
+            {testing ? "Testet ..." : "Pfad testen"}
+          </button>
+          {form.default_path && (
+            <button className="btn-secondary" type="button" onClick={resetDefault} disabled={loading}>
+              Auf Standard zurücksetzen
+            </button>
+          )}
+        </div>
+      </form>
+      {status && (
+        <Alert type={status.type === "error" ? "error" : "success"}>{status.message}</Alert>
+      )}
+      {testStatus && (
+        <Alert type={testStatus.type === "error" ? "error" : "success"}>{testStatus.message}</Alert>
+      )}
     </div>
   );
 }

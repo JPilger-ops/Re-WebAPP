@@ -14,6 +14,7 @@ import {
   getInvoiceHeaderSettings,
   saveInvoiceHeaderSettings,
 } from "../utils/invoiceHeaderSettings.js";
+import { getPdfSettings, savePdfSettings, testPdfPathWritable } from "../utils/pdfSettings.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
@@ -158,6 +159,38 @@ export const updateHkformsData = async (req, res) => {
     const message = err?.userMessage || "HKForms-Einstellungen konnten nicht gespeichert werden.";
     const status = err?.statusCode || 500;
     return res.status(status).json({ message });
+  }
+};
+
+export const getPdfSettingsData = async (_req, res) => {
+  try {
+    const settings = await getPdfSettings();
+    return res.json(settings);
+  } catch (err) {
+    console.error("PDF-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "PDF-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updatePdfSettingsData = async (req, res) => {
+  try {
+    const path = (req.body?.storage_path || "").trim();
+    const saved = await savePdfSettings({ storage_path: path });
+    return res.json({ ...saved, message: "PDF-Einstellungen gespeichert." });
+  } catch (err) {
+    console.error("PDF-Einstellungen speichern fehlgeschlagen:", err);
+    return res.status(500).json({ message: "PDF-Einstellungen konnten nicht gespeichert werden." });
+  }
+};
+
+export const testPdfPath = async (req, res) => {
+  try {
+    const path = req.body?.path || req.body?.storage_path || "";
+    const resolved = await testPdfPathWritable(path);
+    return res.json({ ok: true, path: resolved });
+  } catch (err) {
+    const message = err?.message || "Pfad konnte nicht geschrieben werden.";
+    return res.status(400).json({ message });
   }
 };
 

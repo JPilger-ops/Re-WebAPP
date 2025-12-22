@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import puppeteer from "puppeteer";
 
-const outDir = process.env.PDF_DIR || path.join(process.cwd(), "pdfs");
+const outDir = process.env.PDF_DIR || process.env.PDF_STORAGE_PATH || path.join(process.cwd(), "pdfs");
 const outFile = path.join(outDir, "smoke-check.pdf");
 
 async function main() {

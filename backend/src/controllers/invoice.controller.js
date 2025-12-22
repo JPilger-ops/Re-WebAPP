@@ -1,4 +1,5 @@
 import { prisma } from "../utils/prisma.js";
+import { getResolvedPdfPath } from "../utils/pdfSettings.js";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import fs from "fs";
@@ -56,7 +57,12 @@ const __dirname = path.dirname(__filename);
 
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
 const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
-const pdfDir = path.join(__dirname, "../../pdfs");
+
+const getPdfDir = async () => {
+  const dir = await getResolvedPdfPath();
+  await fs.promises.mkdir(dir, { recursive: true }).catch(() => {});
+  return dir;
+};
 
 let defaultLogoBase64 = "";
 try {
@@ -751,6 +757,7 @@ export const regenerateInvoicePdf = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
   try {
+    const pdfDir = await getPdfDir();
     const invoiceRow = await prisma.invoices.findUnique({
       where: { id },
       select: { invoice_number: true },
@@ -812,9 +819,6 @@ async function ensureInvoicePdf(id) {
       });
       categoryLogo = category?.logo_file || null;
     }
-
-    const filename = `RE-${invoiceRow.invoice_number}.pdf`;
-    const filepath = path.join(pdfDir, filename);
 
     const invoice = {
       invoice_number: invoiceRow.invoice_number,
@@ -948,6 +952,12 @@ async function ensureInvoicePdf(id) {
       iban: headerSettings?.iban || bankSettings.iban || "",
       bic: headerSettings?.bic || bankSettings.bic || "",
     };
+
+    // Dateinamen/Pfade aus Settings ableiten
+    const pdfDir = await getPdfDir();
+    const filename = `RE-${invoiceRow.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+    const filepathInline = path.join(pdfDir, `inline-${filename}`);
 
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
     const html = generateInvoiceHtml(
@@ -2036,7 +2046,7 @@ export const deleteInvoice = async (req, res) => {
 
     // PDF-Datei (falls vorhanden) löschen
     try {
-      const pdfDir = path.join(__dirname, "../../pdfs");
+      const pdfDir = await getPdfDir();
       const filename = `Rechnung-${invoiceRow.invoice_number}.pdf`;
       const filepath = path.join(pdfDir, filename);
       if (fs.existsSync(filepath)) {

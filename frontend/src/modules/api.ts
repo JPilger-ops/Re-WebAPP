@@ -106,6 +106,11 @@ export interface HkformsSettings {
   updated_at?: string | null;
 }
 
+export interface PdfSettings {
+  storage_path: string;
+  default_path?: string;
+}
+
 export async function getSmtpSettings() {
   return apiFetch<SmtpSettings>("/settings/smtp");
 }
@@ -190,6 +195,24 @@ export async function testHkforms(payload: { base_url?: string; organization?: s
       body: JSON.stringify(payload),
     }
   );
+}
+
+export async function getPdfSettings() {
+  return apiFetch<PdfSettings>("/settings/pdf");
+}
+
+export async function updatePdfSettings(payload: { storage_path: string }) {
+  return apiFetch<PdfSettings & { message: string }>("/settings/pdf", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testPdfPath(payload: { path: string }) {
+  return apiFetch<{ ok: boolean; path: string }>("/settings/pdf/test-path", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function regenerateInvoicePdf(id: number) {

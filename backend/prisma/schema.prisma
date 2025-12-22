@@ -206,3 +206,8 @@ model api_keys {
   last_used_at DateTime? @db.Timestamp(6)
   revoked_at   DateTime? @db.Timestamp(6)
 }
+
+model pdf_settings {
+  id            Int     @id @default(1)
+  storage_path  String  @db.Text
+}
