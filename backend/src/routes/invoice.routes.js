@@ -4,6 +4,7 @@ import {
   getAllInvoices, 
   getInvoiceById, 
   getInvoicePdf,
+  getRecentInvoices,
   markSent,
   getInvoiceEmailPreview,
   sendInvoiceEmail,
@@ -35,6 +36,7 @@ router.post("/:id/datev-export", exportInvoiceToDatev);
 
 // Standard-Routen
 router.get("/next-number", getNextInvoiceNumber);
+router.get("/recent", getRecentInvoices);
 router.get("/", getAllInvoices);     
 router.get("/:id", getInvoiceById);
 router.get("/:id/pdf", getInvoicePdf);

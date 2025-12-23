@@ -9,6 +9,7 @@ import {
   InvoiceDetail,
   InvoiceItem,
   InvoiceListItem,
+  RecentInvoice,
   BankSettings,
   TaxSettings,
   DatevSettings,
@@ -38,6 +39,7 @@ import {
   rotateApiKey,
   revokeApiKey,
   deleteApiKey,
+  listRecentInvoices,
   getPdfSettings,
   updatePdfSettings,
   testPdfPath,
@@ -328,6 +330,62 @@ function Dashboard() {
     [hasStats],
   );
 
+  const [recent, setRecent] = useState<RecentInvoice[]>([]);
+  const [recentStatus, setRecentStatus] = useState<FormStatus>(null);
+  const [recentLoading, setRecentLoading] = useState(true);
+
+  useEffect(() => {
+    setRecentStatus(null);
+    setRecentLoading(true);
+    listRecentInvoices(10)
+      .then(setRecent)
+      .catch((err: ApiError) => setRecentStatus({ type: "error", message: err.message || "Rechnungen konnten nicht geladen werden." }))
+      .finally(() => setRecentLoading(false));
+  }, []);
+
+  const statusLabel = (inv: RecentInvoice) => {
+    if (inv.status_paid_at) return { text: "bezahlt", tone: "green" as const };
+    if (inv.status_sent) return { text: "gesendet", tone: "blue" as const };
+    return { text: "offen", tone: "amber" as const };
+  };
+
+  const actionMenu = (inv: RecentInvoice) => (
+    <details className="relative">
+      <summary className="btn-secondary px-2 py-1 cursor-pointer list-none">⋮</summary>
+      <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
+        <button
+          className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+          onClick={() => {
+            window.location.href = "/invoices";
+          }}
+        >
+          Öffnen
+        </button>
+        <button
+          className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+          onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
+        >
+          PDF öffnen
+        </button>
+        {user?.role_name === "admin" && (
+          <button
+            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+            onClick={async () => {
+              try {
+                await regenerateInvoicePdf(inv.id);
+                window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank");
+              } catch (err: any) {
+                alert((err as ApiError)?.message || "PDF konnte nicht neu erstellt werden.");
+              }
+            }}
+          >
+            PDF neu erstellen
+          </button>
+        )}
+      </div>
+    </details>
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -355,6 +413,61 @@ function Dashboard() {
             <div className="text-sm text-slate-600">Öffnen</div>
           </Link>
         ))}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold">Letzte Rechnungen</h2>
+            <p className="text-sm text-slate-600">Die 10 aktuellsten Rechnungen mit Status.</p>
+          </div>
+          {recentLoading && <span className="text-xs text-slate-500">Lade ...</span>}
+        </div>
+        {recentStatus && <Alert type={recentStatus.type === "error" ? "error" : "success"}>{recentStatus.message}</Alert>}
+        {!recentLoading && !recent.length && !recentStatus && (
+          <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
+        )}
+        {!recentLoading && recent.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-left border-b border-slate-200 bg-slate-50">
+                  <th className="px-3 py-2">Nr</th>
+                  <th className="px-3 py-2">Kunde</th>
+                  <th className="px-3 py-2">Kategorie</th>
+                  <th className="px-3 py-2">Datum</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2 text-right">Betrag</th>
+                  <th className="px-3 py-2 text-right">Aktion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((inv) => {
+                  const st = statusLabel(inv);
+                  return (
+                    <tr key={inv.id} className="border-b border-slate-100">
+                      <td className="px-3 py-2 font-medium">{inv.invoice_number}</td>
+                      <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
+                      <td className="px-3 py-2 text-slate-700">{inv.category_label || "–"}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Badge tone={st.tone}>{st.text}</Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {inv.gross_total != null
+                          ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : "–"}
+                      </td>
+                      <td className="px-3 py-2 text-right">{actionMenu(inv)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

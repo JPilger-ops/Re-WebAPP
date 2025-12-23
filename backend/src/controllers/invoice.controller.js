@@ -2066,6 +2066,45 @@ export const deleteInvoice = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/invoices/recent?limit=10
+ * Liefert die letzten Rechnungen (minimaler Satz Felder)
+ */
+export const getRecentInvoices = async (req, res) => {
+  const limitRaw = Number(req.query.limit) || 10;
+  const limit = Math.min(Math.max(limitRaw, 1), 50);
+  try {
+    const rows = await prisma.invoices.findMany({
+      orderBy: [
+        { date: "desc" },
+        { invoice_number: "desc" },
+      ],
+      take: limit,
+      include: {
+        recipients: { select: { name: true } },
+        invoice_categories: { select: { label: true } },
+      },
+    });
+
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      invoice_number: r.invoice_number,
+      date: r.date,
+      recipient_name: r.recipients?.name || null,
+      category_label: r.invoice_categories?.label || null,
+      status_sent: r.status_sent,
+      status_sent_at: r.status_sent_at,
+      status_paid_at: r.status_paid_at,
+      gross_total: r.gross_total,
+    }));
+
+    return res.json(mapped);
+  } catch (err) {
+    console.error("Fehler beim Laden der letzten Rechnungen:", err);
+    return res.status(500).json({ message: "Letzte Rechnungen konnten nicht geladen werden." });
+  }
+};
+
 // -------------------------------------------------------------
 // 🔢 Automatische Rechnungsnummer im Format YYYYMM001
 //    – pro Monat neu beginnend

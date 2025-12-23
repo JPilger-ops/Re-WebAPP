@@ -390,8 +390,25 @@ export interface InvoiceItem {
   line_total_gross?: number;
 }
 
+export interface RecentInvoice {
+  id: number;
+  invoice_number: string;
+  date: string | null;
+  recipient_name: string | null;
+  category_label: string | null;
+  status_sent?: boolean | null;
+  status_sent_at?: string | null;
+  status_paid_at?: string | null;
+  gross_total?: number | null;
+}
+
 export async function listInvoices() {
   return apiFetch<InvoiceListItem[]>("/invoices");
+}
+
+export async function listRecentInvoices(limit = 10) {
+  const qs = limit ? `?limit=${encodeURIComponent(limit)}` : "";
+  return apiFetch<RecentInvoice[]>(`/invoices/recent${qs}`);
 }
 
 export async function getInvoice(id: number) {
