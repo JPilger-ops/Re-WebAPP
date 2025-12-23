@@ -951,6 +951,22 @@ function Invoices() {
     }
   };
 
+  const onDelete = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      await deleteInvoice(id);
+      setInvoices((prev) => prev.filter((inv) => inv.id !== id));
+      setToast({ type: "success", message: "Rechnung gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "Rechnung konnte nicht gelöscht werden.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const markAsSent = async (id: number) => {
     setBusyId(id);
     setToast(null);
@@ -1093,48 +1109,20 @@ function Invoices() {
                       {datev.error && <div className="text-xs text-amber-700">{datev.error}</div>}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <details className="relative">
-                        <summary className="btn-secondary px-2 py-1 cursor-pointer list-none">⋮</summary>
-                        <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
-                          <button
-                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                            onClick={() => navigate(`/invoices/${inv.id}`)}
-                          >
-                            Öffnen
-                          </button>
-                          <button
-                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                            onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
-                          >
-                            PDF öffnen
-                          </button>
-                          <button
-                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                            onClick={() => onRegenerate(inv.id)}
-                            disabled={busyId === inv.id}
-                          >
-                            {busyId === inv.id ? "PDF …" : "PDF neu erstellen"}
-                          </button>
-                          <button
-                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                            onClick={() => loadPreview(inv.id)}
-                          >
-                            E-Mail Vorschau
-                          </button>
-                          <button
-                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                            onClick={() => openSend(inv.id, inv.recipient_email || "")}
-                          >
-                            E-Mail senden
-                          </button>
-                          <button
-                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                            onClick={() => onDatevExport(inv.id)}
-                          >
-                            DATEV Export
-                          </button>
-                        </div>
-                      </details>
+                      <MoreMenu
+                        items={[
+                          { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
+                        { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
+                          { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+                          { label: busyId === inv.id ? "PDF …" : "PDF neu erstellen", onClick: () => onRegenerate(inv.id) },
+                          { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
+                          { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
+                          { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
+                          { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id) },
+                          { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id) },
+                          { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
+                        ]}
+                      />
                     </td>
                   </tr>
                 );
