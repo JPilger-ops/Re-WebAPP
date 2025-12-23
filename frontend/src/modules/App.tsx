@@ -4026,9 +4026,7 @@ function StatsPage() {
           <h1 className="text-2xl font-bold">Statistiken</h1>
           <p className="text-slate-600 text-sm">Umsätze und Status gefiltert nach Jahr/Kategorie.</p>
         </div>
-        <Button variant="secondary" onClick={() => setRefreshFlag((v) => v + 1)}>
-          Aktualisieren
-        </Button>
+        <MoreMenu items={[{ label: "Aktualisieren", onClick: () => setRefreshFlag((v) => v + 1) }]} />
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -4059,45 +4057,58 @@ function StatsPage() {
 
       {!loading && data && (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
             <StatCard title="Summe (Gesamt)" value={formatEuro(data.overall.sum_total)} />
             <StatCard title="Bezahlt" value={formatEuro(data.overall.paid_sum)} />
             <StatCard title="Offen" value={formatEuro(data.overall.outstanding_sum)} />
+            <StatCard title="Gesendet, unbezahlt" value={formatEuro(data.overall.sent_unpaid_sum || 0)} />
             <StatCard title="Rechnungen gesamt" value={data.overall.count} />
             <StatCard title="Bezahlt (Anzahl)" value={data.overall.paid_count} />
             <StatCard title="Offen (Anzahl)" value={data.overall.unpaid_count} />
+            <StatCard title="Schnitt pro Rechnung" value={formatEuro(data.overall.avg_value)} />
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b border-slate-200 bg-slate-50">
-                  <th className="px-3 py-2">Jahr</th>
-                  <th className="px-3 py-2">Summe</th>
-                  <th className="px-3 py-2">Bezahlt</th>
-                  <th className="px-3 py-2">Offen</th>
-                  <th className="px-3 py-2">Anzahl</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.byYear.map((b) => (
-                  <tr key={b.year} className="border-b border-slate-100">
-                    <td className="px-3 py-2 font-medium">{b.year}</td>
-                    <td className="px-3 py-2">{formatEuro(b.sum_total)}</td>
-                    <td className="px-3 py-2 text-green-700">{formatEuro(b.paid_sum)}</td>
-                    <td className="px-3 py-2 text-amber-700">{formatEuro(b.outstanding_sum)}</td>
-                    <td className="px-3 py-2">{b.count}</td>
-                  </tr>
-                ))}
-                {!data.byYear.length && (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-3 text-center text-slate-500">
-                      Keine Daten vorhanden.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="grid gap-4 md:grid-cols-2">
+            <StatsTable
+              title="Jahre"
+              columns={["Jahr", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Anzahl"]}
+              rows={data.byYear.map((b) => [
+                b.year,
+                formatEuro(b.sum_total),
+                formatEuro(b.paid_sum),
+                formatEuro(b.outstanding_sum),
+                formatEuro(b.sent_unpaid_sum || 0),
+                b.count,
+              ])}
+            />
+            <StatsTable
+              title="Monate"
+              columns={["Monat", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Anzahl"]}
+              rows={(data.byMonth || []).map((m) => [
+                `${m.month}.${m.year}`,
+                formatEuro(m.sum_total),
+                formatEuro(m.paid_sum),
+                formatEuro(m.unpaid_sum),
+                formatEuro(m.sent_unpaid_sum || 0),
+                m.count,
+              ])}
+              emptyText="Keine Monatsdaten"
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <StatsTable
+              title="Top Kunden (Umsatz)"
+              columns={["Kunde", "Summe", "Anzahl"]}
+              rows={(data.topCustomers || []).map((c) => [c.name, formatEuro(c.sum_total), c.count])}
+              emptyText="Keine Kundenstatistik"
+            />
+            <StatsTable
+              title="Top Kategorien (Umsatz)"
+              columns={["Kategorie", "Summe", "Anzahl"]}
+              rows={(data.topCategories || []).map((c) => [c.label, formatEuro(c.sum_total), c.count])}
+              emptyText="Keine Kategorienstatistik"
+            />
           </div>
         </div>
       )}
@@ -4116,6 +4127,53 @@ function StatCard({ title, value }: { title: string; value: string | number }) {
 
 const formatEuro = (val: number | null | undefined) =>
   val == null ? "–" : `${Number(val).toFixed(2)} €`;
+
+function StatsTable({
+  title,
+  columns,
+  rows,
+  emptyText = "Keine Daten vorhanden.",
+}: {
+  title: string;
+  columns: string[];
+  rows: (string | number)[][];
+  emptyText?: string;
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
+      <div className="px-3 py-2 font-semibold text-slate-800 border-b border-slate-200">{title}</div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left border-b border-slate-200 bg-slate-50">
+            {columns.map((c) => (
+              <th key={c} className="px-3 py-2">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, idx) => (
+            <tr key={idx} className="border-b border-slate-100">
+              {r.map((v, i) => (
+                <td key={i} className="px-3 py-2">
+                  {v}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {!rows.length && (
+            <tr>
+              <td colSpan={columns.length} className="px-3 py-3 text-center text-slate-500">
+                {emptyText}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function Field({
   label,

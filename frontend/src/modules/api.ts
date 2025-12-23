@@ -270,9 +270,11 @@ export interface InvoiceStatsResponse {
     sum_tax: number;
     paid_count: number;
     unpaid_count: number;
+    sent_unpaid_count?: number;
     paid_sum: number;
     unpaid_sum: number;
     outstanding_sum: number;
+    sent_unpaid_sum?: number;
     avg_value: number;
     currency: string;
   };
@@ -285,12 +287,24 @@ export interface InvoiceStatsResponse {
     paid_sum: number;
     unpaid_sum: number;
     outstanding_sum: number;
+    sent_unpaid_sum?: number;
     paid_count: number;
     unpaid_count: number;
     avg_value: number;
     currency: string;
   }[];
+  byMonth?: {
+    year: number;
+    month: number;
+    count: number;
+    sum_total: number;
+    paid_sum: number;
+    unpaid_sum: number;
+    sent_unpaid_sum?: number;
+  }[];
   categories: { key: string; label: string }[];
+  topCustomers?: { name: string; sum_total: number; count: number }[];
+  topCategories?: { key: string | null; label: string; sum_total: number; count: number }[];
 }
 
 export async function getInvoiceStats(params?: { year?: number; categories?: string[] }) {
