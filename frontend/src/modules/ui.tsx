@@ -165,3 +165,60 @@ export function Badge({ children, tone = "gray" }: { children: React.ReactNode; 
     </span>
   );
 }
+
+type MoreMenuItem = {
+  label: string;
+  onClick: () => void;
+  icon?: React.ReactNode;
+  danger?: boolean;
+  disabled?: boolean;
+};
+
+export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; align?: "left" | "right" }) {
+  const closeMenu = (el: HTMLElement | null) => {
+    const details = el?.closest("details") as HTMLDetailsElement | null;
+    if (details) details.open = false;
+  };
+
+  return (
+    <details className="relative inline-block">
+      <summary
+        className="btn-secondary px-2 py-1 cursor-pointer list-none select-none"
+        role="button"
+        aria-label="Weitere Aktionen"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            const details = (e.currentTarget as HTMLElement).closest("details") as HTMLDetailsElement | null;
+            if (details) details.open = !details.open;
+          }
+        }}
+      >
+        ⋮
+      </summary>
+      <div
+        className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 min-w-[160px] bg-white border border-slate-200 rounded shadow z-20 p-1 text-sm space-y-1`}
+      >
+        {items.map((item, idx) => (
+          <button
+            key={idx}
+            className={`w-full inline-flex items-center gap-2 text-left px-2 py-1 rounded hover:bg-slate-100 ${
+              item.danger ? "text-red-600" : ""
+            } ${item.disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (item.disabled) return;
+              closeMenu(e.currentTarget);
+              item.onClick();
+            }}
+            disabled={item.disabled}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
