@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet, useParams } from "react-router-dom";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -153,6 +153,7 @@ export function App() {
                 <Route path="/settings" element={<AdminSettings />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/roles" element={<AdminRoles />} />
+                <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>
@@ -322,6 +323,7 @@ function Shell() {
 
 function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role_name === "admin";
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
 
@@ -352,15 +354,13 @@ function Dashboard() {
   const actionMenu = (inv: RecentInvoice) => (
     <details className="relative">
       <summary className="btn-secondary px-2 py-1 cursor-pointer list-none">⋮</summary>
-      <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
-        <button
-          className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-          onClick={() => {
-            window.location.href = "/invoices";
-          }}
-        >
-          Öffnen
-        </button>
+          <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
+            <button
+              className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+              onClick={() => navigate(`/invoices/${inv.id}`)}
+            >
+              Öffnen
+            </button>
         <button
           className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
           onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
@@ -805,6 +805,7 @@ function Categories() {
 }
 
 function Invoices() {
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
   const [search, setSearch] = useState("");
@@ -814,7 +815,6 @@ function Invoices() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: "create" | "edit"; id?: number } | null>(null);
-  const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [toast, setToast] = useState<FormStatus>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
@@ -863,16 +863,6 @@ function Invoices() {
   useEffect(() => {
     setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter));
   }, [invoices, search, statusFilter, categoryFilter]);
-
-  const openDetail = async (id: number) => {
-    try {
-      const data = await getInvoice(id);
-      setDetail(data);
-    } catch (err: any) {
-      const apiErr = err as ApiError;
-      setToast({ type: "error", message: apiErr.message || "Rechnung konnte nicht geladen werden." });
-    }
-  };
 
   const loadPreview = async (id: number) => {
     setPreview({ loading: true, data: null, error: null });
@@ -964,12 +954,6 @@ function Invoices() {
       setInvoices((prev) =>
         prev.map((inv) => (inv.id === id ? { ...inv, status_sent: true, status_sent_at: new Date().toISOString() } : inv))
       );
-      if (detail && detail.invoice.id === id) {
-        setDetail({
-          ...detail,
-          invoice: { ...detail.invoice, status_sent: true, status_sent_at: new Date().toISOString() },
-        });
-      }
       setToast({ type: "success", message: "Als gesendet markiert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -993,12 +977,6 @@ function Invoices() {
       setInvoices((prev) =>
         prev.map((inv) => (inv.id === id ? { ...inv, status_paid_at: new Date().toISOString() } : inv))
       );
-      if (detail && detail.invoice.id === id) {
-        setDetail({
-          ...detail,
-          invoice: { ...detail.invoice, status_paid_at: new Date().toISOString() },
-        });
-      }
       setToast({ type: "success", message: "Als bezahlt markiert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -1103,38 +1081,49 @@ function Invoices() {
                         <span className="text-amber-700">Offen</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right flex gap-2 justify-end">
-                      <Button variant="secondary" onClick={() => openDetail(inv.id)}>
-                        Öffnen
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
-                      >
-                        PDF
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => onRegenerate(inv.id)}
-                        disabled={busyId === inv.id}
-                      >
-                        {busyId === inv.id ? "…" : "PDF neu"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          loadPreview(inv.id);
-                          setDetail(null);
-                        }}
-                      >
-                        Preview
-                      </Button>
-                      <Button variant="secondary" onClick={() => openSend(inv.id, inv.recipient_email || "")}>
-                        Mail
-                      </Button>
-                      <Button variant="secondary" onClick={() => onDatevExport(inv.id)}>
-                        DATEV
-                      </Button>
+                    <td className="px-3 py-2 text-right">
+                      <details className="relative">
+                        <summary className="btn-secondary px-2 py-1 cursor-pointer list-none">⋮</summary>
+                        <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
+                          <button
+                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                            onClick={() => navigate(`/invoices/${inv.id}`)}
+                          >
+                            Öffnen
+                          </button>
+                          <button
+                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                            onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
+                          >
+                            PDF öffnen
+                          </button>
+                          <button
+                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                            onClick={() => onRegenerate(inv.id)}
+                            disabled={busyId === inv.id}
+                          >
+                            {busyId === inv.id ? "PDF …" : "PDF neu erstellen"}
+                          </button>
+                          <button
+                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                            onClick={() => loadPreview(inv.id)}
+                          >
+                            E-Mail Vorschau
+                          </button>
+                          <button
+                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                            onClick={() => openSend(inv.id, inv.recipient_email || "")}
+                          >
+                            E-Mail senden
+                          </button>
+                          <button
+                            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                            onClick={() => onDatevExport(inv.id)}
+                          >
+                            DATEV Export
+                          </button>
+                        </div>
+                      </details>
                     </td>
                   </tr>
                 );
@@ -1156,19 +1145,6 @@ function Invoices() {
             load();
           }}
           onError={(msg) => setToast({ type: "error", message: msg })}
-        />
-      )}
-
-      {detail && (
-        <InvoiceDetailModal
-          detail={detail}
-          onClose={() => setDetail(null)}
-          onRegenerate={() => onRegenerate(detail.invoice.id)}
-          onMarkSent={() => markAsSent(detail.invoice.id)}
-          onMarkPaid={() => markAsPaid(detail.invoice.id)}
-          onEmailPreview={() => loadPreview(detail.invoice.id)}
-          onEmailSend={() => openSend(detail.invoice.id, detail.invoice.recipient.email || "")}
-          onDatevExport={() => onDatevExport(detail.invoice.id)}
         />
       )}
 
@@ -1715,96 +1691,326 @@ function InvoiceFormModal({
   );
 }
 
-function InvoiceDetailModal({
-  detail,
-  onClose,
-  onRegenerate,
-  onMarkSent,
-  onMarkPaid,
-  onEmailPreview,
-  onEmailSend,
-  onDatevExport,
-}: {
-  detail: InvoiceDetail;
-  onClose: () => void;
-  onRegenerate: () => void;
-  onMarkSent: () => void;
-  onMarkPaid: () => void;
-  onEmailPreview: () => void;
-  onEmailSend: () => void;
-  onDatevExport: () => void;
-}) {
+function InvoiceDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [detail, setDetail] = useState<InvoiceDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<FormStatus>(null);
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
+  const [sendModal, setSendModal] = useState<{ open: boolean; to?: string }>({ open: false });
+
+  const load = async () => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getInvoice(Number(id));
+      setDetail(data);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || "Rechnung konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [id]);
+
+  const statusBadge = () => {
+    if (!detail) return null;
+    if (detail.invoice.status_paid_at) return <Badge tone="green">Bezahlt</Badge>;
+    if (detail.invoice.status_sent) return <Badge tone="blue">Gesendet</Badge>;
+    return <Badge tone="amber">Offen</Badge>;
+  };
+
+  const onRegenerate = async () => {
+    if (!detail) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      await regenerateInvoicePdf(detail.invoice.id);
+      window.open(`/api/invoices/${detail.invoice.id}/pdf?mode=inline`, "_blank");
+      setToast({ type: "success", message: "PDF neu erstellt." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "PDF konnte nicht neu erstellt werden." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onMarkSent = async () => {
+    if (!detail) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      await markInvoiceSent(detail.invoice.id);
+      setDetail((prev) =>
+        prev ? { ...prev, invoice: { ...prev.invoice, status_sent: true, status_sent_at: new Date().toISOString() } } : prev
+      );
+      setToast({ type: "success", message: "Als gesendet markiert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Konnte nicht markieren." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onMarkPaid = async () => {
+    if (!detail) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      await markInvoicePaid(detail.invoice.id);
+      setDetail((prev) =>
+        prev ? { ...prev, invoice: { ...prev.invoice, status_paid_at: new Date().toISOString() } } : prev
+      );
+      setToast({ type: "success", message: "Als bezahlt markiert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Konnte nicht markieren." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadPreview = async () => {
+    if (!detail) return;
+    setPreview({ loading: true, data: null, error: null });
+    try {
+      const data = await getInvoiceEmailPreview(detail.invoice.id);
+      setPreview({ loading: false, data, error: null });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setPreview({ loading: false, data: null, error: apiErr.message || "Vorschau konnte nicht geladen werden." });
+    }
+  };
+
+  const onSendEmail = async () => {
+    if (!detail) return;
+    if (!sendModal.to || !sendModal.to.trim()) {
+      setToast({ type: "error", message: "Bitte Empfänger-E-Mail angeben." });
+      return;
+    }
+    setBusy(true);
+    setToast(null);
+    try {
+      const res = await sendInvoiceEmailApi(detail.invoice.id, { to: sendModal.to.trim() });
+      setToast({ type: "success", message: res.message || "E-Mail gesendet." });
+      setSendModal({ open: false });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "E-Mail konnte nicht gesendet werden." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDatevExport = async () => {
+    if (!detail) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      const res = await exportInvoiceDatev(detail.invoice.id);
+      setToast({ type: "success", message: res.message || "DATEV Export gestartet." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "DATEV Export fehlgeschlagen." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-600">
+        <Spinner /> Lade Rechnung ...
+      </div>
+    );
+  }
+
+  if (error || !detail) {
+    return (
+      <div className="space-y-3">
+        <Alert type="error">{error || "Rechnung nicht gefunden."}</Alert>
+        <Button variant="secondary" onClick={() => navigate("/invoices")}>
+          Zurück zur Übersicht
+        </Button>
+      </div>
+    );
+  }
+
   const inv = detail.invoice;
+
   return (
-    <Modal title={`Rechnung ${inv.invoice_number}`} onClose={onClose}>
-      <div className="space-y-3 text-sm">
-        <div className="flex justify-between items-center">
-          <div>
-            <div className="font-semibold">{inv.recipient.name}</div>
-            <div className="text-slate-600">
-              {[inv.recipient.street, inv.recipient.zip, inv.recipient.city].filter(Boolean).join(" ")}
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
+          <p className="text-slate-600 text-sm">Details und Aktionen</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {statusBadge()}
+          <Button variant="secondary" onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}>
+            PDF öffnen
+          </Button>
+          <details className="relative">
+            <summary className="btn-secondary px-3 py-2 cursor-pointer list-none">Mehr …</summary>
+            <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
+              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onRegenerate} disabled={busy}>
+                {busy ? "PDF …" : "PDF neu erstellen"}
+              </button>
+              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={loadPreview}>
+                E-Mail Vorschau
+              </button>
+              <button
+                className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
+                onClick={() => setSendModal({ open: true, to: inv.recipient.email || "" })}
+              >
+                E-Mail senden
+              </button>
+              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onDatevExport}>
+                DATEV Export
+              </button>
+              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onMarkSent}>
+                Als gesendet markieren
+              </button>
+              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onMarkPaid}>
+                Als bezahlt markieren
+              </button>
             </div>
+          </details>
+        </div>
+      </div>
+
+      {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-3 lg:col-span-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm text-slate-600">Datum: {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
+            <div className="text-sm text-slate-600">Kategorie: {inv.category || "–"}</div>
           </div>
-          <div className="space-x-2">
-            <Button
-              variant="secondary"
-              onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
-            >
-              PDF
-            </Button>
-            <Button variant="secondary" onClick={onRegenerate}>
-              PDF neu
-            </Button>
+          <div className="text-lg font-semibold">
+            Gesamt:{" "}
+            {inv.gross_total != null
+              ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
+              : "–"}
+          </div>
+          <div className="text-sm text-slate-600 space-y-1">
+            <div>B2B: {inv.b2b ? "Ja" : "Nein"}</div>
+            {inv.ust_id && <div>USt-ID: {inv.ust_id}</div>}
           </div>
         </div>
-        <div className="grid md:grid-cols-2 gap-2">
-          <div><span className="text-slate-500">Datum:</span> {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
-          <div className="flex items-center gap-2">
-            <span className="text-slate-500">Status:</span>
-            {inv.status_paid_at ? (
-              <Badge tone="green">Bezahlt</Badge>
-            ) : inv.status_sent ? (
-              <Badge tone="blue">Gesendet</Badge>
-            ) : (
-              <Badge tone="amber">Offen</Badge>
-            )}
+
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
+          <div className="font-semibold">Empfänger</div>
+          <div className="text-slate-700">{inv.recipient.name}</div>
+          <div className="text-slate-600 text-sm">
+            {[inv.recipient.street, `${inv.recipient.zip || ""} ${inv.recipient.city || ""}`.trim()].filter(Boolean).join(", ")}
           </div>
-          <div><span className="text-slate-500">Kategorie:</span> {inv.category || "–"}</div>
+          <div className="text-slate-600 text-sm">{inv.recipient.email || "–"}</div>
+          <div className="text-slate-600 text-sm">{inv.recipient.phone || "–"}</div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={onMarkSent}>Als gesendet markieren</Button>
-          <Button variant="secondary" onClick={onMarkPaid}>Als bezahlt markieren</Button>
-          <Button variant="secondary" onClick={onEmailPreview}>E-Mail Vorschau</Button>
-          <Button variant="secondary" onClick={onEmailSend}>E-Mail senden</Button>
-          <Button variant="secondary" onClick={onDatevExport}>DATEV Export</Button>
-        </div>
-        <div className="border border-slate-200 rounded-md">
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+        <div className="font-semibold mb-2">Positionen</div>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-left border-b border-slate-200">
+              <tr className="text-left border-b border-slate-200 bg-slate-50">
                 <th className="px-3 py-2">Beschreibung</th>
-                <th className="px-3 py-2">Menge</th>
-                <th className="px-3 py-2">Preis</th>
-                <th className="px-3 py-2">MwSt</th>
+                <th className="px-3 py-2 text-right">Menge</th>
+                <th className="px-3 py-2 text-right">Preis (brutto)</th>
+                <th className="px-3 py-2 text-right">MwSt</th>
+                <th className="px-3 py-2 text-right">Summe</th>
               </tr>
             </thead>
             <tbody>
               {detail.items.map((it) => (
                 <tr key={it.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{it.description}</td>
-                  <td className="px-3 py-2">{Number(it.quantity).toLocaleString("de-DE")}</td>
-                  <td className="px-3 py-2">{Number(it.unit_price_gross).toFixed(2)} €</td>
-                  <td className="px-3 py-2">{it.vat_key === 2 ? "7%" : "19%"}</td>
+                  <td className="px-3 py-2 text-slate-700">{it.description || "–"}</td>
+                  <td className="px-3 py-2 text-right">{Number(it.quantity).toLocaleString("de-DE")}</td>
+                  <td className="px-3 py-2 text-right">
+                    {Number(it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                  </td>
+                  <td className="px-3 py-2 text-right">{it.vat_key}%</td>
+                  <td className="px-3 py-2 text-right">
+                    {Number(it.line_total_gross ?? it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="text-right font-semibold">
-          Summe: {inv.gross_total != null ? `${Number(inv.gross_total).toFixed(2)} €` : "–"}
-        </div>
       </div>
-    </Modal>
+
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
+        <div className="font-semibold">Verlauf</div>
+        <div>Gesendet: {inv.status_sent_at ? new Date(inv.status_sent_at).toLocaleString() : "–"}</div>
+        <div>Bezahlt: {inv.status_paid_at ? new Date(inv.status_paid_at).toLocaleString() : "–"}</div>
+      </div>
+
+      {(preview.loading || preview.data || preview.error) && (
+        <Modal title="E-Mail Vorschau" onClose={() => setPreview({ loading: false, data: null, error: null })}>
+          {preview.loading && (
+            <div className="flex items-center gap-2 text-slate-600">
+              <Spinner /> Lade Vorschau ...
+            </div>
+          )}
+          {preview.error && <Alert type="error">{preview.error}</Alert>}
+          {preview.data && (
+            <div className="space-y-3 text-sm">
+              <div>
+                <div className="font-semibold">Betreff</div>
+                <div>{preview.data.subject}</div>
+              </div>
+              <div>
+                <div className="font-semibold">HTML</div>
+                <div
+                  className="border border-slate-200 rounded p-3 prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: preview.data.body_html || "<em>(leer)</em>" }}
+                />
+              </div>
+              <div>
+                <div className="font-semibold">Text</div>
+                <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap">{preview.data.body_text}</pre>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {sendModal.open && (
+        <Modal title="Rechnung per E-Mail senden" onClose={() => setSendModal({ open: false })}>
+          <div className="space-y-3">
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Empfänger</span>
+              <Input
+                value={sendModal.to || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, to: e.target.value }))}
+                placeholder="kunde@example.com"
+              />
+            </label>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setSendModal({ open: false })}>
+                Abbrechen
+              </Button>
+              <Button onClick={onSendEmail} disabled={busy}>
+                {busy ? "Sendet..." : "Senden"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }
 
