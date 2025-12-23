@@ -3,15 +3,19 @@ services:
     image: postgres:15
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-rechnung_prod}
-      POSTGRES_USER: ${DB_USER:-rechnung_app}
-      POSTGRES_PASSWORD: ${DB_PASS:-change_me}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME not set}
+      POSTGRES_USER: ${DB_USER:?DB_USER not set}
+      POSTGRES_PASSWORD: ${DB_PASS:?DB_PASS not set}
     networks:
       - appnet
     volumes:
       - ./data/db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rechnung_app -d rechnung_prod -h localhost -p 5432"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-rechnung_app} -d ${DB_NAME:-rechnung_prod} -h localhost -p ${DB_PORT:-5432}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,7 +34,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${DB_USER:-rechnung_app}:${DB_PASS:-change_me}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-rechnung_prod}?schema=${DB_SCHEMA:-public}}
       DB_HOST: db
-      DB_PORT: 5432
+      DB_PORT: ${DB_PORT:-5432}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
       HKFORMS_MOCK_ENABLE: "1"

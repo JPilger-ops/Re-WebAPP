@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+color() { printf "\033[%sm%s\033[0m\n" "$1" "$2"; }
+info() { color "36" "$1"; }
+success() { color "32" "$1"; }
+warn() { color "33" "$1"; }
+error() { color "31" "$1"; }
+
+if ! command -v docker >/dev/null; then
+  error "Docker ist nicht installiert. Bitte zuerst Docker installieren."; exit 1;
+fi
+if ! command -v docker compose >/dev/null && ! command -v docker-compose >/dev/null; then
+  error "Docker Compose fehlt. Bitte installieren."; exit 1;
+fi
+
+if [ ! -f .env ]; then
+  cp .env.example .env
+  warn ".env wurde aus .env.example erzeugt. Bitte DB_PASS, DB_USER, DB_NAME anpassen."
+else
+  info ".env existiert bereits."
+fi
+
+info "Wichtige Variablen (aus .env):"
+grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT)=' .env || true
+
+cat <<'EOF'
+Nächste Schritte:
+1) Trage sichere Werte in .env ein (mind. DB_PASS, DB_USER, DB_NAME).
+2) Starte die Container: docker compose up -d --build
+3) Healthcheck: curl http://${APP_HOST:-localhost}:${APP_PORT:-3031}/api/version
+EOF
+
+success "Setup-Skript fertig."
