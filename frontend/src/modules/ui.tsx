@@ -76,10 +76,11 @@ export function EmptyState({ title, description }: { title: string; description?
   );
 }
 
-export function SidebarLink({ to, label, icon }: { to: string; label: string; icon?: React.ReactNode }) {
+export function SidebarLink({ to, label, icon, onClick }: { to: string; label: string; icon?: React.ReactNode; onClick?: () => void }) {
   return (
     <RouterNavLink
       to={to}
+      onClick={onClick}
       className={({ isActive }) =>
         `flex items-center gap-2 px-3 py-2 rounded-md text-sm ${
           isActive ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100"

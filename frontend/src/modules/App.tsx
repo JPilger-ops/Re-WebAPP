@@ -263,6 +263,10 @@ function Shell() {
   const isAdmin = user?.role_name === "admin";
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const safeInsets = {
+    paddingTop: "env(safe-area-inset-top)",
+    paddingBottom: "env(safe-area-inset-bottom)",
+  };
   const links = [
     { to: "/dashboard", label: "Dashboard" },
     { to: "/customers", label: "Kunden" },
@@ -279,8 +283,8 @@ function Shell() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="bg-white border-b border-slate-200 shadow-sm">
+    <div className="bg-slate-50 text-slate-900 min-h-[100dvh] h-[100dvh] flex flex-col" style={safeInsets}>
+      <header className="bg-white border-b border-slate-200 shadow-sm flex-none">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -301,21 +305,34 @@ function Shell() {
           </div>
         </div>
       </header>
-      <div className="max-w-6xl mx-auto px-4 py-8 flex gap-6">
-        <aside
-          className={`w-56 shrink-0 bg-white border border-slate-200 rounded-lg shadow-sm p-3 h-fit ${
-            sidebarOpen ? "block" : "hidden md:block"
-          }`}
-        >
-          <nav className="flex flex-col gap-1">
-            {links.map((l) => (
-              <SidebarLink key={l.to} to={l.to} label={l.label} />
-            ))}
-          </nav>
-        </aside>
-        <main className="flex-1 min-w-0">
-          <Outlet />
-        </main>
+      <div className="flex-1 overflow-hidden relative">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Sidebar schließen"
+          />
+        )}
+        <div className="max-w-6xl mx-auto px-4 py-6 h-full flex gap-4">
+          <aside
+            className={`z-40 md:z-auto w-64 shrink-0 bg-white border border-slate-200 rounded-lg shadow-sm p-3 ${
+              sidebarOpen ? "fixed inset-y-0 left-0 m-4 md:static" : "hidden md:block"
+            } overflow-y-auto`}
+            style={{ maxHeight: "calc(100dvh - 2rem)", WebkitOverflowScrolling: "touch" }}
+          >
+            <nav className="flex flex-col gap-1">
+              {links.map((l) => (
+                <SidebarLink key={l.to} to={l.to} label={l.label} onClick={() => setSidebarOpen(false)} />
+              ))}
+            </nav>
+          </aside>
+          <main
+            className="flex-1 min-w-0 h-full overflow-y-auto"
+            style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+          >
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   );
