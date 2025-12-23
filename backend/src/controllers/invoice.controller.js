@@ -2082,16 +2082,27 @@ export const getRecentInvoices = async (req, res) => {
       take: limit,
       include: {
         recipients: { select: { name: true } },
-        invoice_categories: { select: { label: true } },
       },
     });
+
+    const categoryKeys = Array.from(
+      new Set(rows.map((r) => r.category).filter(Boolean))
+    );
+    let categoryLabels = {};
+    if (categoryKeys.length) {
+      const cats = await prisma.invoice_categories.findMany({
+        where: { key: { in: categoryKeys } },
+        select: { key: true, label: true },
+      });
+      categoryLabels = Object.fromEntries(cats.map((c) => [c.key, c.label]));
+    }
 
     const mapped = rows.map((r) => ({
       id: r.id,
       invoice_number: r.invoice_number,
       date: r.date,
       recipient_name: r.recipients?.name || null,
-      category_label: r.invoice_categories?.label || null,
+      category_label: r.category ? categoryLabels[r.category] || r.category : null,
       status_sent: r.status_sent,
       status_sent_at: r.status_sent_at,
       status_paid_at: r.status_paid_at,
