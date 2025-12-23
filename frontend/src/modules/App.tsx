@@ -80,7 +80,7 @@ import {
   deleteRoleApi,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
-import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select } from "./ui";
+import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select, MoreMenu } from "./ui";
 
 type FormStatus = { type: "success" | "error" | "info"; message: string } | null;
 
@@ -352,38 +352,27 @@ function Dashboard() {
   };
 
   const actionMenu = (inv: RecentInvoice) => (
-    <details className="relative">
-      <summary className="btn-secondary px-2 py-1 cursor-pointer list-none">⋮</summary>
-          <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
-            <button
-              className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-              onClick={() => navigate(`/invoices/${inv.id}`)}
-            >
-              Öffnen
-            </button>
-        <button
-          className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-          onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}
-        >
-          PDF öffnen
-        </button>
-        {user?.role_name === "admin" && (
-          <button
-            className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-            onClick={async () => {
-              try {
-                await regenerateInvoicePdf(inv.id);
-                window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank");
-              } catch (err: any) {
-                alert((err as ApiError)?.message || "PDF konnte nicht neu erstellt werden.");
-              }
-            }}
-          >
-            PDF neu erstellen
-          </button>
-        )}
-      </div>
-    </details>
+    <MoreMenu
+      items={[
+        { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
+        { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+        ...(user?.role_name === "admin"
+          ? [
+              {
+                label: "PDF neu erstellen",
+                onClick: async () => {
+                  try {
+                    await regenerateInvoicePdf(inv.id);
+                    window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank");
+                  } catch (err: any) {
+                    alert((err as ApiError)?.message || "PDF konnte nicht neu erstellt werden.");
+                  }
+                },
+              },
+            ]
+          : []),
+      ]}
+    />
   );
 
   return (
@@ -562,7 +551,7 @@ function Customers() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
         />
-        <Button variant="secondary" onClick={load}>Aktualisieren</Button>
+        <MoreMenu items={[{ label: "Aktualisieren", onClick: load }]} />
       </div>
 
       {loading && (
@@ -594,13 +583,13 @@ function Customers() {
                   <td className="px-3 py-2 font-medium">{c.name}</td>
                   <td className="px-3 py-2 text-slate-600">{c.email || "–"}</td>
                   <td className="px-3 py-2 text-slate-600">{[c.zip, c.city].filter(Boolean).join(" ") || "–"}</td>
-                  <td className="px-3 py-2 text-right space-x-2">
-                    <Button variant="secondary" onClick={() => setModal({ mode: "edit", customer: c })}>
-                      Edit
-                    </Button>
-                    <Button variant="danger" onClick={() => setConfirmId(c.id)}>
-                      Delete
-                    </Button>
+                  <td className="px-3 py-2 text-right">
+                    <MoreMenu
+                      items={[
+                        { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", customer: c }) },
+                        { label: "Löschen", danger: true, onClick: () => setConfirmId(c.id) },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
@@ -713,7 +702,11 @@ function Categories() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
         />
-        <Button variant="secondary" onClick={load}>Aktualisieren</Button>
+        <MoreMenu
+          items={[
+            { label: "Aktualisieren", onClick: load },
+          ]}
+        />
       </div>
 
       {loading && (
@@ -748,10 +741,12 @@ function Categories() {
                     <div className="text-xs text-slate-500">{cat.key}</div>
                   </div>
                 </div>
-                <div className="space-x-2">
-                  <Button variant="secondary" onClick={() => setModal({ mode: "edit", category: cat })}>Edit</Button>
-                  <Button variant="danger" onClick={() => setConfirmId(cat.id)}>Delete</Button>
-                </div>
+                <MoreMenu
+                  items={[
+                    { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", category: cat }) },
+                    { label: "Löschen", danger: true, onClick: () => setConfirmId(cat.id) },
+                  ]}
+                />
               </div>
               {cat.template && (
                 <div className="mt-3 text-xs text-slate-600">
@@ -1041,7 +1036,7 @@ function Invoices() {
             </option>
           ))}
         </Select>
-        <Button variant="secondary" onClick={load}>Aktualisieren</Button>
+        <MoreMenu items={[{ label: "Aktualisieren", onClick: load }]} />
       </div>
 
       {loading && (
@@ -1873,35 +1868,17 @@ function InvoiceDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {statusBadge()}
-          <Button variant="secondary" onClick={() => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank")}>
-            PDF öffnen
-          </Button>
-          <details className="relative">
-            <summary className="btn-secondary px-3 py-2 cursor-pointer list-none">Mehr …</summary>
-            <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded shadow z-10 p-1 text-sm space-y-1">
-              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onRegenerate} disabled={busy}>
-                {busy ? "PDF …" : "PDF neu erstellen"}
-              </button>
-              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={loadPreview}>
-                E-Mail Vorschau
-              </button>
-              <button
-                className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded"
-                onClick={() => setSendModal({ open: true, to: inv.recipient.email || "" })}
-              >
-                E-Mail senden
-              </button>
-              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onDatevExport}>
-                DATEV Export
-              </button>
-              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onMarkSent}>
-                Als gesendet markieren
-              </button>
-              <button className="w-full text-left px-2 py-1 hover:bg-slate-100 rounded" onClick={onMarkPaid}>
-                Als bezahlt markieren
-              </button>
-            </div>
-          </details>
+          <MoreMenu
+            items={[
+              { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+              { label: busy ? "PDF …" : "PDF neu erstellen", onClick: onRegenerate },
+              { label: "E-Mail Vorschau", onClick: loadPreview },
+              { label: "E-Mail senden", onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
+              { label: "DATEV Export", onClick: onDatevExport },
+              { label: "Als gesendet markieren", onClick: onMarkSent },
+              { label: "Als bezahlt markieren", onClick: onMarkPaid },
+            ]}
+          />
         </div>
       </div>
 
