@@ -349,6 +349,9 @@ export interface InvoiceListItem {
   status_sent_at?: string | null;
   status_paid_at?: string | null;
   gross_total?: number | null;
+   datev_export_status?: string | null;
+   datev_exported_at?: string | null;
+   datev_export_error?: string | null;
 }
 
 export interface InvoiceDetail {

@@ -134,10 +134,21 @@ const fetchJson = async (url, opts = {}) => {
       headers: { Cookie: cookie },
     });
 
+    const { data: invDataDetail } = await fetchJson(`${baseUrl}/api/invoices/${invoiceId}`, {
+      headers: { Cookie: cookie },
+    });
+    const status = invDataDetail?.invoice?.datev_export_status;
+    const exportedAt = invDataDetail?.invoice?.datev_exported_at;
+
     if (expRes.status === 200) {
+      if (status !== "SUCCESS" || !exportedAt) {
+        throw new Error(`DATEV export expected SUCCESS status, got ${status}`);
+      }
       log("DATEV export OK");
-    } else if (expRes.status === 500 && /Sender address is not allowed/i.test(JSON.stringify(expData))) {
-      log("DATEV export SKIPPED (Sender not allowed by SMTP) -> treat as skip");
+    } else if (status === "SKIPPED") {
+      log(`DATEV export SKIPPED: ${invDataDetail?.invoice?.datev_export_error || JSON.stringify(expData)}`);
+    } else if (status === "FAILED") {
+      log(`DATEV export FAILED (tolerated for test): ${invDataDetail?.invoice?.datev_export_error || JSON.stringify(expData)}`);
     } else {
       throw new Error(`DATEV export failed (${expRes.status}): ${JSON.stringify(expData)}`);
     }

@@ -826,6 +826,16 @@ function Invoices() {
     return "open";
   };
 
+  const datevLabel = (inv: InvoiceListItem) => {
+    const status = inv.datev_export_status;
+    if (status === "SUCCESS" || status === "SENT") {
+      return { text: inv.datev_exported_at ? `✅ ${new Date(inv.datev_exported_at).toLocaleDateString()}` : "✅" };
+    }
+    if (status === "FAILED") return { text: "❌", error: inv.datev_export_error };
+    if (status === "SKIPPED") return { text: "⏭️", error: inv.datev_export_error };
+    return { text: "—" };
+  };
+
   const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter, categoryKey: string) => {
     const t = term.toLowerCase();
     return list.filter((inv) => {
@@ -1055,12 +1065,14 @@ function Invoices() {
                 <th className="px-3 py-2">Kategorie</th>
                 <th className="px-3 py-2">Betrag</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">DATEV</th>
                 <th className="px-3 py-2 text-right">Aktionen</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((inv) => {
                 const st = computeStatus(inv);
+                const datev = datevLabel(inv);
                 return (
                   <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-3 py-2 font-semibold">{inv.invoice_number}</td>
@@ -1075,11 +1087,15 @@ function Invoices() {
                     <td className="px-3 py-2">
                       {st === "paid" ? (
                         <span className="text-green-700">Bezahlt</span>
-                      ) : st === "sent" ? (
-                        <span className="text-blue-700">Gesendet</span>
-                      ) : (
-                        <span className="text-amber-700">Offen</span>
-                      )}
+                    ) : st === "sent" ? (
+                      <span className="text-blue-700">Gesendet</span>
+                    ) : (
+                      <span className="text-amber-700">Offen</span>
+                    )}
+                  </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {datev.text}
+                      {datev.error && <div className="text-xs text-amber-700">{datev.error}</div>}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <details className="relative">
@@ -1956,6 +1972,18 @@ function InvoiceDetailPage() {
         <div className="font-semibold">Verlauf</div>
         <div>Gesendet: {inv.status_sent_at ? new Date(inv.status_sent_at).toLocaleString() : "–"}</div>
         <div>Bezahlt: {inv.status_paid_at ? new Date(inv.status_paid_at).toLocaleString() : "–"}</div>
+        <div>
+          DATEV:{" "}
+          {inv.datev_export_status
+            ? inv.datev_export_status === "SUCCESS"
+              ? `✅ ${inv.datev_exported_at ? new Date(inv.datev_exported_at).toLocaleString() : ""}`.trim()
+              : inv.datev_export_status === "FAILED"
+              ? `❌ ${inv.datev_export_error || ""}`.trim()
+              : inv.datev_export_status === "SKIPPED"
+              ? `⏭️ ${inv.datev_export_error || ""}`.trim()
+              : inv.datev_export_status
+            : "–"}
+        </div>
       </div>
 
       {(preview.loading || preview.data || preview.error) && (

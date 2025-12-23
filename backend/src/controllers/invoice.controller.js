@@ -202,6 +202,9 @@ const shapeInvoiceListRow = (invoice, recipient, category) => {
     recipient_email: recipient?.email || null,
     category_id: category?.id || null,
     category_label: category?.label || null,
+    datev_export_status: invoice.datev_export_status || null,
+    datev_exported_at: invoice.datev_exported_at || null,
+    datev_export_error: invoice.datev_export_error || null,
   };
 };
 
@@ -1681,6 +1684,7 @@ export const exportInvoiceToDatev = async (req, res) => {
     const datevEmail = (datevSettings?.email || "").trim();
 
     if (!datevEmail) {
+      await updateDatevExportStatus(id, DATEV_STATUS.SKIPPED, "Kein DATEV-Empfänger hinterlegt");
       return res.status(400).json({
         message: "Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.",
       });
@@ -1692,6 +1696,7 @@ export const exportInvoiceToDatev = async (req, res) => {
     const smtpConfig = await resolveSmtpConfig(row);
 
     if (!smtpConfig) {
+      await updateDatevExportStatus(id, DATEV_STATUS.SKIPPED, "Kein SMTP-Konto verfügbar");
       return res.status(400).json({
         message: "Kein SMTP-Konto hinterlegt. Bitte Kategorie- oder Standard-SMTP konfigurieren.",
       });
@@ -1727,7 +1732,7 @@ export const exportInvoiceToDatev = async (req, res) => {
       ],
     });
 
-    await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
+    await updateDatevExportStatus(id, DATEV_STATUS.SUCCESS, null);
 
     return res.json({ message: "Rechnung wurde an DATEV gesendet." });
   } catch (err) {
@@ -1735,11 +1740,7 @@ export const exportInvoiceToDatev = async (req, res) => {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
     console.error("DATEV Export fehlgeschlagen:", err);
-    try {
-      await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV Export fehlgeschlagen.");
-    } catch (statusErr) {
-      console.error("DATEV-Status konnte nicht aktualisiert werden:", statusErr);
-    }
+    await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV Export fehlgeschlagen.");
     const message =
       err?.code === "EAUTH"
         ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."

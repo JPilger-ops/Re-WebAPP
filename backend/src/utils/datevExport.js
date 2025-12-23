@@ -2,8 +2,9 @@ import { db } from "./db.js";
 
 export const DATEV_STATUS = {
   NOT_SENT: "NOT_SENT",
-  SENT: "SENT",
+  SUCCESS: "SUCCESS",
   FAILED: "FAILED",
+  SKIPPED: "SKIPPED",
 };
 
 let columnsReady = false;
@@ -104,7 +105,7 @@ export async function updateDatevExportStatus(invoiceId, status, errorText = nul
       SET
         datev_export_status = $1::varchar(20),
         datev_export_error = $2,
-        datev_exported_at = CASE WHEN $1::varchar(20) = 'SENT' THEN NOW() ELSE datev_exported_at END
+        datev_exported_at = CASE WHEN $1::varchar(20) = 'SUCCESS' THEN NOW() ELSE datev_exported_at END
       WHERE id = $3
     `,
     [sanitizedStatus, errorText || null, invoiceId]
