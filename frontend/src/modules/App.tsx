@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet, useParams } from "react-router-dom";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   AuthUser,
@@ -174,6 +174,14 @@ function LoginPage() {
   const location = useLocation();
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const reason = params.get("reason");
+    if (reason === "idle") {
+      setError("Wegen Inaktivität abgemeldet.");
+    }
+  }, [location.search, setError]);
+
+  useEffect(() => {
     if (user) {
       navigate("/dashboard", { replace: true });
     }
@@ -185,7 +193,9 @@ function LoginPage() {
     setError(null);
     try {
       await login(username, password);
-      const dest = (location.state as any)?.from || "/dashboard";
+      const params = new URLSearchParams(location.search);
+      const returnTo = params.get("returnTo");
+      const dest = returnTo || (location.state as any)?.from || "/dashboard";
       navigate(dest, { replace: true });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -239,6 +249,48 @@ function LoginPage() {
   );
 }
 
+function IdleWatcher() {
+  const { user, logout, setError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastResetRef = useRef<number>(0);
+  const IDLE_MS = 5 * 60 * 1000;
+  const THROTTLE_MS = 1000;
+
+  useEffect(() => {
+    const resetTimer = () => {
+      const now = Date.now();
+      if (now - lastResetRef.current < THROTTLE_MS) return;
+      lastResetRef.current = now;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (!user || location.pathname === "/login") return;
+      timerRef.current = setTimeout(async () => {
+        setError("Wegen Inaktivität abgemeldet.");
+        try {
+          await logout();
+        } catch {
+          // ignore
+        } finally {
+          const returnTo = encodeURIComponent(location.pathname);
+          navigate(`/login?reason=idle&returnTo=${returnTo}`, { replace: true });
+        }
+      }, IDLE_MS);
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "visibilitychange"];
+    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [user, location.pathname, logout, navigate, setError]);
+
+  return null;
+}
+
 function ProtectedLayout() {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -255,7 +307,12 @@ function ProtectedLayout() {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <IdleWatcher />
+      <Outlet />
+    </>
+  );
 }
 
 function Shell() {
