@@ -291,9 +291,35 @@ function IdleWatcher() {
   return null;
 }
 
+function AuthWatcher() {
+  const { setError, logout, user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const handler = async () => {
+      if (!user) return;
+      try {
+        await logout();
+      } catch {
+        // ignore
+      }
+      setError("Session abgelaufen. Bitte erneut anmelden.");
+      const returnTo = encodeURIComponent(`${location.pathname}${location.search}${location.hash}`);
+      navigate(`/login?reason=expired&returnTo=${returnTo}`, { replace: true });
+    };
+    window.addEventListener("auth-unauthorized", handler);
+    return () => window.removeEventListener("auth-unauthorized", handler);
+  }, [logout, navigate, location.pathname, location.search, location.hash, setError, user]);
+
+  return null;
+}
+
 function ProtectedLayout() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const fullPath = `${location.pathname}${location.search}${location.hash}`;
 
   if (loading) {
     return (
@@ -303,13 +329,17 @@ function ProtectedLayout() {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  if (!user && location.pathname !== "/login") {
+    const params = new URLSearchParams();
+    params.set("returnTo", fullPath);
+    params.set("reason", "expired");
+    return <Navigate to={`/login?${params.toString()}`} replace />;
   }
 
   return (
     <>
       <IdleWatcher />
+      <AuthWatcher />
       <Outlet />
     </>
   );

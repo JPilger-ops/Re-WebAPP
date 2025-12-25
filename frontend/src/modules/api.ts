@@ -32,6 +32,13 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     const text = data?.message || data?.error || (typeof data === "string" ? data : "") || (await res.text());
     const err: ApiError = new Error(text || `Request failed with ${res.status}`);
     err.status = res.status;
+    if (res.status === 401) {
+      try {
+        window.dispatchEvent(new CustomEvent("auth-unauthorized"));
+      } catch {
+        // ignore
+      }
+    }
     throw err;
   }
   return res.json() as Promise<T>;
