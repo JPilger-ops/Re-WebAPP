@@ -1131,143 +1131,147 @@ function Invoices() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Rechnungen</h1>
-          <p className="text-slate-600 text-sm">PDF-Aktionen direkt an der Rechnung.</p>
+    <div className="flex flex-col gap-4 h-full min-h-[70vh]">
+      <div className="sticky top-0 z-10 bg-slate-50/90 backdrop-blur border-b border-slate-200 pb-2 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div>
+            <h1 className="text-2xl font-bold">Rechnungen</h1>
+            <p className="text-slate-600 text-sm">PDF-Aktionen direkt an der Rechnung.</p>
+          </div>
+          <Button onClick={() => navigate("/invoices/new")}>Neu</Button>
         </div>
-        <Button onClick={() => navigate("/invoices/new")}>Neu</Button>
+
+        <div className="flex flex-wrap gap-3 items-center">
+          <Input
+            placeholder="Suche nach Nummer oder Kunde"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64"
+          />
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="w-44"
+            placeholder="Von"
+          />
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="w-44"
+            placeholder="Bis"
+          />
+          <Input
+            placeholder="Kunde (Filter)"
+            value={customerFilter}
+            onChange={(e) => setCustomerFilter(e.target.value)}
+            className="w-48"
+          />
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="w-40"
+          >
+            <option value="all">Alle Status</option>
+            <option value="open">Offen</option>
+            <option value="sent">Gesendet</option>
+            <option value="paid">Bezahlt</option>
+          </Select>
+          <Select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="w-48"
+          >
+            <option value="all">Alle Kategorien</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.label}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+          <MoreMenu items={[{ label: "Aktualisieren", onClick: load }]} />
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 items-center">
-        <Input
-          placeholder="Suche nach Nummer oder Kunde"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-64"
-        />
-        <Input
-          type="date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          className="w-44"
-          placeholder="Von"
-        />
-        <Input
-          type="date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          className="w-44"
-          placeholder="Bis"
-        />
-        <Input
-          placeholder="Kunde (Filter)"
-          value={customerFilter}
-          onChange={(e) => setCustomerFilter(e.target.value)}
-          className="w-48"
-        />
-        <Select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
-          className="w-40"
-        >
-          <option value="all">Alle Status</option>
-          <option value="open">Offen</option>
-          <option value="sent">Gesendet</option>
-          <option value="paid">Bezahlt</option>
-        </Select>
-        <Select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="w-48"
-        >
-          <option value="all">Alle Kategorien</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.label}>
-              {c.label}
-            </option>
-          ))}
-        </Select>
-        <MoreMenu items={[{ label: "Aktualisieren", onClick: load }]} />
+      <div className="flex-1 min-h-0 space-y-3">
+        {loading && (
+          <div className="flex items-center gap-2 text-slate-600">
+            <Spinner /> Lade Rechnungen ...
+          </div>
+        )}
+        {error && <Alert type="error">{error}</Alert>}
+        {!loading && !filtered.length && !error && (
+          <EmptyState title="Keine Rechnungen" description="Lege eine neue Rechnung an." />
+        )}
+
+        {!loading && filtered.length > 0 && (
+          <div className="overflow-auto bg-white border border-slate-200 rounded-lg shadow-sm max-h-[70vh]">
+            <table className="w-full text-sm min-w-[900px]">
+              <thead className="sticky top-0 bg-slate-50 z-10">
+                <tr className="text-left border-b border-slate-200">
+                  <th className="px-3 py-2">Nr.</th>
+                  <th className="px-3 py-2">Datum</th>
+                  <th className="px-3 py-2">Kunde</th>
+                  <th className="px-3 py-2">Kategorie</th>
+                  <th className="px-3 py-2">Betrag</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">DATEV</th>
+                  <th className="px-3 py-2 text-right">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((inv) => {
+                  const st = computeStatus(inv);
+                  const datev = datevLabel(inv);
+                  return (
+                    <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2 font-semibold">{inv.invoice_number}</td>
+                      <td className="px-3 py-2 text-slate-600">
+                        {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
+                      <td className="px-3 py-2 text-slate-600">{inv.category_label || "–"}</td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {st === "paid" ? (
+                          <span className="text-green-700">Bezahlt</span>
+                        ) : st === "sent" ? (
+                          <span className="text-blue-700">Gesendet</span>
+                        ) : (
+                          <span className="text-amber-700">Offen</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {datev.text}
+                        {datev.error && <div className="text-xs text-amber-700">{datev.error}</div>}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <MoreMenu
+                          items={[
+                            { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
+                            { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
+                            { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+                            { label: busyId === inv.id ? "PDF …" : "PDF neu erstellen", onClick: () => onRegenerate(inv.id) },
+                            { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
+                            { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
+                            { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
+                            { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id) },
+                            { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id) },
+                            { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
+                          ]}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
-      {loading && (
-        <div className="flex items-center gap-2 text-slate-600">
-          <Spinner /> Lade Rechnungen ...
-        </div>
-      )}
-      {error && <Alert type="error">{error}</Alert>}
-      {!loading && !filtered.length && !error && (
-        <EmptyState title="Keine Rechnungen" description="Lege eine neue Rechnung an." />
-      )}
-
-      {!loading && filtered.length > 0 && (
-        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-2">Nr.</th>
-                <th className="px-3 py-2">Datum</th>
-                <th className="px-3 py-2">Kunde</th>
-                <th className="px-3 py-2">Kategorie</th>
-                <th className="px-3 py-2">Betrag</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">DATEV</th>
-                <th className="px-3 py-2 text-right">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((inv) => {
-                const st = computeStatus(inv);
-                const datev = datevLabel(inv);
-                return (
-                  <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2 font-semibold">{inv.invoice_number}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
-                  </td>
-                  <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
-                  <td className="px-3 py-2 text-slate-600">{inv.category_label || "–"}</td>
-                  <td className="px-3 py-2 text-slate-700">
-                    {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
-                  </td>
-                    <td className="px-3 py-2">
-                      {st === "paid" ? (
-                        <span className="text-green-700">Bezahlt</span>
-                    ) : st === "sent" ? (
-                      <span className="text-blue-700">Gesendet</span>
-                    ) : (
-                      <span className="text-amber-700">Offen</span>
-                    )}
-                  </td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {datev.text}
-                      {datev.error && <div className="text-xs text-amber-700">{datev.error}</div>}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <MoreMenu
-                        items={[
-                          { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
-                        { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
-                          { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
-                          { label: busyId === inv.id ? "PDF …" : "PDF neu erstellen", onClick: () => onRegenerate(inv.id) },
-                          { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
-                          { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
-                          { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
-                          { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id) },
-                          { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id) },
-                          { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
 
