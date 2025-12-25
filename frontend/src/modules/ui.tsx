@@ -184,7 +184,7 @@ export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; al
   return (
     <details className="relative inline-block">
       <summary
-        className="btn-secondary px-2 py-1 cursor-pointer list-none select-none"
+        className="cursor-pointer list-none select-none h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
         role="button"
         aria-label="Weitere Aktionen"
         onKeyDown={(e) => {
@@ -195,7 +195,7 @@ export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; al
           }
         }}
       >
-        ⋮
+        <span className="text-lg leading-none">⋮</span>
       </summary>
       <div
         className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 min-w-[160px] bg-white border border-slate-200 rounded shadow z-20 p-1 text-sm space-y-1`}
