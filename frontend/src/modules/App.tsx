@@ -148,6 +148,7 @@ export function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/customers" element={<Customers />} />
                 <Route path="/invoices" element={<Invoices />} />
+                <Route path="/invoices/new" element={<InvoiceCreatePage />} />
                 <Route path="/stats" element={<StatsPage />} />
                 <Route path="/categories" element={<Categories />} />
                 <Route path="/settings" element={<AdminSettings />} />
@@ -913,7 +914,7 @@ function Invoices() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modal, setModal] = useState<{ mode: "create" | "edit"; id?: number } | null>(null);
+  const [modal, setModal] = useState<{ mode: "edit"; id?: number } | null>(null);
   const [toast, setToast] = useState<FormStatus>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
@@ -1124,7 +1125,7 @@ function Invoices() {
           <h1 className="text-2xl font-bold">Rechnungen</h1>
           <p className="text-slate-600 text-sm">PDF-Aktionen direkt an der Rechnung.</p>
         </div>
-        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
+        <Button onClick={() => navigate("/invoices/new")}>Neu</Button>
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -1243,8 +1244,9 @@ function Invoices() {
           mode={modal.mode}
           id={modal.id}
           onClose={() => setModal(null)}
-          onSaved={(invNumber) => {
+          onSaved={(invoiceId, invNumber) => {
             setToast({ type: "success", message: `Rechnung ${invNumber} gespeichert.` });
+            navigate(`/invoices/${invoiceId}`);
             load();
           }}
           onError={(msg) => setToast({ type: "error", message: msg })}
@@ -1329,6 +1331,29 @@ function Invoices() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function InvoiceCreatePage() {
+  const navigate = useNavigate();
+  const [toast, setToast] = useState<FormStatus>(null);
+
+  return (
+    <div className="space-y-4">
+      {toast && <Alert type={toast.type === "error" ? "error" : "success"}>{toast.message}</Alert>}
+      <InvoiceFormModal
+        asPage
+        mode="create"
+        titleOverride="Neue Rechnung"
+        onClose={() => navigate("/invoices")}
+        onCancel={() => navigate("/invoices")}
+        onSaved={(id, num) => {
+          setToast({ type: "success", message: `Rechnung ${num} erstellt.` });
+          navigate(`/invoices/${id}`);
+        }}
+        onError={(msg) => setToast({ type: "error", message: msg })}
+      />
     </div>
   );
 }
@@ -1454,12 +1479,18 @@ function InvoiceFormModal({
   onClose,
   onSaved,
   onError,
+  asPage = false,
+  titleOverride,
+  onCancel,
 }: {
   mode: "create" | "edit";
   id?: number;
-  onClose: () => void;
-  onSaved: (invoiceNumber: string) => void;
-  onError: (msg: string) => void;
+  onClose?: () => void;
+  onSaved: (invoiceId: number, invoiceNumber: string) => void;
+  onError?: (msg: string) => void;
+  asPage?: boolean;
+  titleOverride?: string;
+  onCancel?: () => void;
 }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -1482,6 +1513,11 @@ function InvoiceFormModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const close = onClose || (() => {});
+  const handleCancel = () => {
+    if (onCancel) onCancel();
+    else close();
+  };
 
   const loadBase = async () => {
     setLoading(true);
@@ -1614,182 +1650,220 @@ function InvoiceFormModal({
 
       if (mode === "create") {
         const res = await createInvoice(payload);
-        onSaved(payload.invoice.invoice_number);
-        // Reset
-        setItems([{ description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
+        onSaved(res.invoice_id, payload.invoice.invoice_number);
+        if (!asPage) {
+          // Reset for modal usage
+          setItems([{ description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
+        }
       } else if (id) {
         await updateInvoice(id, payload);
-        onSaved(payload.invoice.invoice_number);
+        onSaved(id, payload.invoice.invoice_number);
       }
-      onClose();
+      if (!asPage) {
+        close();
+      }
     } catch (err: any) {
       const apiErr = err as ApiError;
       const msg = apiErr.message || "Rechnung konnte nicht gespeichert werden.";
       setError(msg);
-      onError(msg);
+      if (onError) onError(msg);
       return;
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <Modal title={mode === "create" ? "Neue Rechnung" : "Rechnung bearbeiten"} onClose={onClose}>
-      {loading ? (
-        <div className="flex items-center gap-2 text-slate-600">
-          <Spinner /> Lade Daten ...
+  const formContent = loading ? (
+    <div className="flex items-center gap-2 text-slate-600">
+      <Spinner /> Lade Daten ...
+    </div>
+  ) : (
+    <>
+      <div className="grid md:grid-cols-2 gap-3">
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Empfänger auswählen</span>
+          <Select value={form.recipient_id} onChange={(e) => selectRecipient(e.target.value)}>
+            <option value="">— Manuell erfassen —</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Rechnungsnummer</span>
+          <Input
+            value={form.invoice_number}
+            onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
+            required
+          />
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Kategorie</span>
+          <Select
+            value={form.category_key}
+            onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
+          >
+            <option value="">– Keine –</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Datum</span>
+          <Input
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+            required
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 mt-6">
+          <input
+            type="checkbox"
+            checked={form.b2b}
+            onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
+          />
+          <span>B2B (USt-ID Pflicht)</span>
+        </label>
+        {form.b2b && (
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">USt-ID</span>
+            <Input
+              value={form.ust_id}
+              onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
+            />
+          </label>
+        )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Name *</span>
+          <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">E-Mail</span>
+          <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Straße *</span>
+          <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">PLZ *</span>
+          <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Ort *</span>
+          <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+        </label>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold">Positionen</h4>
+          <Button variant="secondary" type="button" onClick={addItem}>
+            Position hinzufügen
+          </Button>
         </div>
-      ) : (
-        <form className="space-y-3" onSubmit={onSubmit}>
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Empfänger auswählen</span>
-              <Select value={form.recipient_id} onChange={(e) => selectRecipient(e.target.value)}>
-                <option value="">— Manuell erfassen —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Rechnungsnummer</span>
-              <Input
-                value={form.invoice_number}
-                onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Kategorie</span>
-              <Select
-                value={form.category_key}
-                onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
-              >
-                <option value="">– Keine –</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Datum</span>
-              <Input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700 mt-6">
+        <div className="space-y-2">
+          {items.map((item, idx) => (
+            <div key={idx} className="grid md:grid-cols-4 gap-2 items-center border border-slate-200 rounded-md p-3">
               <input
-                type="checkbox"
-                checked={form.b2b}
-                onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
+                className="input md:col-span-2"
+                placeholder="Beschreibung"
+                value={item.description}
+                onChange={(e) => updateItem(idx, "description", e.target.value)}
               />
-              <span>B2B (USt-ID Pflicht)</span>
-            </label>
-            {form.b2b && (
-              <label className="text-sm text-slate-700">
-                <span className="font-medium">USt-ID</span>
-                <Input
-                  value={form.ust_id}
-                  onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
-                />
-              </label>
-            )}
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Name *</span>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">E-Mail</span>
-              <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Straße *</span>
-              <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">PLZ *</span>
-              <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Ort *</span>
-              <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
-            </label>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold">Positionen</h4>
-              <Button variant="secondary" type="button" onClick={addItem}>
-                Position hinzufügen
-              </Button>
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={item.quantity}
+                onChange={(e) => updateItem(idx, "quantity", Number(e.target.value))}
+              />
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={item.unit_price_gross}
+                onChange={(e) => updateItem(idx, "unit_price_gross", Number(e.target.value))}
+              />
+              <select
+                className="input"
+                value={item.vat_key}
+                onChange={(e) => updateItem(idx, "vat_key", Number(e.target.value))}
+              >
+                <option value={1}>19% MwSt</option>
+                <option value={2}>7% MwSt</option>
+              </select>
+              <div className="flex justify-end">
+                {items.length > 1 && (
+                  <Button variant="ghost" type="button" onClick={() => removeItem(idx)}>
+                    Entfernen
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="space-y-2">
-              {items.map((item, idx) => (
-                <div key={idx} className="grid md:grid-cols-4 gap-2 items-center border border-slate-200 rounded-md p-3">
-                  <input
-                    className="input md:col-span-2"
-                    placeholder="Beschreibung"
-                    value={item.description}
-                    onChange={(e) => updateItem(idx, "description", e.target.value)}
-                  />
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(idx, "quantity", Number(e.target.value))}
-                  />
-                  <input
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.unit_price_gross}
-                    onChange={(e) => updateItem(idx, "unit_price_gross", Number(e.target.value))}
-                  />
-                  <select
-                    className="input"
-                    value={item.vat_key}
-                    onChange={(e) => updateItem(idx, "vat_key", Number(e.target.value))}
-                  >
-                    <option value={1}>19% MwSt</option>
-                    <option value={2}>7% MwSt</option>
-                  </select>
-                  <div className="flex justify-end">
-                    {items.length > 1 && (
-                      <Button variant="ghost" type="button" onClick={() => removeItem(idx)}>
-                        Entfernen
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+          ))}
+        </div>
+      </div>
+
+      {error && <Alert type="error">{error}</Alert>}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button variant="secondary" type="button" onClick={handleCancel}>
+          Abbrechen
+        </Button>
+        <Button type="submit" disabled={saving}>
+          {saving ? "Speichern ..." : "Speichern"}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (asPage) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold">{titleOverride || (mode === "create" ? "Neue Rechnung" : "Rechnung bearbeiten")}</h1>
+            <p className="text-slate-600 text-sm">Stammdaten und Positionen erfassen.</p>
           </div>
-
-          {error && <Alert type="error">{error}</Alert>}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" type="button" onClick={onClose}>
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" type="button" onClick={handleCancel}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Speichern ..." : "Speichern"}
-            </Button>
+            {!loading && (
+              <Button type="submit" form="invoice-form-main" disabled={saving}>
+                {saving ? "Speichern ..." : "Speichern"}
+              </Button>
+            )}
           </div>
-        </form>
-      )}
+        </div>
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+          {loading ? (
+            formContent
+          ) : (
+            <form id="invoice-form-main" className="space-y-3" onSubmit={onSubmit}>
+              {formContent}
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Modal title={titleOverride || (mode === "create" ? "Neue Rechnung" : "Rechnung bearbeiten")} onClose={close}>
+      {loading ? formContent : <form className="space-y-3" onSubmit={onSubmit}>{formContent}</form>}
     </Modal>
   );
 }
