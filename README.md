@@ -22,6 +22,7 @@ Schritte:
 Defaults:
 - Host-IP: 192.200.255.225
 - Host-Port: 3031 (forward durch NPM)
+- Container-Port: 3030 (APP_PORT); Compose mappt 192.200.255.225:3031 -> 3030
 - Domain: rechnung.intern (Proxy auf 192.168.50.100)
 - App intern: HTTP only; TLS ausschließlich im NPM
 
@@ -41,7 +42,7 @@ Defaults:
 ## 4) Konfiguration (.env & Settings UI)
 Wichtige ENV:
 - DB_* (DB_HOST/PORT/USER/PASS/NAME/SCHEMA, DATABASE_URL)
-- APP_HOST / APP_PORT (Default 192.200.255.225 / 3031)
+- APP_HOST / APP_PORT (Default 0.0.0.0 / 3030; Host-Port 3031 wird über docker-compose gebunden)
 - TRUST_PROXY, CORS_ORIGINS
 - EMAIL_SEND_DISABLED, EMAIL_REDIRECT_TO (Safe-Mail)
 - SMTP Fallback (ENV), Category-/DB-SMTP über UI
@@ -84,4 +85,3 @@ Frontend:
 - `npm --prefix frontend run build`
 
 Team-Workflow: Nach Meilensteinen commit/push auf dev_Prisma; Compose/Smoke grün halten.
-
