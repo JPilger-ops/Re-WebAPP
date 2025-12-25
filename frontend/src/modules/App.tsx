@@ -911,6 +911,9 @@ function Invoices() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "sent" | "paid">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+  const [customerFilter, setCustomerFilter] = useState<string>("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -954,7 +957,16 @@ function Invoices() {
     setLoading(true);
     setError(null);
     try {
-      const [res, cats] = await Promise.all([listInvoices(), listCategories().catch(() => [])]);
+      const [res, cats] = await Promise.all([
+        listInvoices({
+          from: fromDate || undefined,
+          to: toDate || undefined,
+          customer: customerFilter || undefined,
+          status: statusFilter === "all" ? undefined : [statusFilter],
+          category: categoryFilter === "all" ? undefined : categoryFilter,
+        }),
+        listCategories().catch(() => []),
+      ]);
       setInvoices(res);
       setCategories(cats);
       setFiltered(applyFilter(res, search, statusFilter, categoryFilter));
@@ -1134,6 +1146,26 @@ function Invoices() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
+        />
+        <Input
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          className="w-44"
+          placeholder="Von"
+        />
+        <Input
+          type="date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          className="w-44"
+          placeholder="Bis"
+        />
+        <Input
+          placeholder="Kunde (Filter)"
+          value={customerFilter}
+          onChange={(e) => setCustomerFilter(e.target.value)}
+          className="w-48"
         />
         <Select
           value={statusFilter}

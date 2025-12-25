@@ -659,9 +659,67 @@ export const getAllInvoices = async (req, res) => {
     await ensureInvoiceCategoriesTable();
     await ensureDatevExportColumns();
 
+    const { from, to, customer, status, category, category_id, limit } = req.query;
+
+    let categoryKey = category || null;
+    if (!categoryKey && category_id) {
+      const cat = await prisma.invoice_categories.findUnique({
+        where: { id: Number(category_id) || 0 },
+        select: { key: true },
+      });
+      if (cat?.key) categoryKey = cat.key;
+    }
+
+    const where = {};
+
+    // Zeitraum
+    if (from || to) {
+      where.date = {};
+      if (from) where.date.gte = new Date(from);
+      if (to) where.date.lte = new Date(to);
+    }
+
+    // Kategorie
+    if (categoryKey) {
+      where.category = categoryKey;
+    }
+
+    // Kunde/Empfänger (name search)
+    if (customer && String(customer).trim() !== "") {
+      where.recipients = {
+        name: { contains: String(customer).trim(), mode: "insensitive" },
+      };
+    }
+
+    // Status-Filter
+    if (status) {
+      const statuses = String(status)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const or = [];
+      if (statuses.includes("paid")) {
+        or.push({ status_paid_at: { not: null } });
+      }
+      if (statuses.includes("sent")) {
+        or.push({ status_sent: true });
+      }
+      if (statuses.includes("open")) {
+        or.push({ status_sent: { not: true }, status_paid_at: null });
+      }
+      if (or.length) {
+        where.AND = where.AND || [];
+        where.AND.push({ OR: or });
+      }
+    }
+
+    const take = limit ? Number(limit) : undefined;
+
     const invoices = await prisma.invoices.findMany({
+      where,
       include: { recipients: true },
       orderBy: { invoice_number: "desc" },
+      take,
     });
 
     const categoryKeys = Array.from(

@@ -427,8 +427,23 @@ export interface RecentInvoice {
   gross_total?: number | null;
 }
 
-export async function listInvoices() {
-  return apiFetch<InvoiceListItem[]>("/invoices");
+export async function listInvoices(params?: {
+  from?: string;
+  to?: string;
+  customer?: string;
+  status?: string[];
+  category?: string;
+  limit?: number;
+}) {
+  const qs: string[] = [];
+  if (params?.from) qs.push(`from=${encodeURIComponent(params.from)}`);
+  if (params?.to) qs.push(`to=${encodeURIComponent(params.to)}`);
+  if (params?.customer) qs.push(`customer=${encodeURIComponent(params.customer)}`);
+  if (params?.status?.length) qs.push(`status=${encodeURIComponent(params.status.join(","))}`);
+  if (params?.category) qs.push(`category=${encodeURIComponent(params.category)}`);
+  if (params?.limit) qs.push(`limit=${encodeURIComponent(String(params.limit))}`);
+  const query = qs.length ? `?${qs.join("&")}` : "";
+  return apiFetch<InvoiceListItem[]>(`/invoices${query}`);
 }
 
 export async function listRecentInvoices(limit = 10) {
