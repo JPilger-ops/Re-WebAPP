@@ -1531,7 +1531,8 @@ function InvoiceFormModal({
       setCustomers(custs);
       setCategories(cats);
       if (mode === "create") {
-        setForm((f) => ({ ...f, invoice_number: nextNr.next_number || f.invoice_number }));
+        const nextVal = (nextNr as any).next || (nextNr as any).next_number || "";
+        setForm((f) => ({ ...f, invoice_number: nextVal || f.invoice_number }));
       }
       if (mode === "edit" && id) {
         const data = await getInvoice(id);
@@ -1571,6 +1572,18 @@ function InvoiceFormModal({
     loadBase();
   }, []);
 
+  const refreshInvoiceNumber = async () => {
+    setError(null);
+    try {
+      const nextNr = await getNextInvoiceNumber();
+      const nextVal = (nextNr as any).next || (nextNr as any).next_number || "";
+      if (nextVal) setForm((f) => ({ ...f, invoice_number: nextVal }));
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || "Rechnungsnummer konnte nicht ermittelt werden.");
+    }
+  };
+
   const selectRecipient = (idStr: string) => {
     setForm((f) => ({ ...f, recipient_id: idStr }));
     const idNum = Number(idStr);
@@ -1602,7 +1615,7 @@ function InvoiceFormModal({
       setError("Empfängername ist erforderlich.");
       return;
     }
-    if (!form.invoice_number.trim()) {
+    if (mode === "edit" && !form.invoice_number.trim()) {
       setError("Rechnungsnummer fehlt.");
       return;
     }
@@ -1667,6 +1680,11 @@ function InvoiceFormModal({
       const msg = apiErr.message || "Rechnung konnte nicht gespeichert werden.";
       setError(msg);
       if (onError) onError(msg);
+      // Bei 409 einen neuen Vorschlag übernehmen, falls vorhanden
+      const suggested = (err as any)?.data?.suggested_next_number;
+      if (apiErr.status === 409 && suggested) {
+        setForm((f) => ({ ...f, invoice_number: suggested }));
+      }
       return;
     } finally {
       setSaving(false);
@@ -1691,14 +1709,25 @@ function InvoiceFormModal({
             ))}
           </Select>
         </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Rechnungsnummer</span>
-          <Input
-            value={form.invoice_number}
-            onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
-            required
-          />
-        </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium flex items-center justify-between gap-2">
+                <span>Rechnungsnummer</span>
+                {mode === "create" && (
+                  <button
+                    type="button"
+                    className="text-xs text-blue-600 hover:underline"
+                    onClick={refreshInvoiceNumber}
+                  >
+                    Neu berechnen
+                  </button>
+                )}
+              </span>
+              <Input
+                value={form.invoice_number}
+                onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
+                required
+              />
+            </label>
         <label className="text-sm text-slate-700">
           <span className="font-medium">Kategorie</span>
           <Select

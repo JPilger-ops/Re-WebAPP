@@ -416,6 +416,32 @@ function calculateTotals(items) {
   };
 }
 
+// -------------------------------------------------------------
+// Hilfsfunktion für nächste Rechnungsnummer (YYYYMM + laufend)
+// -------------------------------------------------------------
+const computeNextInvoiceNumber = async () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const prefix = `${year}${month}`;
+
+  const last = await prisma.invoices.findFirst({
+    where: { invoice_number: { startsWith: prefix } },
+    orderBy: { invoice_number: "desc" },
+    select: { invoice_number: true },
+  });
+
+  let nextRunningNumber = 1;
+  if (last?.invoice_number) {
+    const lastSuffix = last.invoice_number.substring(6);
+    const lastInt = parseInt(lastSuffix, 10) || 0;
+    nextRunningNumber = lastInt + 1;
+  }
+
+  const suffix = String(nextRunningNumber).padStart(3, "0");
+  return `${prefix}${suffix}`;
+};
+
 /**
  * POST /api/invoices
  * Erstellt eine komplette Rechnung + Empfänger + Positionen
@@ -452,10 +478,6 @@ if (!recipient.city || recipient.city.trim() === "") {
 // --- Rechnungsdaten prüfen ---
 if (!invoice) {
   return res.status(400).json({ message: "Rechnungsdaten fehlen." });
-}
-
-if (!invoice.invoice_number || invoice.invoice_number.toString().trim() === "") {
-  return res.status(400).json({ message: "Rechnungsnummer fehlt." });
 }
 
 if (!invoice.date || invoice.date.trim() === "") {
@@ -518,6 +540,24 @@ for (let i = 0; i < items.length; i++) {
     const isB2B  = invoice.b2b === true;
     const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
+    // Rechnungsnummer bestimmen/prüfen (außerhalb der Transaktion, um doppelte Antworten zu vermeiden)
+    let invoiceNumber = (invoice.invoice_number || "").toString().trim();
+    if (!invoiceNumber) {
+      invoiceNumber = await computeNextInvoiceNumber();
+    } else {
+      const exists = await prisma.invoices.findFirst({
+        where: { invoice_number: invoiceNumber },
+        select: { id: true },
+      });
+      if (exists) {
+        const suggested = await computeNextInvoiceNumber();
+        return res.status(409).json({
+          message: "Rechnungsnummer bereits vergeben. Vorschlag: " + suggested,
+          suggested_next_number: suggested,
+        });
+      }
+    }
+
     const txResult = await prisma.$transaction(async (tx) => {
       // Empfänger suchen/erstellen
       let recipientRow = await tx.recipients.findFirst({
@@ -546,7 +586,7 @@ for (let i = 0; i < items.length; i++) {
 
       const invoiceRow = await tx.invoices.create({
         data: {
-          invoice_number: invoice.invoice_number,
+          invoice_number: invoiceNumber,
           date: invoiceDate,
           recipient_id: recipientRow.id,
           category,
@@ -594,6 +634,13 @@ for (let i = 0; i < items.length; i++) {
     if (err?.code === "P2002" && (err?.meta?.target || []).join(",").includes("reservation_request_id")) {
       return res.status(400).json({
         message: "Diese HKForms-Anfrage-ID ist bereits einer anderen Rechnung zugeordnet."
+      });
+    }
+    if (err?.code === "P2002" && (err?.meta?.target || []).join(",").includes("invoice_number")) {
+      const suggested = await computeNextInvoiceNumber().catch(() => null);
+      return res.status(409).json({
+        message: "Rechnungsnummer bereits vergeben." + (suggested ? " Vorschlag: " + suggested : ""),
+        suggested_next_number: suggested || undefined,
       });
     }
 
@@ -2127,28 +2174,7 @@ export const getRecentInvoices = async (req, res) => {
 // -------------------------------------------------------------
 export const getNextInvoiceNumber = async (req, res) => {
   try {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const prefix = `${year}${month}`; // z.B. "202502"
-
-    const last = await prisma.invoices.findFirst({
-      where: { invoice_number: { startsWith: prefix } },
-      orderBy: { invoice_number: "desc" },
-      select: { invoice_number: true },
-    });
-
-    let nextRunningNumber = 1;
-
-    if (last?.invoice_number) {
-      const lastSuffix = last.invoice_number.substring(6); // alles nach YYYYMM
-      const lastInt = parseInt(lastSuffix, 10) || 0;
-      nextRunningNumber = lastInt + 1;
-    }
-
-    const suffix = String(nextRunningNumber).padStart(3, "0");
-    const next = `${prefix}${suffix}`;
-
+    const next = await computeNextInvoiceNumber();
     return res.json({ next });
   } catch (err) {
     console.error("Fehler bei next-number:", err);
