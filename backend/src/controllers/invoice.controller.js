@@ -1740,12 +1740,16 @@ export const exportInvoiceToDatev = async (req, res) => {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
     console.error("DATEV Export fehlgeschlagen:", err);
-    await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV Export fehlgeschlagen.");
-    const message =
+    const short =
       err?.code === "EAUTH"
         ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."
+        : err?.responseCode
+        ? `SMTP-Fehler (${err.responseCode}): ${(err.response || err.message || "").split("\n")[0]}`
         : err?.message || "DATEV Export fehlgeschlagen.";
-    return res.status(500).json({ message });
+    await updateDatevExportStatus(id, DATEV_STATUS.FAILED, short);
+    // 4xx/5xx differenziert, aber kein harter 500 bei bekannten SMTP-Fehlern
+    const status = err?.responseCode ? 502 : 400;
+    return res.status(status).json({ message: short });
   }
 };
 
