@@ -1509,6 +1509,7 @@ function InvoiceFormModal({
     b2b: false,
     ust_id: "",
     category_key: "",
+    reservation_request_id: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1548,6 +1549,7 @@ function InvoiceFormModal({
           b2b: data.invoice.b2b === true,
           ust_id: data.invoice.ust_id || "",
           category_key: data.invoice.category || "",
+          reservation_request_id: data.invoice.reservation_request_id || "",
         });
         setItems(
           data.items.map((i) => ({
@@ -1652,6 +1654,7 @@ function InvoiceFormModal({
           b2b: form.b2b,
           ust_id: form.ust_id.trim() || null,
           category: form.category_key || null,
+          reservation_request_id: form.reservation_request_id.trim() || null,
         },
         items: items.map((i) => ({
           description: i.description.trim(),
@@ -1728,11 +1731,11 @@ function InvoiceFormModal({
                 required
               />
             </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Kategorie</span>
-          <Select
-            value={form.category_key}
-            onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Kategorie</span>
+              <Select
+                value={form.category_key}
+                onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
           >
             <option value="">– Keine –</option>
             {categories.map((c) => (
@@ -1742,11 +1745,20 @@ function InvoiceFormModal({
             ))}
           </Select>
         </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Datum</span>
-          <Input
-            type="date"
-            value={form.date}
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">HK-Forms-ID (optional)</span>
+              <Input
+                value={form.reservation_request_id}
+                onChange={(e) => setForm((f) => ({ ...f, reservation_request_id: e.target.value }))}
+                placeholder="Reservation Request ID"
+              />
+              <span className="text-xs text-slate-500">Für HKForms Sync / Reservation Request.</span>
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Datum</span>
+              <Input
+                type="date"
+                value={form.date}
             onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             required
           />
@@ -2084,6 +2096,9 @@ function InvoiceDetailPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-slate-600">Datum: {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
             <div className="text-sm text-slate-600">Kategorie: {inv.category || "–"}</div>
+            <div className="text-sm text-slate-600">
+              HK-Forms-ID: {inv.reservation_request_id ? <code className="text-xs">{inv.reservation_request_id}</code> : "–"}
+            </div>
           </div>
           <div className="text-lg font-semibold">
             Gesamt:{" "}
