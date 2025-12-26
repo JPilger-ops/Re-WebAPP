@@ -1,3 +1,5 @@
 services:
   app:
     ports: []
+    tmpfs:
+      - /app/pdfs:rw,mode=1777

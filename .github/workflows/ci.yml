@@ -111,6 +111,16 @@ jobs:
             exit 1
           '
 
+      - name: Prepare pdf directory (debug perms)
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T app sh -lc '
+            id
+            ls -ld /app /app/pdfs || true
+            mkdir -p /app/pdfs
+            chmod 1777 /app/pdfs
+            ls -ld /app /app/pdfs
+          '
+
       - name: Smoke - check:api
         run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:api
 
