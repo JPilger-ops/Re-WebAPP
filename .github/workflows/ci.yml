@@ -49,6 +49,7 @@ jobs:
             echo "DB_PASS=change_me"
             echo "DB_NAME=rechnung_prod"
             echo "DB_SCHEMA=public"
+            echo "DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public"
           } > .env
           rm -f backend/.env
           cp backend/.env.example backend/.env
@@ -70,6 +71,12 @@ jobs:
 
       - name: Build and start services
         run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+
+      - name: Debug app container status
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=250 app || true
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker inspect $(APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q app) --format '{{.State.Status}} {{.State.ExitCode}}' || true
 
       - name: Wait for app health
         run: |
