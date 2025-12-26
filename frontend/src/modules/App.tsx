@@ -359,10 +359,21 @@ function Shell() {
   const isAdmin = user?.role_name === "admin";
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const safeInsets = {
     paddingTop: "env(safe-area-inset-top)",
     paddingBottom: "env(safe-area-inset-bottom)",
   };
+
+  useEffect(() => {
+    const stored = localStorage.getItem("ui.sidebarCollapsed");
+    if (stored === "1" || stored === "true") setSidebarCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("ui.sidebarCollapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
   const links = [
     { to: "/dashboard", label: "Dashboard" },
     { to: "/customers", label: "Kunden" },
@@ -379,29 +390,38 @@ function Shell() {
   ];
 
   return (
-    <div className="bg-slate-50 text-slate-900 min-h-[100dvh] h-[100dvh] flex flex-col" style={safeInsets}>
-      <header className="bg-white border-b border-slate-200 shadow-sm flex-none">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <div className="bg-slate-50 text-slate-900 h-[100dvh] min-h-[100dvh]" style={safeInsets}>
+      <div className="flex h-full w-full overflow-hidden">
+        {/* Sidebar */}
+        <aside
+          className={`bg-white border-r border-slate-200 shadow-sm h-full flex flex-col transition-[width] duration-200 ease-in-out ${
+            sidebarCollapsed ? "w-16" : "w-64"
+          } hidden md:flex`}
+        >
+          <div className="h-14 flex items-center justify-between px-3 border-b border-slate-200">
+            <div className="text-sm font-semibold text-slate-800">{sidebarCollapsed ? "RE" : "RechnungsAPP"}</div>
             <button
-              className="md:hidden rounded-md border border-slate-200 px-2 py-1"
-              onClick={() => setSidebarOpen((s) => !s)}
+              className="text-slate-500 hover:text-slate-700 rounded-md p-1"
+              onClick={() => setSidebarCollapsed((s) => !s)}
+              aria-label="Sidebar umschalten"
             >
-              ☰
+              {sidebarCollapsed ? "›" : "‹"}
             </button>
-            <div className="font-semibold">RechnungsAPP</div>
           </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-slate-600 hidden md:inline">
-              Eingeloggt als {user?.username} {isAdmin ? "(Admin)" : ""}
-            </span>
-            <Button variant="secondary" onClick={logout}>
-              Logout
-            </Button>
-          </div>
-        </div>
-      </header>
-      <div className="flex-1 overflow-hidden relative">
+          <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1" style={{ WebkitOverflowScrolling: "touch" }}>
+            {links.map((l) => (
+              <SidebarLink
+                key={l.to}
+                to={l.to}
+                label={l.label}
+                collapsed={sidebarCollapsed}
+                onClick={() => setSidebarOpen(false)}
+              />
+            ))}
+          </nav>
+        </aside>
+
+        {/* Mobile Drawer */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 z-30 bg-black/30 md:hidden"
@@ -409,24 +429,59 @@ function Shell() {
             aria-label="Sidebar schließen"
           />
         )}
-        <div className="max-w-6xl mx-auto px-4 py-6 h-full flex gap-4">
-          <aside
-            className={`z-40 md:z-auto w-64 shrink-0 bg-white border border-slate-200 rounded-lg shadow-sm p-3 ${
-              sidebarOpen ? "fixed inset-y-0 left-0 m-4 md:static" : "hidden md:block"
-            } overflow-y-auto`}
-            style={{ maxHeight: "calc(100dvh - 2rem)", WebkitOverflowScrolling: "touch" }}
-          >
-            <nav className="flex flex-col gap-1">
-              {links.map((l) => (
-                <SidebarLink key={l.to} to={l.to} label={l.label} onClick={() => setSidebarOpen(false)} />
-              ))}
-            </nav>
-          </aside>
+        <aside
+          className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 shadow-lg p-3 transition-transform duration-200 md:hidden ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
+          <div className="h-12 flex items-center justify-between mb-2">
+            <div className="font-semibold">RechnungsAPP</div>
+            <button className="text-slate-500 hover:text-slate-700" onClick={() => setSidebarOpen(false)}>✕</button>
+          </div>
+          <nav className="flex flex-col gap-1">
+            {links.map((l) => (
+              <SidebarLink key={l.to} to={l.to} label={l.label} onClick={() => setSidebarOpen(false)} />
+            ))}
+          </nav>
+        </aside>
+
+        {/* Main */}
+        <div className="flex-1 flex flex-col min-w-0 h-full">
+          <header className="h-14 flex items-center justify-between px-4 md:px-6 bg-white border-b border-slate-200 shadow-sm flex-none">
+            <div className="flex items-center gap-3">
+              <button
+                className="md:hidden rounded-md border border-slate-200 px-2 py-1"
+                onClick={() => setSidebarOpen((s) => !s)}
+                aria-label="Menü öffnen"
+              >
+                ☰
+              </button>
+              <button
+                className="hidden md:inline-flex rounded-md border border-slate-200 px-2 py-1 text-slate-600 hover:text-slate-800"
+                onClick={() => setSidebarCollapsed((s) => !s)}
+                aria-label="Sidebar ein-/ausblenden"
+              >
+                {sidebarCollapsed ? "›" : "‹"}
+              </button>
+              <div className="font-semibold text-slate-800">RechnungsAPP</div>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-slate-600 hidden sm:inline">
+                {user?.username} {isAdmin ? "(Admin)" : ""}
+              </span>
+              <Button variant="secondary" onClick={logout}>
+                Logout
+              </Button>
+            </div>
+          </header>
           <main
-            className="flex-1 min-w-0 h-full overflow-y-auto"
+            className="flex-1 min-w-0 overflow-y-auto bg-slate-50"
             style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
           >
-            <Outlet />
+            <div className="px-4 md:px-6 py-4 md:py-6 max-w-6xl mx-auto">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>
