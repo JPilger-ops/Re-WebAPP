@@ -7,13 +7,13 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
   const base =
-    "inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold transition";
+    "inline-flex items-center justify-center px-3.5 h-10 text-sm font-semibold transition rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-white disabled:opacity-60 disabled:cursor-not-allowed";
   const variants: Record<string, string> = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-70",
+    primary: "bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-md hover:from-blue-500 hover:to-blue-500 active:translate-y-px",
     secondary:
-      "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 disabled:opacity-70",
-    ghost: "bg-transparent text-slate-700 hover:bg-slate-100",
-    danger: "bg-red-600 text-white hover:bg-red-700 disabled:opacity-70",
+      "bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50 active:translate-y-px",
+    ghost: "bg-transparent text-slate-700 hover:bg-slate-100 active:translate-y-px",
+    danger: "bg-red-600 text-white shadow hover:bg-red-700 active:translate-y-px",
   };
   return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
 }
@@ -54,11 +54,11 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 
 export function Alert({ type = "info", children }: { type?: "success" | "error" | "info"; children: React.ReactNode; }) {
   const styles: Record<string, string> = {
-    success: "bg-green-50 text-green-800 border border-green-100",
-    error: "bg-red-50 text-red-700 border border-red-100",
-    info: "bg-blue-50 text-blue-800 border border-blue-100",
+    success: "bg-green-50 text-green-800 border border-green-100 shadow-sm",
+    error: "bg-red-50 text-red-700 border border-red-100 shadow-sm",
+    info: "bg-blue-50 text-blue-800 border border-blue-100 shadow-sm",
   };
-  return <div className={`rounded-md px-3 py-2 text-sm ${styles[type]}`}>{children}</div>;
+  return <div className={`rounded-lg px-3 py-2 text-sm ${styles[type]}`}>{children}</div>;
 }
 
 export function Spinner() {
@@ -127,11 +127,11 @@ export function Modal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-xl border border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 rounded-full p-1">✕</button>
         </div>
         <div className="p-4">{children}</div>
       </div>
@@ -154,11 +154,11 @@ export function Confirm({
 }) {
   return (
     <Modal title={title} onClose={onCancel}>
-      {description && <p className="text-sm text-slate-700 mb-4">{description}</p>}
+      {description && <p className="text-sm text-slate-700 mb-4 leading-relaxed">{description}</p>}
       <div className="flex justify-end gap-3">
         <Button variant="secondary" onClick={onCancel}>Abbrechen</Button>
         <Button variant="danger" onClick={onConfirm} disabled={busy}>
-          {busy ? "Bitte warten..." : "Löschen"}
+          {busy ? "Bitte warten..." : "Bestätigen"}
         </Button>
       </div>
     </Modal>

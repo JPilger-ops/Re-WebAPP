@@ -31,63 +31,82 @@ body {
 
 .card {
   background: white;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
 }
 
 .input {
   width: 100%;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 10px 12px;
   background: white;
   font-size: 14px;
   color: #0f172a;
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  min-height: 40px;
 }
 
 .input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: #94b8ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+  background: #fdfefe;
+}
+
+.input[aria-invalid="true"] {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15);
 }
 
 .btn-primary {
-  background: #2563eb;
+  background: linear-gradient(180deg, #4f8bff 0%, #336ee6 100%);
   color: white;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid #3b7ded;
+  border-radius: 12px;
   padding: 10px 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, background 0.15s ease;
+  min-height: 40px;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.18);
 }
 
 .btn-primary:hover {
-  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.22);
 }
 
 .btn-primary:disabled {
-  opacity: 0.7;
+  opacity: 0.65;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-secondary {
   background: white;
   color: #0f172a;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 10px 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  min-height: 40px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
 }
 
 .btn-secondary:hover {
   background: #f8fafc;
   border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
 
 .btn-secondary:disabled {
-  opacity: 0.7;
+  opacity: 0.65;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
