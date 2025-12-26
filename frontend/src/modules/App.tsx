@@ -735,34 +735,37 @@ function Customers() {
       )}
 
       {!loading && filtered.length > 0 && (
-        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Email</th>
-                <th className="px-3 py-2">Ort</th>
-                <th className="px-3 py-2 w-32 text-right">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => (
-                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-medium">{c.name}</td>
-                  <td className="px-3 py-2 text-slate-600">{c.email || "–"}</td>
-                  <td className="px-3 py-2 text-slate-600">{[c.zip, c.city].filter(Boolean).join(" ") || "–"}</td>
-                  <td className="px-3 py-2 text-right">
-                    <MoreMenu
-                      items={[
-                        { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", customer: c }) },
-                        { label: "Löschen", danger: true, onClick: () => setConfirmId(c.id) },
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
+            <div className="flex-1">Kunde</div>
+            <div className="w-12 text-right">…</div>
+          </div>
+          <div className="flex-1">
+            <table className="w-full text-sm">
+              <tbody>
+                {filtered.map((c) => (
+                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50 align-top">
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-900 truncate">{c.name}</div>
+                      <div className="text-sm text-slate-700 truncate">{c.email || "–"}</div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {[c.street, [c.zip, c.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "–"}
+                      </div>
+                      {c.phone && <div className="text-xs text-slate-500 mt-0.5">{c.phone}</div>}
+                    </td>
+                    <td className="px-3 py-3 w-12 text-right align-top">
+                      <MoreMenu
+                        items={[
+                          { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", customer: c }) },
+                          { label: "Löschen", danger: true, onClick: () => setConfirmId(c.id) },
+                        ]}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
