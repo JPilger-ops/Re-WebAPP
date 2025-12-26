@@ -64,6 +64,10 @@ jobs:
           echo "---- ports lines (if any) ----"
           grep -n "ports" /tmp/compose.resolved.yml || true
 
+      - name: Show container layout (package.json locations)
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T app sh -lc 'pwd; ls -la; ls -la /app; find /app -maxdepth 3 -name package.json'
+
       - name: Build and start services
         run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
 
@@ -80,13 +84,13 @@ jobs:
           exit 1
 
       - name: Smoke - check:api
-        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:api
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:api
 
       - name: Smoke - check:pdf
-        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:pdf
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:pdf
 
       - name: Smoke - check:invoice
-        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:invoice
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:invoice
 
       - name: Dump logs on failure
         if: failure()
