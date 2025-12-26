@@ -1269,69 +1269,70 @@ function Invoices() {
         )}
 
         {!loading && filtered.length > 0 && (
-          <div className="overflow-auto bg-white border border-slate-200 rounded-lg shadow-sm max-h-[70vh]">
-            <table className="w-full text-sm min-w-[900px]">
-              <thead className="sticky top-0 bg-slate-50 z-10">
-                <tr className="text-left border-b border-slate-200">
-                  <th className="px-3 py-2">Nr.</th>
-                  <th className="px-3 py-2">Datum</th>
-                  <th className="px-3 py-2">Kunde</th>
-                  <th className="px-3 py-2">Kategorie</th>
-                  <th className="px-3 py-2">Betrag</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">DATEV</th>
-                  <th className="px-3 py-2 text-right">Aktionen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((inv) => {
-                  const st = computeStatus(inv);
-                  const datev = datevLabel(inv);
-                  return (
-                    <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-2 font-semibold">{inv.invoice_number}</td>
-                      <td className="px-3 py-2 text-slate-600">
-                        {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
-                      <td className="px-3 py-2 text-slate-600">{inv.category_label || "–"}</td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {st === "paid" ? (
-                          <span className="text-green-700">Bezahlt</span>
-                        ) : st === "sent" ? (
-                          <span className="text-blue-700">Gesendet</span>
-                        ) : (
-                          <span className="text-amber-700">Offen</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {datev.text}
-                        {datev.error && <div className="text-xs text-amber-700">{datev.error}</div>}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <MoreMenu
-                          items={[
-                            { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
-                            { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
-                            { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
-                            { label: busyId === inv.id ? "PDF …" : "PDF neu erstellen", onClick: () => onRegenerate(inv.id) },
-                            { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
-                            { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
-                            { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
-                            { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id) },
-                            { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id) },
-                            { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm max-h-[70vh] flex flex-col">
+            <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
+              <div className="flex-1">Rechnung</div>
+              <div className="w-28 text-right">Betrag</div>
+              <div className="w-10 text-right">…</div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {filtered.map((inv) => {
+                    const st = computeStatus(inv);
+                    const datev = datevLabel(inv);
+                    return (
+                      <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50 align-top">
+                        <td className="px-3 py-3">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <div className="font-semibold text-slate-900 truncate">{inv.invoice_number}</div>
+                                {st === "paid" ? (
+                                  <Badge tone="green">Bezahlt</Badge>
+                                ) : st === "sent" ? (
+                                  <Badge tone="blue">Gesendet</Badge>
+                                ) : (
+                                  <Badge tone="amber">Offen</Badge>
+                                )}
+                              </div>
+                              <div className="text-slate-700 truncate">{inv.recipient_name || "–"}</div>
+                              <div className="text-xs text-slate-500 flex flex-wrap gap-2 mt-1">
+                                <span>{inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</span>
+                                <span>•</span>
+                                <span>{inv.category_label || "Kategorie –"}</span>
+                                <span>•</span>
+                                <span>DATEV: {datev.text}</span>
+                              </div>
+                              {datev.error && <div className="text-xs text-amber-700 mt-0.5">{datev.error}</div>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 w-28 text-right align-top text-slate-900">
+                          {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
+                        </td>
+                        <td className="px-3 py-3 w-10 text-right align-top">
+                          <MoreMenu
+                            items={[
+                              { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
+                              { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
+                              { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+                              { label: busyId === inv.id ? "PDF …" : "PDF neu erstellen", onClick: () => onRegenerate(inv.id) },
+                              { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
+                              { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
+                              { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
+                              { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id) },
+                              { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id) },
+                              { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
+                            ]}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
