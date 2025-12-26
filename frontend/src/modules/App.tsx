@@ -2171,7 +2171,7 @@ function InvoiceDetailPage() {
   const inv = detail.invoice;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-5xl mx-auto">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
@@ -2195,85 +2195,115 @@ function InvoiceDetailPage() {
 
       {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-3 lg:col-span-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="text-sm text-slate-600">Datum: {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</div>
-            <div className="text-sm text-slate-600">Kategorie: {inv.category || "–"}</div>
-            <div className="text-sm text-slate-600">
-              HK-Forms-ID: {inv.reservation_request_id ? <code className="text-xs">{inv.reservation_request_id}</code> : "–"}
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+              <span>Datum: {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</span>
+              <span>•</span>
+              <span>Kategorie: {inv.category || "–"}</span>
+              <span>•</span>
+              <span>
+                HK-Forms-ID: {inv.reservation_request_id ? <code className="text-[11px]">{inv.reservation_request_id}</code> : "–"}
+              </span>
+            </div>
+            <div className="text-3xl font-semibold">
+              {inv.gross_total != null
+                ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
+                : "–"}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2 text-sm text-slate-700">
+              <div className="text-xs uppercase text-slate-500">B2B</div>
+              <div>{inv.b2b ? "Ja" : "Nein"}</div>
+              {inv.ust_id && (
+                <>
+                  <div className="text-xs uppercase text-slate-500">USt-ID</div>
+                  <div>{inv.ust_id}</div>
+                </>
+              )}
             </div>
           </div>
-          <div className="text-lg font-semibold">
-            Gesamt:{" "}
-            {inv.gross_total != null
-              ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
-              : "–"}
-          </div>
-          <div className="text-sm text-slate-600 space-y-1">
-            <div>B2B: {inv.b2b ? "Ja" : "Nein"}</div>
-            {inv.ust_id && <div>USt-ID: {inv.ust_id}</div>}
-          </div>
-        </div>
 
-        <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
-          <div className="font-semibold">Empfänger</div>
-          <div className="text-slate-700">{inv.recipient.name}</div>
-          <div className="text-slate-600 text-sm">
-            {[inv.recipient.street, `${inv.recipient.zip || ""} ${inv.recipient.city || ""}`.trim()].filter(Boolean).join(", ")}
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
+            <div className="text-xs uppercase text-slate-500">Empfänger</div>
+            <div className="text-slate-900 font-semibold">{inv.recipient.name}</div>
+            <div className="text-slate-600 text-sm">
+              {[inv.recipient.street, `${inv.recipient.zip || ""} ${inv.recipient.city || ""}`.trim()].filter(Boolean).join(", ") || "–"}
+            </div>
+            <div className="text-slate-600 text-sm">{inv.recipient.email || "–"}</div>
+            <div className="text-slate-600 text-sm">{inv.recipient.phone || "–"}</div>
           </div>
-          <div className="text-slate-600 text-sm">{inv.recipient.email || "–"}</div>
-          <div className="text-slate-600 text-sm">{inv.recipient.phone || "–"}</div>
-        </div>
-      </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
-        <div className="font-semibold mb-2">Positionen</div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b border-slate-200 bg-slate-50">
-                <th className="px-3 py-2">Beschreibung</th>
-                <th className="px-3 py-2 text-right">Menge</th>
-                <th className="px-3 py-2 text-right">Preis (brutto)</th>
-                <th className="px-3 py-2 text-right">MwSt</th>
-                <th className="px-3 py-2 text-right">Summe</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase text-slate-500">Positionen</div>
+            </div>
+            <div className="space-y-2">
               {detail.items.map((it) => (
-                <tr key={it.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2 text-slate-700">{it.description || "–"}</td>
-                  <td className="px-3 py-2 text-right">{Number(it.quantity).toLocaleString("de-DE")}</td>
-                  <td className="px-3 py-2 text-right">
-                    {Number(it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                  </td>
-                  <td className="px-3 py-2 text-right">{it.vat_key}%</td>
-                  <td className="px-3 py-2 text-right">
-                    {Number(it.line_total_gross ?? it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                  </td>
-                </tr>
+                <div key={it.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                  <div className="flex justify-between text-sm text-slate-900 font-medium">
+                    <span className="truncate">{it.description || "–"}</span>
+                    <span>
+                      {Number(it.line_total_gross ?? it.unit_price_gross).toLocaleString("de-DE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      €
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 flex gap-3 mt-1">
+                    <span>Menge: {Number(it.quantity).toLocaleString("de-DE")}</span>
+                    <span>Preis: {Number(it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                    <span>MwSt: {it.vat_key}%</span>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
-        <div className="font-semibold">Verlauf</div>
-        <div>Gesendet: {inv.status_sent_at ? new Date(inv.status_sent_at).toLocaleString() : "–"}</div>
-        <div>Bezahlt: {inv.status_paid_at ? new Date(inv.status_paid_at).toLocaleString() : "–"}</div>
-        <div>
-          DATEV:{" "}
-          {inv.datev_export_status
-            ? inv.datev_export_status === "SUCCESS"
-              ? `✅ ${inv.datev_exported_at ? new Date(inv.datev_exported_at).toLocaleString() : ""}`.trim()
-              : inv.datev_export_status === "FAILED"
-              ? `❌ ${inv.datev_export_error || ""}`.trim()
-              : inv.datev_export_status === "SKIPPED"
-              ? `⏭️ ${inv.datev_export_error || ""}`.trim()
-              : inv.datev_export_status
-            : "–"}
+        <div className="space-y-3">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
+            <div className="text-xs uppercase text-slate-500">Status</div>
+            <div className="flex items-center gap-2 text-sm text-slate-800">
+              {statusBadge()}{" "}
+              <span>
+                {inv.status_paid_at
+                  ? `Bezahlt am ${new Date(inv.status_paid_at).toLocaleString()}`
+                  : inv.status_sent
+                  ? `Gesendet am ${inv.status_sent_at ? new Date(inv.status_sent_at).toLocaleString() : ""}`
+                  : "Offen"}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
+            <div className="text-xs uppercase text-slate-500">Verlauf</div>
+            <div className="text-sm text-slate-700 space-y-1">
+              <div>Gesendet: {inv.status_sent_at ? new Date(inv.status_sent_at).toLocaleString() : "–"}</div>
+              <div>Bezahlt: {inv.status_paid_at ? new Date(inv.status_paid_at).toLocaleString() : "–"}</div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
+            <div className="text-xs uppercase text-slate-500">DATEV</div>
+            <div>
+              {inv.datev_export_status
+                ? inv.datev_export_status === "SUCCESS"
+                  ? `✅ ${inv.datev_exported_at ? new Date(inv.datev_exported_at).toLocaleString() : ""}`.trim()
+                  : inv.datev_export_status === "FAILED"
+                  ? `❌ ${inv.datev_export_error || ""}`.trim()
+                  : inv.datev_export_status === "SKIPPED"
+                  ? `⏭️ ${inv.datev_export_error || ""}`.trim()
+                  : inv.datev_export_status
+                : "–"}
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
+            <div className="text-xs uppercase text-slate-500">PDF</div>
+            <div>Aktuelle Datei vorhanden. Aktionen im Mehr-Menü.</div>
+          </div>
         </div>
       </div>
 
