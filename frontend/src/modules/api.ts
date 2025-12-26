@@ -126,6 +126,18 @@ export interface EmailTemplateSettings {
   updated_at?: string | null;
 }
 
+export interface FaviconSettings {
+  filename: string | null;
+  url?: string;
+  updated_at?: string | null;
+}
+
+export interface FaviconSettings {
+  filename: string | null;
+  updated_at?: string | null;
+  url?: string | null;
+}
+
 export async function getSmtpSettings() {
   return apiFetch<SmtpSettings>("/settings/smtp");
 }
@@ -242,6 +254,23 @@ export async function saveEmailTemplates(payload: {
   return apiFetch<EmailTemplateSettings>("/settings/email-templates", {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function getFaviconSettings() {
+  return apiFetch<FaviconSettings>("/settings/favicon");
+}
+
+export async function uploadFavicon(payload: { data_url: string }) {
+  return apiFetch<FaviconSettings & { ok: boolean }>("/settings/favicon", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resetFavicon() {
+  return apiFetch<FaviconSettings & { ok: boolean }>("/settings/favicon/reset", {
+    method: "POST",
   });
 }
 

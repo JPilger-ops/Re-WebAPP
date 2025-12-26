@@ -207,6 +207,17 @@ async function seedEmailTemplates() {
   });
 }
 
+async function seedFaviconSettings() {
+  await prisma.favicon_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      filename: "logos/RE-WebAPP.png",
+    },
+  });
+}
+
 async function main() {
   const adminRoleId = await seedRoles();
   await seedAdmin(adminRoleId);
@@ -218,6 +229,7 @@ async function main() {
   await seedHkforms();
   await seedPdfSettings();
   await seedEmailTemplates();
+  await seedFaviconSettings();
 }
 
 main()

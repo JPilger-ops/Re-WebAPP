@@ -26,6 +26,9 @@ import {
   testPdfPath,
   getEmailTemplates,
   updateEmailTemplates,
+  getFaviconData,
+  uploadFavicon,
+  resetFaviconHandler,
 } from "../controllers/settings.controller.js";
 
 const router = Router();
@@ -180,6 +183,24 @@ router.put(
   "/email-templates",
   requireRole("admin"),
   updateEmailTemplates
+);
+
+router.get(
+  "/favicon",
+  requireRole("admin"),
+  getFaviconData
+);
+
+router.post(
+  "/favicon",
+  requireRole("admin"),
+  uploadFavicon
+);
+
+router.post(
+  "/favicon/reset",
+  requireRole("admin"),
+  resetFaviconHandler
 );
 
 export default router;

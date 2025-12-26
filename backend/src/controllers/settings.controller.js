@@ -16,6 +16,7 @@ import {
 } from "../utils/invoiceHeaderSettings.js";
 import { getPdfSettings, savePdfSettings, testPdfPathWritable } from "../utils/pdfSettings.js";
 import { getGlobalEmailTemplate, saveGlobalEmailTemplate } from "../utils/emailTemplates.js";
+import { getFaviconSettings, saveFavicon, resetFavicon, resolveFaviconPath } from "../utils/favicon.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
@@ -298,6 +299,64 @@ export const updateEmailTemplates = async (req, res) => {
   } catch (err) {
     console.error("E-Mail-Templates speichern fehlgeschlagen:", err);
     return res.status(500).json({ message: "E-Mail-Vorlage konnte nicht gespeichert werden." });
+  }
+};
+
+export const getFaviconData = async (_req, res) => {
+  try {
+    const settings = await getFaviconSettings();
+    return res.json({
+      filename: settings?.filename || null,
+      updated_at: settings?.updated_at || null,
+      url: `/favicon.ico${settings?.updated_at ? `?v=${new Date(settings.updated_at).getTime()}` : ""}`,
+    });
+  } catch (err) {
+    console.error("Favicon laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Favicon konnte nicht geladen werden." });
+  }
+};
+
+export const uploadFavicon = async (req, res) => {
+  try {
+    const { data_url } = req.body || {};
+    if (!data_url || typeof data_url !== "string" || !data_url.startsWith("data:")) {
+      return res.status(400).json({ message: "Ungültige Datei." });
+    }
+    const match = data_url.match(/^data:(.*?);base64,(.*)$/);
+    if (!match) {
+      return res.status(400).json({ message: "Ungültiges Datenformat." });
+    }
+    const mime = match[1];
+    const base64 = match[2];
+    const buffer = Buffer.from(base64, "base64");
+
+    const saved = await saveFavicon({ buffer, mime });
+    return res.json({
+      ok: true,
+      filename: saved.filename,
+      updated_at: saved.updated_at,
+      url: `/favicon.ico?v=${new Date(saved.updated_at).getTime()}`,
+    });
+  } catch (err) {
+    const message = err?.message || "Upload fehlgeschlagen.";
+    const status = err?.status || 500;
+    console.error("Favicon Upload fehlgeschlagen:", err);
+    return res.status(status).json({ message });
+  }
+};
+
+export const resetFaviconHandler = async (_req, res) => {
+  try {
+    const saved = await resetFavicon();
+    return res.json({
+      ok: true,
+      filename: saved.filename,
+      updated_at: saved.updated_at,
+      url: `/favicon.ico?v=${new Date(saved.updated_at).getTime()}`,
+    });
+  } catch (err) {
+    console.error("Favicon Reset fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Favicon konnte nicht zurückgesetzt werden." });
   }
 };
 

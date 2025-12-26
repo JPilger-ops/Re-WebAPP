@@ -80,6 +80,9 @@ import {
   deleteRoleApi,
   getEmailTemplates,
   saveEmailTemplates,
+  getFaviconSettings,
+  uploadFavicon,
+  resetFavicon,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select, MoreMenu } from "./ui";
@@ -2543,6 +2546,7 @@ function AdminSettings() {
 
   const tabs = [
     { key: "pdf", label: "PDF", content: <PdfSettingsInfo /> },
+    { key: "branding", label: "Branding", content: <FaviconSettingsForm /> },
     { key: "mail", label: "Mail / SMTP", content: <SmtpSettingsForm /> },
     { key: "email_templates", label: "E-Mail Vorlagen", content: <EmailTemplatesSettings /> },
     { key: "header", label: "Rechnungskopf", content: <InvoiceHeaderForm /> },
@@ -2688,6 +2692,104 @@ function PdfSettingsInfo() {
       {testStatus && (
         <Alert type={testStatus.type === "error" ? "error" : "success"}>{testStatus.message}</Alert>
       )}
+    </div>
+  );
+}
+
+function FaviconSettingsForm() {
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStatus(null);
+    getFaviconSettings()
+      .then((data) => {
+        setPreviewUrl(data.url || "/favicon.ico");
+        setUpdatedAt(data.updated_at || null);
+      })
+      .catch((err: ApiError) => {
+        setStatus({ type: "error", message: err.message || "Favicon konnte nicht geladen werden." });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleFileChange = async (file?: File | null) => {
+    if (!file) return;
+    setStatus(null);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      try {
+        const res = await uploadFavicon({ data_url: dataUrl });
+        setPreviewUrl(res.url || "/favicon.ico");
+        setUpdatedAt(res.updated_at || null);
+        setStatus({ type: "success", message: "Favicon gespeichert. Bitte Browser-Cache leeren/hart neu laden." });
+      } catch (err: any) {
+        const apiErr = err as ApiError;
+        setStatus({ type: "error", message: apiErr.message || "Upload fehlgeschlagen." });
+      }
+    };
+    reader.onerror = () => {
+      setStatus({ type: "error", message: "Datei konnte nicht gelesen werden." });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onReset = async () => {
+    setStatus(null);
+    try {
+      const res = await resetFavicon();
+      setPreviewUrl(res.url || "/favicon.ico");
+      setUpdatedAt(res.updated_at || null);
+      setStatus({ type: "success", message: "Favicon zurückgesetzt. Bitte hart neu laden." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Zurücksetzen fehlgeschlagen." });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Branding / Favicon</h2>
+        <p className="text-sm text-slate-600">
+          Lade ein eigenes Favicon (PNG, ICO, SVG, max. 1MB). Nach Upload bitte einen Hard-Reload im Browser durchführen, damit das neue Icon sichtbar wird.
+        </p>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 border border-slate-200 rounded-lg flex items-center justify-center bg-white overflow-hidden">
+          {previewUrl ? (
+            <img
+              src={`${previewUrl}${previewUrl.includes("?") ? "&" : "?"}cb=${updatedAt ? new Date(updatedAt).getTime() : Date.now()}`}
+              alt="Favicon Preview"
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <span className="text-xs text-slate-500">kein Icon</span>
+          )}
+        </div>
+        <div className="text-sm text-slate-600">
+          {updatedAt ? `Zuletzt aktualisiert: ${new Date(updatedAt).toLocaleString()}` : "Noch kein Upload erfolgt"}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3 items-center">
+        <label className="btn-secondary cursor-pointer">
+          <input
+            type="file"
+            accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml"
+            className="hidden"
+            disabled={loading}
+            onChange={(e) => handleFileChange(e.target.files?.[0])}
+          />
+          Neues Favicon hochladen
+        </label>
+        <button type="button" className="btn-secondary" onClick={onReset} disabled={loading}>
+          Auf Standard zurücksetzen
+        </button>
+      </div>
+      {status && <Alert type={status.type === "error" ? "error" : "success"}>{status.message}</Alert>}
     </div>
   );
 }
