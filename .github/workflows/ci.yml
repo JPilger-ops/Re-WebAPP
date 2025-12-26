@@ -100,6 +100,17 @@ jobs:
           APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=200
           exit 1
 
+      - name: Verify API reachable inside app container
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T app sh -lc '
+            for i in $(seq 1 10); do
+              if curl -fsS http://127.0.0.1:3030/api/version; then exit 0; fi
+              sleep 3
+            done
+            curl -v http://127.0.0.1:3030/api/version
+            exit 1
+          '
+
       - name: Smoke - check:api
         run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:api
 
