@@ -49,6 +49,14 @@ jobs:
           echo "DB_NAME=rechnung_prod" >> .env
           echo "DB_SCHEMA=public" >> .env
 
+      - name: Show resolved compose config (ports check)
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml config > /tmp/compose.resolved.yml
+          echo "---- app service (resolved) ----"
+          awk '/^  app:/,/^  [a-zA-Z0-9_-]+:/' /tmp/compose.resolved.yml || true
+          echo "---- ports lines (if any) ----"
+          grep -n "ports" /tmp/compose.resolved.yml || true
+
       - name: Build and start services
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
 
