@@ -37,56 +37,63 @@ jobs:
 
       - name: Prepare env files
         run: |
-          cp .env.example .env
+          rm -f .env
+          cat <<'EOF' > .env
+APP_BIND_IP=0.0.0.0
+APP_PUBLIC_PORT=3031
+APP_HOST=0.0.0.0
+APP_PORT=3030
+DB_HOST=db
+DB_PORT=5432
+DB_USER=rechnung_app
+DB_PASS=change_me
+DB_NAME=rechnung_prod
+DB_SCHEMA=public
+EOF
+          rm -f backend/.env
           cp backend/.env.example backend/.env
-          echo "APP_HOST=0.0.0.0" >> .env
-          echo "APP_PORT=3030" >> .env
           echo "APP_PORT=3030" >> backend/.env
-          echo "DB_HOST=db" >> .env
-          echo "DB_PORT=5432" >> .env
-          echo "DB_USER=rechnung_app" >> .env
-          echo "DB_PASS=change_me" >> .env
-          echo "DB_NAME=rechnung_prod" >> .env
-          echo "DB_SCHEMA=public" >> .env
+          echo "---- .env (CI) ----"
+          grep -E "APP_BIND_IP|APP_PUBLIC_PORT|APP_PORT|APP_HOST" .env
 
       - name: Show resolved compose config (ports check)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml config > /tmp/compose.resolved.yml
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml config > /tmp/compose.resolved.yml
           echo "---- app service (resolved) ----"
           awk '/^  app:/,/^  [a-zA-Z0-9_-]+:/' /tmp/compose.resolved.yml || true
           echo "---- ports lines (if any) ----"
           grep -n "ports" /tmp/compose.resolved.yml || true
 
       - name: Build and start services
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
 
       - name: Wait for app health
         run: |
           for i in {1..60}; do
-            if docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format '{{.Name}} {{.Health}}' | grep -q 'app.*healthy'; then
+            if APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format '{{.Name}} {{.Health}}' | grep -q 'app.*healthy'; then
               exit 0
             fi
             sleep 5
           done
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=200
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=200
           exit 1
 
       - name: Smoke - check:api
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:api
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:api
 
       - name: Smoke - check:pdf
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:pdf
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:pdf
 
       - name: Smoke - check:invoice
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:invoice
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:invoice
 
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200
 
       - name: Shutdown
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
