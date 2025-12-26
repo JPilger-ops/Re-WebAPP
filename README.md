@@ -79,6 +79,7 @@ Backend-Smokes/Special:
 - `npm --prefix backend run check:mail-parity`
 - `npm --prefix backend run check:datev-parity`
 - `npm --prefix backend run check:hkforms-parity`
+- Design-QA/Apple-Look: siehe `docs/design-qa.md` (Checkliste) und `docs/design-diff.md` (Style-Änderungen)
 
 Frontend:
 - `npm --prefix frontend run typecheck`
