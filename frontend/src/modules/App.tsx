@@ -2638,59 +2638,98 @@ function AdminSettings() {
   }
 
   const tabs = [
-    { key: "pdf", label: "PDF", content: <PdfSettingsInfo /> },
-    { key: "branding", label: "Branding", content: <FaviconSettingsForm /> },
-    { key: "mail", label: "Mail / SMTP", content: <SmtpSettingsForm /> },
-    { key: "email_templates", label: "E-Mail Vorlagen", content: <EmailTemplatesSettings /> },
-    { key: "header", label: "Rechnungskopf", content: <InvoiceHeaderForm /> },
-    { key: "bank", label: "Bank / Steuer", content: <BankTaxSettingsForm /> },
-    { key: "datev", label: "DATEV", content: <DatevSettingsForm /> },
-    {
-      key: "hkforms",
-      label: "HKForms",
-      content: (
-        <div className="space-y-6">
-          <HkformsSettingsForm />
-          <ApiKeysSection />
-        </div>
-      ),
-    },
-    { key: "network", label: "Netzwerk", content: <NetworkSettingsForm /> },
-    { key: "security", label: "Sicherheit", content: <SecuritySettingsInfo /> },
+    { key: "pdf", label: "PDF" },
+    { key: "branding", label: "Branding" },
+    { key: "mail", label: "Mail / SMTP" },
+    { key: "email_templates", label: "E-Mail Vorlagen" },
+    { key: "header", label: "Rechnungskopf" },
+    { key: "bank", label: "Bank / Steuer" },
+    { key: "datev", label: "DATEV" },
+    { key: "hkforms", label: "HKForms" },
+    { key: "network", label: "Netzwerk" },
+    { key: "security", label: "Sicherheit" },
   ];
 
   const [active, setActive] = useState(tabs[0].key);
+  const activeContent = (key: string) => {
+    switch (key) {
+      case "pdf":
+        return <PdfSettingsInfo />;
+      case "branding":
+        return <FaviconSettingsForm />;
+      case "mail":
+        return <SmtpSettingsForm />;
+      case "email_templates":
+        return <EmailTemplatesSettings />;
+      case "header":
+        return <InvoiceHeaderForm />;
+      case "bank":
+        return <BankTaxSettingsForm />;
+      case "datev":
+        return <DatevSettingsForm />;
+      case "hkforms":
+        return (
+          <div className="space-y-6">
+            <HkformsSettingsForm />
+            <ApiKeysSection />
+          </div>
+        );
+      case "network":
+        return <NetworkSettingsForm />;
+      case "security":
+        return <SecuritySettingsInfo />;
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="space-y-6">
-      <header>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <header className="mb-2">
         <h1 className="text-2xl font-bold mb-1">Einstellungen</h1>
         <p className="text-slate-700 text-sm">
-          Einstellungen sind pro Bereich in Tabs gruppiert. Änderungen gelten sofort für neue Vorgänge.
+          System-Einstellungen im macOS-Stil. Wähle links einen Bereich, rechts erscheint das passende Pane.
         </p>
       </header>
 
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm">
-        <div className="flex flex-wrap gap-2 border-b border-slate-200 px-3 py-2">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium ${
-                active === t.key ? "bg-blue-50 text-blue-700 border border-blue-200" : "text-slate-700 hover:bg-slate-100"
-              }`}
-              onClick={() => setActive(t.key)}
-              type="button"
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-col md:flex-row gap-4">
+        <div className="w-full md:w-60 flex-shrink-0">
+          <div className="hidden md:block">
+            <nav className="flex flex-col gap-1">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setActive(t.key)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition border ${
+                    active === t.key
+                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : "border-transparent hover:bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="md:hidden">
+            <select
+              value={active}
+              onChange={(e) => setActive(e.target.value)}
+              className="input"
             >
-              {t.label}
-            </button>
-          ))}
+              {tabs.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="p-4 space-y-4">
-          {tabs.map((t) => (
-            <div key={t.key} className={active === t.key ? "block" : "hidden"}>
-              {t.content}
-            </div>
-          ))}
+
+        <div className="flex-1 min-w-0">
+          <div className="border border-slate-200 rounded-2xl shadow-sm bg-white p-4 space-y-4">
+            {activeContent(active)}
+          </div>
         </div>
       </div>
     </div>
