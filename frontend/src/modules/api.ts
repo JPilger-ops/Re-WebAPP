@@ -119,6 +119,13 @@ export interface PdfSettings {
   default_path?: string;
 }
 
+export interface EmailTemplateSettings {
+  subject_template: string;
+  body_html_template: string;
+  body_text_template: string;
+  updated_at?: string | null;
+}
+
 export async function getSmtpSettings() {
   return apiFetch<SmtpSettings>("/settings/smtp");
 }
@@ -219,6 +226,21 @@ export async function updatePdfSettings(payload: { storage_path: string }) {
 export async function testPdfPath(payload: { path: string }) {
   return apiFetch<{ ok: boolean; path: string }>("/settings/pdf/test-path", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getEmailTemplates() {
+  return apiFetch<EmailTemplateSettings>("/settings/email-templates");
+}
+
+export async function saveEmailTemplates(payload: {
+  subject_template: string;
+  body_html_template?: string | null;
+  body_text_template?: string | null;
+}) {
+  return apiFetch<EmailTemplateSettings>("/settings/email-templates", {
+    method: "PUT",
     body: JSON.stringify(payload),
   });
 }

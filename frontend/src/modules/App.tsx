@@ -78,6 +78,8 @@ import {
   createRoleApi,
   updateRoleApi,
   deleteRoleApi,
+  getEmailTemplates,
+  saveEmailTemplates,
 } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select, MoreMenu } from "./ui";
@@ -2542,6 +2544,7 @@ function AdminSettings() {
   const tabs = [
     { key: "pdf", label: "PDF", content: <PdfSettingsInfo /> },
     { key: "mail", label: "Mail / SMTP", content: <SmtpSettingsForm /> },
+    { key: "email_templates", label: "E-Mail Vorlagen", content: <EmailTemplatesSettings /> },
     { key: "header", label: "Rechnungskopf", content: <InvoiceHeaderForm /> },
     { key: "bank", label: "Bank / Steuer", content: <BankTaxSettingsForm /> },
     { key: "datev", label: "DATEV", content: <DatevSettingsForm /> },
@@ -2963,6 +2966,188 @@ function SmtpSettingsForm() {
           {testResult.message}
         </div>
       )}
+    </div>
+  );
+}
+
+function EmailTemplatesSettings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [form, setForm] = useState<{
+    subject_template: string;
+    body_html_template: string;
+    body_text_template: string;
+    updated_at?: string | null;
+  }>({
+    subject_template: "",
+    body_html_template: "",
+    body_text_template: "",
+  });
+  const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
+  const [previewId, setPreviewId] = useState<string>("");
+
+  useEffect(() => {
+    setStatus(null);
+    getEmailTemplates()
+      .then((data) =>
+        setForm({
+          subject_template: data.subject_template || "",
+          body_html_template: data.body_html_template || "",
+          body_text_template: data.body_text_template || "",
+          updated_at: data.updated_at || null,
+        })
+      )
+      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "Templates konnten nicht geladen werden." }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      const saved = await saveEmailTemplates({
+        subject_template: form.subject_template,
+        body_html_template: form.body_html_template || null,
+        body_text_template: form.body_text_template || null,
+      });
+      setForm((f) => ({ ...f, ...saved }));
+      setStatus({ type: "success", message: "Vorlage gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Speichern fehlgeschlagen." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onPreview = async () => {
+    if (!previewId.trim()) {
+      setStatus({ type: "error", message: "Bitte eine Rechnungs-ID für die Vorschau angeben." });
+      return;
+    }
+    setPreview({ loading: true, data: null, error: null });
+    try {
+      const data = await fetch(`/api/invoices/${Number(previewId)}/email-preview`, { credentials: "include" }).then((r) => r.json());
+      setPreview({ loading: false, data, error: null });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setPreview({ loading: false, data: null, error: apiErr.message || "Vorschau fehlgeschlagen." });
+    }
+  };
+
+  const placeholders = [
+    "{{recipient_name}}",
+    "{{recipient_street}}",
+    "{{recipient_zip}}",
+    "{{recipient_city}}",
+    "{{invoice_number}}",
+    "{{invoice_date}}",
+    "{{due_date}}",
+    "{{amount}}",
+    "{{bank_name}}",
+    "{{iban}}",
+    "{{bic}}",
+    "{{company_name}}",
+    "{{category_name}}",
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold">E-Mail Vorlagen</h2>
+        <p className="text-sm text-slate-600">
+          Globale Vorlagen für Betreff und Body. Kategorie-spezifische Templates haben Vorrang.
+        </p>
+      </div>
+
+      <form className="space-y-3" onSubmit={onSave}>
+        <label className="text-sm text-slate-700 block">
+          <span className="font-medium">Betreff</span>
+          <Input
+            value={form.subject_template}
+            onChange={(e) => setForm((f) => ({ ...f, subject_template: e.target.value }))}
+            disabled={loading}
+          />
+        </label>
+        <label className="text-sm text-slate-700 block">
+          <span className="font-medium">Body HTML (optional)</span>
+          <Textarea
+            className="min-h-[140px]"
+            value={form.body_html_template}
+            onChange={(e) => setForm((f) => ({ ...f, body_html_template: e.target.value }))}
+            disabled={loading}
+          />
+        </label>
+        <label className="text-sm text-slate-700 block">
+          <span className="font-medium">Body Text (optional)</span>
+          <Textarea
+            className="min-h-[140px]"
+            value={form.body_text_template}
+            onChange={(e) => setForm((f) => ({ ...f, body_text_template: e.target.value }))}
+            disabled={loading}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={saving || loading}>
+            {saving ? "Speichere ..." : "Speichern"}
+          </Button>
+          {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
+          {form.updated_at && (
+            <span className="text-xs text-slate-500">
+              Aktualisiert: {new Date(form.updated_at).toLocaleString()}
+            </span>
+          )}
+        </div>
+      </form>
+
+      <div className="border border-dashed border-slate-200 rounded-md p-3 bg-slate-50">
+        <div className="font-semibold text-sm mb-1">Platzhalter</div>
+        <div className="flex flex-wrap gap-2 text-xs text-slate-700">
+          {placeholders.map((p) => (
+            <code key={p} className="px-2 py-1 bg-white border border-slate-200 rounded">
+              {p}
+            </code>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Rechnungs-ID für Vorschau"
+            value={previewId}
+            onChange={(e) => setPreviewId(e.target.value)}
+            className="w-60"
+          />
+          <Button variant="secondary" type="button" onClick={onPreview} disabled={preview.loading}>
+            {preview.loading ? "Lädt ..." : "Vorschau laden"}
+          </Button>
+        </div>
+        {preview.error && <Alert type="error">{preview.error}</Alert>}
+        {preview.data && (
+          <div className="space-y-3">
+            <div>
+              <div className="font-semibold">Betreff</div>
+              <div className="text-sm">{preview.data.subject}</div>
+            </div>
+            <div>
+              <div className="font-semibold">HTML</div>
+              <div
+                className="border border-slate-200 rounded p-3 prose prose-sm max-w-none bg-white"
+                dangerouslySetInnerHTML={{ __html: preview.data.body_html || "<em>(leer)</em>" }}
+              />
+            </div>
+            <div>
+              <div className="font-semibold">Text</div>
+              <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap text-sm bg-white">
+                {preview.data.body_text || "(leer)"}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
