@@ -128,14 +128,23 @@ export interface EmailTemplateSettings {
 
 export interface FaviconSettings {
   filename: string | null;
-  url?: string;
+  updated_at?: string | null;
+  url?: string | null;
+}
+
+export interface NetworkSettings {
+  cors_origins: string[];
+  trust_proxy: boolean | number;
   updated_at?: string | null;
 }
 
-export interface FaviconSettings {
-  filename: string | null;
-  updated_at?: string | null;
-  url?: string | null;
+export interface NetworkDiagnostics {
+  api: boolean;
+  db: boolean;
+  pdf_path_writable: boolean;
+  smtp_config_present: boolean;
+  cors_effective: string[];
+  trust_proxy_effective: number | boolean;
 }
 
 export async function getSmtpSettings() {
@@ -272,6 +281,21 @@ export async function resetFavicon() {
   return apiFetch<FaviconSettings & { ok: boolean }>("/settings/favicon/reset", {
     method: "POST",
   });
+}
+
+export async function getNetworkSettings() {
+  return apiFetch<NetworkSettings>("/settings/network");
+}
+
+export async function updateNetworkSettings(payload: { cors_origins: string[]; trust_proxy: boolean | number }) {
+  return apiFetch<NetworkSettings & { message?: string }>("/settings/network", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getNetworkDiagnostics() {
+  return apiFetch<NetworkDiagnostics>("/settings/network/diagnostics");
 }
 
 export async function regenerateInvoicePdf(id: number) {

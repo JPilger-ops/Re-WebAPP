@@ -20,6 +20,12 @@ import settingsRoutes from "./routes/settings.routes.js";
 import versionRoutes from "./routes/version.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import { resolveFaviconPath } from "./utils/favicon.js";
+import {
+  setNetworkDefaults,
+  loadNetworkSettingsCache,
+  getAllowedOrigins,
+  setNetworkApp,
+} from "./utils/networkSettings.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +63,15 @@ const allowedOrigins = (
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+setNetworkDefaults({
+  cors_origins: allowedOrigins,
+  trust_proxy: trustProxy,
+});
+setNetworkApp(app);
+loadNetworkSettingsCache().catch((err) => {
+  console.error("Network settings konnten nicht geladen werden, nutze Defaults:", err?.message || err);
+});
+
 const rateLimitEnabled = !["0", "false", "no"].includes(
   (process.env.RATE_LIMIT_ENABLED || "1").toLowerCase()
 );
@@ -86,11 +101,17 @@ app.use((req, res, next) => {
 
 /* -------------------------
    🔧 MIDDLEWARES (MÜSSEN ZUERST!)
--------------------------- */
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+--------------------------- */
+const corsOptionsDelegate = (req, callback) => {
+  const origin = req.header("Origin");
+  const list = getAllowedOrigins();
+  if (!origin || list.includes(origin)) {
+    callback(null, { origin: true, credentials: true });
+  } else {
+    callback(null, { origin: false });
+  }
+};
+app.use(cors(corsOptionsDelegate));
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,

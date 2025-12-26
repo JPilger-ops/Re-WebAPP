@@ -218,6 +218,18 @@ async function seedFaviconSettings() {
   });
 }
 
+async function seedNetworkSettings() {
+  await prisma.network_settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      cors_origins: "https://rechnung.intern,http://rechnung.intern",
+      trust_proxy: 1,
+    },
+  });
+}
+
 async function main() {
   const adminRoleId = await seedRoles();
   await seedAdmin(adminRoleId);
@@ -230,6 +242,7 @@ async function main() {
   await seedPdfSettings();
   await seedEmailTemplates();
   await seedFaviconSettings();
+  await seedNetworkSettings();
 }
 
 main()

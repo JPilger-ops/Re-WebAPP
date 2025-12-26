@@ -17,6 +17,7 @@ import {
 import { getPdfSettings, savePdfSettings, testPdfPathWritable } from "../utils/pdfSettings.js";
 import { getGlobalEmailTemplate, saveGlobalEmailTemplate } from "../utils/emailTemplates.js";
 import { getFaviconSettings, saveFavicon, resetFavicon, resolveFaviconPath } from "../utils/favicon.js";
+import { getNetworkSettings, saveNetworkSettings, getAllowedOrigins, getEffectiveTrustProxy } from "../utils/networkSettings.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
@@ -357,6 +358,80 @@ export const resetFaviconHandler = async (_req, res) => {
   } catch (err) {
     console.error("Favicon Reset fehlgeschlagen:", err);
     return res.status(500).json({ message: "Favicon konnte nicht zurückgesetzt werden." });
+  }
+};
+
+export const getNetworkSettingsData = async (_req, res) => {
+  try {
+    const settings = await getNetworkSettings();
+    return res.json({
+      cors_origins: settings.cors_origins || [],
+      trust_proxy: settings.trust_proxy,
+      updated_at: settings.updated_at || null,
+    });
+  } catch (err) {
+    console.error("Netzwerk-Einstellungen laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Netzwerk-Einstellungen konnten nicht geladen werden." });
+  }
+};
+
+export const updateNetworkSettingsData = async (req, res) => {
+  try {
+    const cors_origins = req.body?.cors_origins || req.body?.origins || [];
+    const trust_proxy = req.body?.trust_proxy;
+    const saved = await saveNetworkSettings({ cors_origins, trust_proxy });
+    return res.json({
+      ...saved,
+      message: "Netzwerk-Einstellungen gespeichert.",
+    });
+  } catch (err) {
+    console.error("Netzwerk-Einstellungen speichern fehlgeschlagen:", err);
+    const status = err?.status || 500;
+    return res.status(status).json({ message: err?.message || "Netzwerk-Einstellungen konnten nicht gespeichert werden." });
+  }
+};
+
+export const networkDiagnostics = async (_req, res) => {
+  try {
+    const diagnostics = {
+      api: true,
+      db: false,
+      pdf_path_writable: false,
+      smtp_config_present: false,
+      cors_effective: getAllowedOrigins(),
+      trust_proxy_effective: getEffectiveTrustProxy(),
+    };
+
+    // DB check
+    await prisma.$queryRaw`SELECT 1`;
+    diagnostics.db = true;
+
+    // PDF path
+    try {
+      const pdf = await getPdfSettings();
+      const target = pdf?.storage_path || "/app/pdfs";
+      const testFile = path.join(target, `.diag-${Date.now()}.tmp`);
+      await fs.promises.mkdir(target, { recursive: true });
+      await fs.promises.writeFile(testFile, "diag");
+      await fs.promises.rm(testFile, { force: true });
+      diagnostics.pdf_path_writable = true;
+    } catch (err) {
+      diagnostics.pdf_path_writable = false;
+    }
+
+    // SMTP present?
+    try {
+      const dbConfig = await resolveGlobalSmtpFromDb();
+      const envConfig = resolveGlobalSmtpFromEnv();
+      diagnostics.smtp_config_present = Boolean(dbConfig || envConfig);
+    } catch {
+      diagnostics.smtp_config_present = false;
+    }
+
+    return res.json(diagnostics);
+  } catch (err) {
+    console.error("Netzwerk-Diagnose fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Diagnose fehlgeschlagen." });
   }
 };
 

@@ -19,6 +19,9 @@ import {
   Role,
   getInvoiceHeader,
   getSmtpSettings,
+  getNetworkSettings,
+  updateNetworkSettings,
+  getNetworkDiagnostics,
   login as apiLogin,
   testSmtp,
   updateInvoiceHeader,
@@ -2562,7 +2565,7 @@ function AdminSettings() {
         </div>
       ),
     },
-    { key: "network", label: "Netzwerk", content: <NetworkSettingsInfo /> },
+    { key: "network", label: "Netzwerk", content: <NetworkSettingsForm /> },
     { key: "security", label: "Sicherheit", content: <SecuritySettingsInfo /> },
   ];
 
@@ -2794,15 +2797,120 @@ function FaviconSettingsForm() {
   );
 }
 
-function NetworkSettingsInfo() {
+function NetworkSettingsForm() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [diagStatus, setDiagStatus] = useState<FormStatus>(null);
+  const [diagResult, setDiagResult] = useState<any>(null);
+  const [originsText, setOriginsText] = useState("https://rechnung.intern\nhttp://rechnung.intern");
+  const [trustProxy, setTrustProxy] = useState(true);
+
+  useEffect(() => {
+    setStatus(null);
+    getNetworkSettings()
+      .then((data) => {
+        setOriginsText((data.cors_origins || []).join("\n"));
+        setTrustProxy(Boolean(data.trust_proxy));
+      })
+      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "Netzwerk-Einstellungen konnten nicht geladen werden." }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const onSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      const origins = originsText
+        .split(/\n/)
+        .map((o) => o.trim())
+        .filter(Boolean);
+      const saved = await updateNetworkSettings({ cors_origins: origins, trust_proxy: trustProxy });
+      setOriginsText((saved.cors_origins || []).join("\n"));
+      setTrustProxy(Boolean(saved.trust_proxy));
+      setStatus({ type: "success", message: saved.message || "Netzwerk-Einstellungen gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Speichern fehlgeschlagen." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runDiagnostics = async () => {
+    setDiagnosing(true);
+    setDiagStatus(null);
+    setDiagResult(null);
+    try {
+      const res = await getNetworkDiagnostics();
+      setDiagResult(res);
+      setDiagStatus({ type: "success", message: "Diagnose ausgeführt." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setDiagStatus({ type: "error", message: apiErr.message || "Diagnose fehlgeschlagen." });
+    } finally {
+      setDiagnosing(false);
+    }
+  };
+
+  const originsValid = originsText
+    .split(/\n/)
+    .map((o) => o.trim())
+    .filter(Boolean)
+    .every((o) => /^https?:\/\/[^\/]+$/i.test(o));
+
   return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-semibold">Netzwerk</h2>
-      <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
-        <li>Interner HTTP-Port: Container 3030, Host 192.200.255.225:3031.</li>
-        <li>NPM Forward: https://rechnung.intern → http://192.200.255.225:3031</li>
-        <li>TRUST_PROXY=1, CORS_ORIGINS: https://rechnung.intern (weitere Origins per ENV).</li>
-      </ul>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Netzwerk / Proxy</h2>
+        <p className="text-sm text-slate-600">
+          CORS-Origins und Trust-Proxy steuern den Betrieb hinter NPM/Reverse Proxy. Änderungen werden sofort wirksam, Trust Proxy wird live gesetzt.
+        </p>
+      </div>
+      <form className="space-y-3" onSubmit={onSave}>
+        <label className="text-sm text-slate-700 block">
+          <span className="font-medium">CORS Origins (eine pro Zeile)</span>
+          <textarea
+            className="textarea mt-1"
+            rows={4}
+            value={originsText}
+            onChange={(e) => setOriginsText(e.target.value)}
+            disabled={loading}
+          />
+          {!originsValid && <p className="text-xs text-red-600 mt-1">Nur http/https Origins ohne Pfad erlaubt.</p>}
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={trustProxy}
+            onChange={(e) => setTrustProxy(e.target.checked)}
+            disabled={loading}
+          />
+          Trust Proxy aktivieren (empfohlen hinter NPM)
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-primary" type="submit" disabled={saving || loading || !originsValid}>
+            {saving ? "Speichere ..." : "Speichern"}
+          </button>
+          <button className="btn-secondary" type="button" onClick={runDiagnostics} disabled={diagnosing || loading}>
+            {diagnosing ? "Prüfe ..." : "Diagnose ausführen"}
+          </button>
+        </div>
+      </form>
+      {status && <Alert type={status.type === "error" ? "error" : "success"}>{status.message}</Alert>}
+      {diagStatus && <Alert type={diagStatus.type === "error" ? "error" : "success"}>{diagStatus.message}</Alert>}
+      {diagResult && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1 text-sm text-slate-700">
+          <div>API: {diagResult.api ? "ok" : "fail"}</div>
+          <div>DB: {diagResult.db ? "ok" : "fail"}</div>
+          <div>PDF Pfad schreibbar: {diagResult.pdf_path_writable ? "ok" : "fail"}</div>
+          <div>SMTP konfiguriert: {diagResult.smtp_config_present ? "ja" : "nein"}</div>
+          <div>CORS aktiv: {(diagResult.cors_effective || []).join(", ") || "–"}</div>
+          <div>Trust Proxy aktiv: {diagResult.trust_proxy_effective ? "ja" : "nein"}</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -26,6 +26,9 @@ import {
   testPdfPath,
   getEmailTemplates,
   updateEmailTemplates,
+  getNetworkSettingsData,
+  updateNetworkSettingsData,
+  networkDiagnostics,
   getFaviconData,
   uploadFavicon,
   resetFaviconHandler,
@@ -141,6 +144,24 @@ router.post(
   "/pdf/test-path",
   requireRole("admin"),
   testPdfPath
+);
+
+router.get(
+  "/network",
+  requireRole("admin"),
+  getNetworkSettingsData
+);
+
+router.put(
+  "/network",
+  requireRole("admin"),
+  updateNetworkSettingsData
+);
+
+router.get(
+  "/network/diagnostics",
+  requireRole("admin"),
+  networkDiagnostics
 );
 
 router.get(

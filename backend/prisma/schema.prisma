@@ -225,3 +225,10 @@ model favicon_settings {
   filename   String?   @db.VarChar(255)
   updated_at DateTime? @default(now()) @db.Timestamp(6)
 }
+
+model network_settings {
+  id           Int       @id @default(1)
+  cors_origins String?   @db.Text
+  trust_proxy  Int?      @default(1)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+}
