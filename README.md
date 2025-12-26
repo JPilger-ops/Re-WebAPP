@@ -23,6 +23,8 @@ Defaults:
 - Host-IP: 192.200.255.225
 - Host-Port: 3031 (forward durch NPM)
 - Container-Port: 3030 (APP_PORT); Compose mappt 192.200.255.225:3031 -> 3030
+  - Port-Binding per ENV steuerbar: APP_BIND_IP (default 0.0.0.0), APP_PUBLIC_PORT (default 3031)
+  - Auf Server: APP_BIND_IP=192.200.255.225, APP_PUBLIC_PORT=3031. In CI/local reicht Default.
 - Domain: rechnung.intern (Proxy auf 192.168.50.100)
 - App intern: HTTP only; TLS ausschließlich im NPM
 

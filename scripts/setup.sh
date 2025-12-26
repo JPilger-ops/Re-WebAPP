@@ -22,13 +22,15 @@ else
 fi
 
 info "Wichtige Variablen (aus .env):"
-grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT)=' .env || true
+grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT|APP_BIND_IP|APP_PUBLIC_PORT)=' .env || true
 
 cat <<'EOF'
 Nächste Schritte:
 1) Trage sichere Werte in .env ein (mind. DB_PASS, DB_USER, DB_NAME).
 2) Starte die Container: docker compose up -d --build
-3) Healthcheck: curl http://${APP_HOST:-localhost}:${APP_PORT:-3031}/api/version
+   - Auf deinem Server: setze APP_BIND_IP=192.200.255.225 und APP_PUBLIC_PORT=3031 (Host-Port)
+   - Standard (CI/Local): APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031
+3) Healthcheck: curl http://${APP_BIND_IP:-127.0.0.1}:${APP_PUBLIC_PORT:-3031}/api/version
 EOF
 
 success "Setup-Skript fertig."
