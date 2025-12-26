@@ -585,44 +585,45 @@ function Dashboard() {
           <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
         )}
         {!recentLoading && recent.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="text-left border-b border-slate-200 bg-slate-50">
-                  <th className="px-3 py-2">Nr</th>
-                  <th className="px-3 py-2">Kunde</th>
-                  <th className="px-3 py-2">Kategorie</th>
-                  <th className="px-3 py-2">Datum</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2 text-right">Betrag</th>
-                  <th className="px-3 py-2 text-right">Aktion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((inv) => {
-                  const st = statusLabel(inv);
-                  return (
-                    <tr key={inv.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2 font-medium">{inv.invoice_number}</td>
-                      <td className="px-3 py-2 text-slate-700">{inv.recipient_name || "–"}</td>
-                      <td className="px-3 py-2 text-slate-700">{inv.category_label || "–"}</td>
-                      <td className="px-3 py-2 text-slate-600">
-                        {inv.date ? new Date(inv.date).toLocaleDateString() : "–"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge tone={st.tone}>{st.text}</Badge>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {inv.gross_total != null
-                          ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                          : "–"}
-                      </td>
-                      <td className="px-3 py-2 text-right">{actionMenu(inv)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="overflow-hidden border border-slate-200 rounded-lg">
+            <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
+              <div className="flex-1">Rechnung</div>
+              <div className="w-20 text-right">Betrag</div>
+              <div className="w-10 text-right">…</div>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {recent.map((inv) => {
+                    const st = statusLabel(inv);
+                    return (
+                      <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900 truncate">{inv.invoice_number}</span>
+                              <Badge tone={st.tone}>{st.text}</Badge>
+                            </div>
+                            <div className="text-slate-700 truncate">{inv.recipient_name || "–"}</div>
+                            <div className="text-xs text-slate-500 flex flex-wrap gap-2">
+                              <span>{inv.date ? new Date(inv.date).toLocaleDateString() : "–"}</span>
+                              <span>•</span>
+                              <span>{inv.category_label || "Kategorie –"}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 w-20 text-right align-top">
+                          {inv.gross_total != null
+                            ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : "–"}
+                        </td>
+                        <td className="px-3 py-3 w-10 text-right align-top">{actionMenu(inv)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
