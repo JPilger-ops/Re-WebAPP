@@ -80,7 +80,19 @@ jobs:
 
       - name: Wait for app health
         run: |
+          APP_ID=$(APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q app)
+          if [ -z "$APP_ID" ]; then
+            echo "app container not found"
+            APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a
+            exit 1
+          fi
           for i in {1..60}; do
+            STATUS=$(docker inspect "$APP_ID" --format '{{.State.Status}}')
+            if [ "$STATUS" != "running" ]; then
+              echo "app container status: $STATUS (not running)"
+              APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200 app || true
+              exit 1
+            fi
             if APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format '{{.Name}} {{.Health}}' | grep -q 'app.*healthy'; then
               exit 0
             fi
