@@ -29,8 +29,8 @@ jobs:
         run: |
           cp .env.example .env
           cp backend/.env.example backend/.env
-          echo "APP_HOST=127.0.0.1" >> .env
-          echo "APP_PORT=3031" >> .env
+          echo "APP_HOST=0.0.0.0" >> .env
+          echo "APP_PORT=3030" >> .env
           echo "DB_HOST=db" >> .env
           echo "DB_PORT=5432" >> .env
           echo "DB_USER=rechnung_app" >> .env
@@ -54,13 +54,13 @@ jobs:
           exit 1
 
       - name: Smoke - check:api
-        run: docker compose exec -T app npm --prefix backend run check:api
+        run: docker compose exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:api
 
       - name: Smoke - check:pdf
-        run: docker compose exec -T app npm --prefix backend run check:pdf
+        run: docker compose exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:pdf
 
       - name: Smoke - check:invoice
-        run: docker compose exec -T app npm --prefix backend run check:invoice
+        run: docker compose exec -T -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm --prefix backend run check:invoice
 
       - name: Dump logs on failure
         if: failure()
