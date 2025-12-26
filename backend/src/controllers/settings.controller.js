@@ -15,6 +15,7 @@ import {
   saveInvoiceHeaderSettings,
 } from "../utils/invoiceHeaderSettings.js";
 import { getPdfSettings, savePdfSettings, testPdfPathWritable } from "../utils/pdfSettings.js";
+import { getGlobalEmailTemplate, saveGlobalEmailTemplate } from "../utils/emailTemplates.js";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
@@ -253,6 +254,50 @@ export const testHkformsConnection = async (req, res) => {
   } catch (err) {
     console.error("HKForms-Test fehlgeschlagen:", err);
     return res.status(500).json({ message: "HKForms-Test fehlgeschlagen." });
+  }
+};
+
+export const getEmailTemplates = async (_req, res) => {
+  try {
+    const tmpl = await getGlobalEmailTemplate();
+    return res.json({
+      subject_template: tmpl?.subject_template || "",
+      body_html_template: tmpl?.body_html_template || "",
+      body_text_template: tmpl?.body_text_template || "",
+      updated_at: tmpl?.updated_at || null,
+    });
+  } catch (err) {
+    console.error("E-Mail-Templates laden fehlgeschlagen:", err);
+    return res.status(500).json({ message: "E-Mail-Vorlagen konnten nicht geladen werden." });
+  }
+};
+
+export const updateEmailTemplates = async (req, res) => {
+  try {
+    const subject = (req.body?.subject_template || "").trim();
+    const bodyHtml = (req.body?.body_html_template || "").trim() || null;
+    const bodyText = (req.body?.body_text_template || "").trim() || null;
+
+    if (!subject) {
+      return res.status(400).json({ message: "Betreff darf nicht leer sein." });
+    }
+
+    const saved = await saveGlobalEmailTemplate({
+      subject_template: subject,
+      body_html_template: bodyHtml,
+      body_text_template: bodyText,
+    });
+
+    return res.json({
+      subject_template: saved.subject_template || "",
+      body_html_template: saved.body_html_template || "",
+      body_text_template: saved.body_text_template || "",
+      updated_at: saved.updated_at || null,
+      message: "E-Mail-Vorlage gespeichert.",
+    });
+  } catch (err) {
+    console.error("E-Mail-Templates speichern fehlgeschlagen:", err);
+    return res.status(500).json({ message: "E-Mail-Vorlage konnte nicht gespeichert werden." });
   }
 };
 

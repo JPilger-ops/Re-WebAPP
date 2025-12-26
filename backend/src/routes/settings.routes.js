@@ -24,6 +24,8 @@ import {
   getPdfSettingsData,
   updatePdfSettingsData,
   testPdfPath,
+  getEmailTemplates,
+  updateEmailTemplates,
 } from "../controllers/settings.controller.js";
 
 const router = Router();
@@ -166,6 +168,18 @@ router.delete(
   "/api-keys/:id",
   requireRole("admin"),
   deleteApiKey
+);
+
+router.get(
+  "/email-templates",
+  requireRole("admin"),
+  getEmailTemplates
+);
+
+router.put(
+  "/email-templates",
+  requireRole("admin"),
+  updateEmailTemplates
 );
 
 export default router;

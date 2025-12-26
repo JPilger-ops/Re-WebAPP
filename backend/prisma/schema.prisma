@@ -211,3 +211,11 @@ model pdf_settings {
   id            Int     @id @default(1)
   storage_path  String  @db.Text
 }
+
+model email_templates {
+  id                   Int       @id @default(1)
+  subject_template     String?   @db.Text
+  body_html_template   String?   @db.Text
+  body_text_template   String?   @db.Text
+  updated_at           DateTime? @default(now()) @db.Timestamp(6)
+}

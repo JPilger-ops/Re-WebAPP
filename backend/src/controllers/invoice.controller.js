@@ -24,6 +24,7 @@ import {
   resolveGlobalSmtpFromDb,
   resolveGlobalSmtpFromEnv,
 } from "../utils/smtpSettings.js";
+import { getGlobalEmailTemplate } from "../utils/emailTemplates.js";
 
 const fetchFirstItemDescription = async (invoiceId) => {
   if (!invoiceId) return null;
@@ -132,7 +133,7 @@ const formatNumberDe = (val) =>
 
 const placeholderRegex = (ph) => new RegExp(ph.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
 
-const buildPlaceholderMap = (row = {}, bankSettings = {}) => {
+const buildPlaceholderMap = (row = {}, bankSettings = {}, headerSettings = {}) => {
   const amountValue = row.b2b ? n(row.net_19) + n(row.net_7) : n(row.gross_total);
   const amountDisplay = amountValue.toLocaleString("de-DE", {
     minimumFractionDigits: 2,
@@ -151,6 +152,8 @@ const buildPlaceholderMap = (row = {}, bankSettings = {}) => {
     "{{bank_name}}": bankSettings.bank_name || "",
     "{{iban}}": formatIban(bankSettings.iban),
     "{{bic}}": (bankSettings.bic || "").toUpperCase(),
+    "{{company_name}}": headerSettings.company_name || "",
+    "{{category_name}}": row.category_label || row.category || "",
   };
 };
 
@@ -299,8 +302,8 @@ const resolveSmtpConfig = async (row = {}) => {
   return null;
 };
 
-const buildEmailContent = (row, bankSettings = {}) => {
-  const placeholders = buildPlaceholderMap(row, bankSettings);
+const buildEmailContent = (row, bankSettings = {}, headerSettings = {}, globalTemplate = null) => {
+  const placeholders = buildPlaceholderMap(row, bankSettings, headerSettings);
   const fallbackSubject = `Rechnung Nr. ${row.invoice_number}`;
 
   const defaultBody = `Hallo ${row.recipient_name || "Kunde"},
@@ -318,25 +321,33 @@ Bei Fragen melde dich gerne jederzeit.
 Vielen Dank für deinen Auftrag!
 
 Beste Grüße
-Waldwirtschaft Heidekönig
-Thomas Pilger
-02241 76649`;
+${placeholders["{{company_name}}"] || "Ihr Team"}`;
 
-  const subject = row.tpl_subject
-    ? replacePlaceholders(row.tpl_subject, placeholders, false) || fallbackSubject
+  const useSubjectTpl = row.tpl_subject || globalTemplate?.subject_template || null;
+  const useHtmlTpl = row.tpl_body_html || globalTemplate?.body_html_template || null;
+  const useTextTpl = globalTemplate?.body_text_template || null;
+
+  const subject = useSubjectTpl
+    ? replacePlaceholders(useSubjectTpl, placeholders, false) || fallbackSubject
     : fallbackSubject;
 
-  const bodyHtml = row.tpl_body_html
-    ? replacePlaceholders(row.tpl_body_html, placeholders, true)
+  let bodyHtml = useHtmlTpl
+    ? replacePlaceholders(useHtmlTpl, placeholders, true)
     : null;
 
-  const bodyText = bodyHtml ? stripHtmlToText(bodyHtml) : defaultBody;
+  let bodyText = bodyHtml ? stripHtmlToText(bodyHtml) : defaultBody;
+
+  if (!bodyHtml && useTextTpl) {
+    const renderedText = replacePlaceholders(useTextTpl, placeholders, false);
+    bodyHtml = ensureHtmlBody(renderedText, renderedText);
+    bodyText = renderedText;
+  }
 
   return {
     subject,
     bodyHtml,
     bodyText,
-    templateUsed: Boolean(row.tpl_subject || row.tpl_body_html),
+    templateUsed: Boolean(row.tpl_subject || row.tpl_body_html || globalTemplate),
     category: {
       id: row.category_id,
       key: row.category_key,
@@ -1577,7 +1588,9 @@ export const getInvoiceEmailPreview = async (req, res) => {
   try {
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
-    const content = buildEmailContent(row, bankSettings);
+    const headerSettings = await getInvoiceHeaderSettings();
+    const globalTemplate = await getGlobalEmailTemplate();
+    const content = buildEmailContent(row, bankSettings, headerSettings, globalTemplate);
     const smtp = await resolveSmtpConfig(row);
     const datevSettings = await getDatevSettings();
     const datevEmail = (datevSettings?.email || "").trim();
@@ -1633,7 +1646,9 @@ export const sendInvoiceEmail = async (req, res) => {
     const { filename, filepath } = await ensureInvoicePdf(id);
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
-    const content = buildEmailContent(row, bankSettings);
+    const headerSettings = await getInvoiceHeaderSettings();
+    const globalTemplate = await getGlobalEmailTemplate();
+    const content = buildEmailContent(row, bankSettings, headerSettings, globalTemplate);
     const smtpConfig = await resolveSmtpConfig(row);
     const datevSettings = includeDatev ? await getDatevSettings() : null;
     const datevEmail = includeDatev ? (datevSettings?.email || "").trim() : "";

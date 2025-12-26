@@ -193,6 +193,20 @@ async function seedPdfSettings() {
   });
 }
 
+async function seedEmailTemplates() {
+  await prisma.email_templates.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      subject_template: "Rechnung {{invoice_number}}",
+      body_html_template: null,
+      body_text_template:
+        "Hallo {{recipient_name}},\\n\\nanbei erhältst du deine Rechnung Nr. {{invoice_number}} vom {{invoice_date}}.\\nDer Betrag von {{amount}} ist fällig bis {{due_date}}.\\n\\nVielen Dank!\\n{{company_name}}",
+    },
+  });
+}
+
 async function main() {
   const adminRoleId = await seedRoles();
   await seedAdmin(adminRoleId);
@@ -203,6 +217,7 @@ async function main() {
   await seedDatev();
   await seedHkforms();
   await seedPdfSettings();
+  await seedEmailTemplates();
 }
 
 main()
