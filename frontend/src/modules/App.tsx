@@ -355,7 +355,7 @@ function ProtectedLayout() {
 }
 
 function Shell() {
-  const { user, logout } = useAuth();
+  const { user, logout, idleWarning, resetIdleTimer } = useAuth();
   const isAdmin = user?.role_name === "admin";
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -480,6 +480,16 @@ function Shell() {
             style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
           >
             <div className="px-4 md:px-6 py-4 md:py-6 max-w-6xl mx-auto">
+              {idleWarning && (
+                <Alert type="info">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>Du wirst in 2 Minuten automatisch abgemeldet.</span>
+                    <Button variant="secondary" onClick={resetIdleTimer}>
+                      Angemeldet bleiben
+                    </Button>
+                  </div>
+                </Alert>
+              )}
               <Outlet />
             </div>
           </main>
