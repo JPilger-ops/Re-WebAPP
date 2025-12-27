@@ -27,10 +27,11 @@ grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT|A
 cat <<'EOF'
 Nächste Schritte:
 1) Trage sichere Werte in .env ein (mind. DB_PASS, DB_USER, DB_NAME).
-2) Starte die Container: docker compose up -d --build
+2) Build mit Git-Metadaten: ./scripts/build-meta.sh
+3) Container starten: docker compose up -d
    - Auf deinem Server: setze APP_BIND_IP=192.200.255.225 und APP_PUBLIC_PORT=3031 (Host-Port)
    - Standard (CI/Local): APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031
-3) Healthcheck: curl http://${APP_BIND_IP:-127.0.0.1}:${APP_PUBLIC_PORT:-3031}/api/version
+4) Healthcheck: curl http://${APP_BIND_IP:-127.0.0.1}:${APP_PUBLIC_PORT:-3031}/api/version
 EOF
 
 success "Setup-Skript fertig."

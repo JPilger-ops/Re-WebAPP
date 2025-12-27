@@ -13,8 +13,9 @@ Schritte:
 1. `git clone <repo>`
 2. `./scripts/setup.sh` (legt .env an, wenn fehlt)
 3. `.env` anpassen (mindestens DB_PASS, DB_USER, DB_NAME setzen)
-4. `docker compose up -d --build`
-5. Smoke-Checks (im Repo):
+4. `./scripts/build-meta.sh` (schreibt BUILD_SHA/BUILD_NUMBER/BUILD_TIME in `.env` und ruft `docker compose build`)
+5. `docker compose up -d`
+6. Smoke-Checks (im Repo):
    - `npm --prefix backend run check:api`
    - `npm --prefix backend run check:pdf`
    - `npm --prefix backend run check:invoice`
@@ -86,5 +87,9 @@ Backend-Smokes/Special:
 Frontend:
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run build`
+
+Build-Metadaten/Version:
+- `./scripts/build-meta.sh` ermittelt SHA + Commit-Count aus Git, aktualisiert `.env` (BUILD_SHA, BUILD_NUMBER, BUILD_TIME) und ruft `docker compose build`.
+- `/api/version` gibt Version + Build aus; lokal testen mit `curl http://127.0.0.1:3031/api/version`.
 
 Team-Workflow: Nach Meilensteinen commit/push auf dev_Prisma; Compose/Smoke grün halten.

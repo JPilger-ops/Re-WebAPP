@@ -16,7 +16,7 @@ RUN mkdir -p /app/backend/public && npm run build
 FROM node:18-bookworm-slim AS build
 ARG BUILD_SHA=unknown
 ARG BUILD_TIME=unknown
-ARG BUILD_NUMBER=unknown
+ARG BUILD_NUMBER=0
 ARG APP_VERSION=0.0.0
 
 WORKDIR /app/backend
@@ -43,7 +43,7 @@ RUN npm prune --omit=dev
 FROM node:18-bookworm-slim AS runtime
 ARG BUILD_SHA=unknown
 ARG BUILD_TIME=unknown
-ARG BUILD_NUMBER=unknown
+ARG BUILD_NUMBER=0
 ARG APP_VERSION=0.0.0
 
 ENV NODE_ENV=production

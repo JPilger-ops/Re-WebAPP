@@ -12,7 +12,7 @@ Schnellstart
    - `.env` aus `.env.example` kopieren und DB/Port anpassen  
    - `backend/.env` aus `backend/.env.example` kopieren
 3) Build & Start  
-   - `docker compose build`  
+   - `./scripts/build-meta.sh` (setzt BUILD_SHA/BUILD_NUMBER/TIME in `.env` und ruft `docker compose build`)  
    - `docker compose up -d`
 4) Status prüfen  
    - `docker compose ps` (Healthchecks)  
@@ -24,7 +24,7 @@ Geführte Installation
 
 Update / Redeploy
 1) `git pull`
-2) `docker compose build`
+2) `./scripts/build-meta.sh`
 3) `docker compose up -d --force-recreate`
 
 Troubleshooting

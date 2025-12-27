@@ -28,7 +28,7 @@ services:
       args:
         BUILD_SHA: ${BUILD_SHA:-unknown}
         BUILD_TIME: ${BUILD_TIME:-unknown}
-        BUILD_NUMBER: ${BUILD_NUMBER:-unknown}
+        BUILD_NUMBER: ${BUILD_NUMBER:-0}
         APP_VERSION: ${APP_VERSION:-0.9.8}
     restart: unless-stopped
     ports:
@@ -45,6 +45,10 @@ services:
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
       HKFORMS_MOCK_ENABLE: "1"
+      BUILD_SHA: ${BUILD_SHA:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      BUILD_NUMBER: ${BUILD_NUMBER:-0}
+      APP_VERSION: ${APP_VERSION:-0.9.8}
     depends_on:
       db:
         condition: service_healthy

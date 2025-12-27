@@ -121,6 +121,32 @@ const PERMISSION_OPTIONS: { key: string; label: string }[] = [
   { key: "categories.delete", label: "Kategorien löschen" },
 ];
 
+function extractBuildNumber(info: VersionInfo | null) {
+  const raw = info?.build?.number;
+  if (raw === undefined || raw === null) return null;
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatVersionBadge(info: VersionInfo | null) {
+  if (!info) return null;
+  const buildNumber = extractBuildNumber(info);
+  const numberLabel = buildNumber && buildNumber > 0 ? `v${buildNumber}` : `v${info.version}`;
+  const shaPart = info.build?.sha && info.build.sha !== "unknown" ? info.build.sha : null;
+  return shaPart ? `${numberLabel} (${shaPart})` : numberLabel;
+}
+
+function formatVersionDetail(info: VersionInfo | null) {
+  if (!info) return null;
+  const parts: string[] = [];
+  const buildNumber = extractBuildNumber(info);
+  if (buildNumber && buildNumber > 0) parts.push(`build ${buildNumber}`);
+  if (info.build?.sha) parts.push(`sha ${info.build.sha}`);
+  if (info.build?.time && info.build.time !== "unknown") parts.push(info.build.time);
+  const suffix = parts.length ? ` (${parts.join(", ")})` : "";
+  return `Version ${info.version}${suffix}`;
+}
+
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
@@ -363,6 +389,7 @@ function Shell() {
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const safeInsets = {
     paddingTop: "env(safe-area-inset-top)",
     paddingBottom: "env(safe-area-inset-bottom)",
@@ -376,6 +403,14 @@ function Shell() {
   useEffect(() => {
     localStorage.setItem("ui.sidebarCollapsed", sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    getVersion()
+      .then(setVersionInfo)
+      .catch(() => setVersionInfo(null));
+  }, []);
+
+  const versionBadgeLabel = useMemo(() => formatVersionBadge(versionInfo), [versionInfo]);
 
   const links = [
     { to: "/dashboard", label: "Dashboard" },
@@ -463,6 +498,14 @@ function Shell() {
               <div className="font-semibold text-slate-800">RechnungsAPP</div>
             </div>
             <div className="flex items-center gap-3 text-sm">
+              {versionBadgeLabel && (
+                <span
+                  className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-1 whitespace-nowrap hidden sm:inline"
+                  title={versionInfo?.build?.time || `Version ${versionInfo?.version || ""}`}
+                >
+                  {versionBadgeLabel}
+                </span>
+              )}
               <span className="text-slate-600 hidden sm:inline">
                 {user?.username} {isAdmin ? "(Admin)" : ""}
               </span>
@@ -2905,6 +2948,7 @@ function CategoryFormModal({
 function AdminSettings() {
   const { user } = useAuth();
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const versionDetail = useMemo(() => formatVersionDetail(versionInfo), [versionInfo]);
   if (user?.role_name !== "admin") {
     return (
       <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4">
@@ -3013,15 +3057,7 @@ function AdminSettings() {
           </div>
         </div>
       </div>
-      {versionInfo && (
-        <div className="text-xs text-slate-600">
-          Version {versionInfo.version}
-          {versionInfo.build?.number ? ` (build ${versionInfo.build.number}` : ""}
-          {versionInfo.build?.sha ? `${versionInfo.build?.number ? ", " : " ("}sha ${versionInfo.build.sha}` : ""}
-          {versionInfo.build?.time ? `${versionInfo.build?.number || versionInfo.build?.sha ? ", " : " ("}${versionInfo.build.time}` : ""}
-          {versionInfo.build?.number || versionInfo.build?.sha || versionInfo.build?.time ? ")" : ""}
-        </div>
-      )}
+      {versionDetail && <div className="text-xs text-slate-600">{versionDetail}</div>}
     </div>
   );
 }

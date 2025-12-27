@@ -15,7 +15,7 @@ export interface VersionInfo {
   build?: {
     sha?: string;
     time?: string;
-    number?: string;
+    number?: number;
   };
 }
 

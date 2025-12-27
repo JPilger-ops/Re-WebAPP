@@ -28,8 +28,8 @@ else
   info "backend/.env vorhanden"
 fi
 
-info "Baue Images (docker compose build)"
-docker compose build
+info "Baue Images (inkl. Build-Metadaten aus Git)"
+./scripts/build-meta.sh
 
 info "Starte Container (docker compose up -d)"
 docker compose up -d
