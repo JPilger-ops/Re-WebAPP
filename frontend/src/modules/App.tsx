@@ -457,13 +457,6 @@ function Shell() {
               >
                 ☰
               </button>
-              <button
-                className="hidden md:inline-flex rounded-md border border-slate-200 px-2 py-1 text-slate-600 hover:text-slate-800"
-                onClick={() => setSidebarCollapsed((s) => !s)}
-                aria-label="Sidebar ein-/ausblenden"
-              >
-                {sidebarCollapsed ? "›" : "‹"}
-              </button>
               <div className="font-semibold text-slate-800">RechnungsAPP</div>
             </div>
             <div className="flex items-center gap-3 text-sm">
