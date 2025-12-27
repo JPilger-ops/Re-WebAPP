@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet, useParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet, useParams, useSearchParams } from "react-router-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
@@ -4751,11 +4751,14 @@ function HkformsSettingsForm() {
 function StatsPage() {
   const { user } = useAuth();
   const canView = user?.role_name === "admin" || (user?.permissions || []).includes("stats.view");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<InvoiceStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [year, setYear] = useState<string>("");
-  const [category, setCategory] = useState<string>("all");
+  const initialYear = searchParams.get("year") || "";
+  const initialCategory = searchParams.get("category") || "all";
+  const [year, setYear] = useState<string>(initialYear);
+  const [category, setCategory] = useState<string>(initialCategory);
   const [refreshFlag, setRefreshFlag] = useState(0);
 
   useEffect(() => {
@@ -4773,6 +4776,19 @@ function StatsPage() {
       })
       .finally(() => setLoading(false));
   }, [canView, year, category, refreshFlag]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (year) params.set("year", year);
+    if (category && category !== "all") params.set("category", category);
+    setSearchParams(params, { replace: true });
+  }, [year, category, setSearchParams]);
+
+  const clearFilters = () => {
+    setYear("");
+    setCategory("all");
+    setRefreshFlag((v) => v + 1);
+  };
 
   const years = useMemo(() => {
     if (!data?.byYear?.length) return [];
@@ -4811,6 +4827,7 @@ function StatsPage() {
             </option>
           ))}
         </Select>
+        <Button variant="ghost" onClick={clearFilters}>Filter zurücksetzen</Button>
       </div>
 
       {loading && (
@@ -4818,7 +4835,14 @@ function StatsPage() {
           <Spinner /> Lade Statistiken ...
         </div>
       )}
-      {error && <Alert type="error">{error}</Alert>}
+      {error && (
+        <Alert type="error">
+          {error}{" "}
+          <Button variant="ghost" onClick={() => setRefreshFlag((v) => v + 1)}>
+            Erneut versuchen
+          </Button>
+        </Alert>
+      )}
 
       {!loading && data && (
         <div className="space-y-4">
