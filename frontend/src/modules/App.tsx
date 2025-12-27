@@ -2,7 +2,6 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link,
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
-  AuthUser,
   ApiKeyInfo,
   Customer,
   Category,
