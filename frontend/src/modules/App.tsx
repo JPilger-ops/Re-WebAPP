@@ -14,6 +14,7 @@ import {
   DatevSettings,
   HkformsSettings,
   InvoiceStatsResponse,
+  VersionInfo,
   User,
   Role,
   getInvoiceHeader,
@@ -72,6 +73,7 @@ import {
   getInvoiceEmailPreview,
   sendInvoiceEmailApi,
   exportInvoiceDatev,
+  getVersion,
   listUsers,
   createUserApi,
   updateUserApi,
@@ -2734,6 +2736,7 @@ function CategoryFormModal({
 }
 function AdminSettings() {
   const { user } = useAuth();
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   if (user?.role_name !== "admin") {
     return (
       <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4">
@@ -2756,6 +2759,11 @@ function AdminSettings() {
   ];
 
   const [active, setActive] = useState(tabs[0].key);
+  useEffect(() => {
+    getVersion()
+      .then(setVersionInfo)
+      .catch(() => setVersionInfo(null));
+  }, []);
   const activeContent = (key: string) => {
     switch (key) {
       case "pdf":
@@ -2837,6 +2845,13 @@ function AdminSettings() {
           </div>
         </div>
       </div>
+      {versionInfo && (
+        <div className="text-xs text-slate-600">
+          Version {versionInfo.version}
+          {versionInfo.build?.sha ? ` (sha ${versionInfo.build.sha})` : ""}{" "}
+          {versionInfo.build?.time ? `– ${versionInfo.build.time}` : ""}
+        </div>
+      )}
     </div>
   );
 }

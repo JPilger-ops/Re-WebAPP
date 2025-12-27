@@ -10,6 +10,14 @@ export interface AuthUser {
   permissions?: string[];
 }
 
+export interface VersionInfo {
+  version: string;
+  build?: {
+    sha?: string;
+    time?: string;
+  };
+}
+
 async function parseJsonSafe(res: Response) {
   try {
     return await res.json();
@@ -68,6 +76,10 @@ export async function changePassword(payload: { currentPassword: string; newPass
       newPassword: payload.newPassword,
     }),
   });
+}
+
+export async function getVersion() {
+  return apiFetch<VersionInfo>("/version");
 }
 
 // Settings APIs

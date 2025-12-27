@@ -14,6 +14,9 @@ RUN mkdir -p /app/backend/public && npm run build
 # Backend build stage
 ########################################
 FROM node:18-bookworm-slim AS build
+ARG BUILD_SHA=unknown
+ARG BUILD_TIME=unknown
+ARG APP_VERSION=0.0.0
 
 WORKDIR /app/backend
 
@@ -37,10 +40,16 @@ RUN npm prune --omit=dev
 # Runtime stage
 ########################################
 FROM node:18-bookworm-slim AS runtime
+ARG BUILD_SHA=unknown
+ARG BUILD_TIME=unknown
+ARG APP_VERSION=0.0.0
 
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV BUILD_SHA=${BUILD_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV APP_VERSION=${APP_VERSION}
 
 WORKDIR /app
 

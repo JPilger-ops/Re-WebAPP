@@ -25,6 +25,10 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        BUILD_SHA: ${BUILD_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+        APP_VERSION: ${APP_VERSION:-0.9.8}
     restart: unless-stopped
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${APP_PUBLIC_PORT:-3031}:3030"
