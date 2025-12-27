@@ -113,11 +113,12 @@ jobs:
 
       - name: Prepare pdf directory (debug perms)
         run: |
-          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T app sh -lc '
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -u 0 app sh -lc '
             id
             ls -ld /app /app/pdfs || true
             mkdir -p /app/pdfs
-            chmod 1777 /app/pdfs
+            chown -R node:node /app/pdfs || true
+            chmod 1777 /app/pdfs || chmod 777 /app/pdfs
             ls -ld /app /app/pdfs
           '
 
