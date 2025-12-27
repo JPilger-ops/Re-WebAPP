@@ -710,7 +710,12 @@ function Customers() {
           <h1 className="text-2xl font-bold">Kunden</h1>
           <p className="text-slate-600 text-sm">Empfänger verwalten (Name erforderlich, sonst optional).</p>
         </div>
-        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" disabled={loading} onClick={load}>
+            {loading ? "Lädt..." : "Refresh"}
+          </Button>
+          <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -720,7 +725,6 @@ function Customers() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
         />
-        <MoreMenu items={[{ label: "Aktualisieren", onClick: load }]} />
       </div>
 
       {loading && (
@@ -1205,7 +1209,12 @@ function Invoices() {
             <h1 className="text-2xl font-bold">Rechnungen</h1>
             <p className="text-slate-600 text-sm">PDF-Aktionen direkt an der Rechnung.</p>
           </div>
-          <Button onClick={() => navigate("/invoices/new")}>Neu</Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" disabled={loading} onClick={load}>
+              {loading ? "Lädt..." : "Refresh"}
+            </Button>
+            <Button onClick={() => navigate("/invoices/new")}>Neu</Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3 items-center">
@@ -1229,12 +1238,12 @@ function Invoices() {
             className="w-44"
             placeholder="Bis"
           />
-          <Input
-            placeholder="Kunde (Filter)"
-            value={customerFilter}
-            onChange={(e) => setCustomerFilter(e.target.value)}
-            className="w-48"
-          />
+        <Input
+          placeholder="Kunde (Filter)"
+          value={customerFilter}
+          onChange={(e) => setCustomerFilter(e.target.value)}
+          className="w-48"
+        />
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -1245,20 +1254,19 @@ function Invoices() {
             <option value="sent">Gesendet</option>
             <option value="paid">Bezahlt</option>
           </Select>
-          <Select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-48"
-          >
-            <option value="all">Alle Kategorien</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.label}>
-                {c.label}
-              </option>
-            ))}
-          </Select>
-          <MoreMenu items={[{ label: "Aktualisieren", onClick: load }]} />
-        </div>
+        <Select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="w-48"
+        >
+          <option value="all">Alle Kategorien</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.label}>
+              {c.label}
+            </option>
+          ))}
+        </Select>
+      </div>
       </div>
 
       <div className="flex-1 min-h-0 space-y-3">
