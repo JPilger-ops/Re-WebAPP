@@ -1329,7 +1329,6 @@ function Invoices() {
                               { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
                               { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
                               { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
-                              { label: busyId === inv.id ? "PDF …" : "PDF neu erstellen", onClick: () => onRegenerate(inv.id) },
                               { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
                               { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
                               { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
@@ -2190,7 +2189,6 @@ function InvoiceDetailPage() {
           <MoreMenu
             items={[
               { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
-              { label: busy ? "PDF …" : "PDF neu erstellen", onClick: onRegenerate },
               { label: "E-Mail Vorschau", onClick: loadPreview },
               { label: "E-Mail senden", onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
               { label: "DATEV Export", onClick: onDatevExport },
