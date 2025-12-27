@@ -1302,13 +1302,13 @@ function Invoices() {
         )}
 
         {!loading && filtered.length > 0 && (
-          <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm max-h-[70vh] flex flex-col">
-            <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
+          <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
+            <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
               <div className="flex-1">Rechnung</div>
               <div className="w-28 text-right">Betrag</div>
               <div className="w-10 text-right">…</div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div>
               <table className="w-full text-sm">
                 <tbody>
                   {filtered.map((inv) => {

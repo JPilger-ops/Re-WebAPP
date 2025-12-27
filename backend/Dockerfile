@@ -1,19 +1,31 @@
 ########################################
-# Build stage
+# Frontend build stage (Vite → backend/public)
+########################################
+FROM node:18-bookworm-slim AS frontend
+
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend ./
+# Vite schreibt nach ../backend/public (siehe vite.config.ts)
+RUN mkdir -p /app/backend/public && npm run build
+
+########################################
+# Backend build stage
 ########################################
 FROM node:18-bookworm-slim AS build
 
-WORKDIR /app
+WORKDIR /app/backend
 
-# Install build tools (for bcrypt etc.)
+# Install build tools (für bcrypt etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
   python3 build-essential ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package*.json ./
+COPY backend/package*.json ./
 RUN npm ci
 
-COPY . .
+COPY backend ./
 
 # Generate Prisma client + build TS
 RUN npx prisma generate && npm run build
@@ -50,14 +62,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy node_modules and built assets
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/public ./public
-COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/migrations ./migrations
-COPY --from=build /app/scripts ./scripts
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY --from=build /app/backend/node_modules ./node_modules
+COPY --from=build /app/backend/dist ./dist
+COPY --from=build /app/backend/public ./public
+# Overlay with freshly built frontend assets
+COPY --from=frontend /app/backend/public ./public
+COPY --from=build /app/backend/prisma ./prisma
+COPY --from=build /app/backend/migrations ./migrations
+COPY --from=build /app/backend/scripts ./scripts
+COPY backend/package*.json ./
+COPY backend/tsconfig.json ./
 
 # Ensure pdf output dir exists (volume may override)
 RUN mkdir -p /app/pdfs
