@@ -1004,6 +1004,7 @@ function Invoices() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
   const [sendModal, setSendModal] = useState<{ open: boolean; id?: number; to?: string; subject?: string; message?: string; includeDatev?: boolean }>({ open: false });
+  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null);
 
   const computeStatus = (inv: InvoiceListItem) => {
     if (inv.status_paid_at) return "paid";
@@ -1147,6 +1148,15 @@ function Invoices() {
       setToast({ type: "error", message: msg });
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const openPdf = async (id: number) => {
+    setPdfBusyId(id);
+    try {
+      window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
+    } finally {
+      setPdfBusyId(null);
     }
   };
 
@@ -1339,7 +1349,11 @@ function Invoices() {
                             items={[
                               { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
                               { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
-                              { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+                              {
+                                label: pdfBusyId === inv.id ? "PDF …" : "PDF öffnen",
+                                onClick: () => openPdf(inv.id),
+                                disabled: pdfBusyId === inv.id,
+                              },
                               { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
                               { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
                               { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
@@ -2013,7 +2027,14 @@ function InvoiceFormModal({
             </Button>
             {!loading && (
               <Button type="submit" form="invoice-form-main" disabled={saving}>
-                {saving ? "Speichern ..." : "Speichern"}
+                {saving ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner />
+                    Speichern ...
+                  </span>
+                ) : (
+                  "Speichern"
+                )}
               </Button>
             )}
           </div>
@@ -2048,6 +2069,7 @@ function InvoiceDetailPage() {
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
   const [sendModal, setSendModal] = useState<{ open: boolean; to?: string }>({ open: false });
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -2174,6 +2196,16 @@ function InvoiceDetailPage() {
     }
   };
 
+  const openDetailPdf = async () => {
+    if (!detail) return;
+    setPdfBusy(true);
+    try {
+      window.open(`/api/invoices/${detail.invoice.id}/pdf?mode=inline`, "_blank");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-slate-600">
@@ -2197,16 +2229,20 @@ function InvoiceDetailPage() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
-          <p className="text-slate-600 text-sm">Details und Aktionen</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {statusBadge()}
-          <MoreMenu
-            items={[
-              { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
+            <p className="text-slate-600 text-sm">Details und Aktionen</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {statusBadge()}
+            <MoreMenu
+              items={[
+              {
+                label: pdfBusy ? "PDF …" : "PDF öffnen",
+                onClick: openDetailPdf,
+                disabled: pdfBusy,
+              },
               { label: "E-Mail Vorschau", onClick: loadPreview },
               { label: "E-Mail senden", onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
               { label: "DATEV Export", onClick: onDatevExport },
