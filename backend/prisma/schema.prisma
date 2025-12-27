@@ -97,6 +97,8 @@ model invoices {
   status_sent_at         DateTime?       @db.Timestamp(6)
   status_paid_at         DateTime?       @db.Timestamp(6)
   overdue_since          DateTime?       @db.Timestamp(6)
+  canceled_at            DateTime?       @db.Timestamp(6)
+  cancel_reason          String?         @db.Text
   datev_export_status    String?         @default("NOT_SENT") @db.VarChar(20)
   datev_exported_at      DateTime?       @db.Timestamp(6)
   datev_export_error     String?

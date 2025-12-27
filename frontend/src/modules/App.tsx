@@ -53,6 +53,7 @@ import {
   createInvoice,
   updateInvoice,
   deleteInvoice,
+  bulkCancelInvoices,
   listCustomers,
   createCustomer,
   updateCustomer,
@@ -981,14 +982,16 @@ function Categories() {
 }
 
 function Invoices() {
+  type InvoiceStatusFilter = "active" | "all" | "open" | "sent" | "paid" | "canceled";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const statusParam = searchParams.get("status") as InvoiceStatusFilter | null;
+  const allowedStatuses: InvoiceStatusFilter[] = ["active", "all", "open", "sent", "paid", "canceled"];
+  const initialStatus: InvoiceStatusFilter = statusParam && allowedStatuses.includes(statusParam) ? statusParam : "active";
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
   const [search, setSearch] = useState(searchParams.get("q") || "");
-  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "sent" | "paid">(
-    (searchParams.get("status") as any) || "all"
-  );
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>(initialStatus);
   const [categoryFilter, setCategoryFilter] = useState<string>(searchParams.get("category") || "all");
   const [fromDate, setFromDate] = useState<string>(searchParams.get("from") || "");
   const [toDate, setToDate] = useState<string>(searchParams.get("to") || "");
@@ -1002,8 +1005,12 @@ function Invoices() {
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
   const [sendModal, setSendModal] = useState<{ open: boolean; id?: number; to?: string; subject?: string; message?: string; includeDatev?: boolean }>({ open: false });
   const [pdfBusyId, setPdfBusyId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [cancelDialog, setCancelDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: "" });
+  const [bulkBusy, setBulkBusy] = useState(false);
 
-  const computeStatus = (inv: InvoiceListItem) => {
+  const computeStatus = (inv: InvoiceListItem): "open" | "sent" | "paid" | "canceled" => {
+    if (inv.canceled_at) return "canceled";
     if (inv.status_paid_at) return "paid";
     if (inv.status_sent) return "sent";
     return "open";
@@ -1019,7 +1026,19 @@ function Invoices() {
     return { text: "—" };
   };
 
-  const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter, categoryKey: string, customerTerm: string) => {
+  const statusLabel = (s: InvoiceStatusFilter) => {
+    const labels: Record<InvoiceStatusFilter, string> = {
+      active: "Aktiv (ohne Storno)",
+      all: "Alle inkl. Storno",
+      open: "Offen",
+      sent: "Gesendet",
+      paid: "Bezahlt",
+      canceled: "Storniert",
+    };
+    return labels[s];
+  };
+
+  const applyFilter = (list: InvoiceListItem[], term: string, status: InvoiceStatusFilter, categoryKey: string, customerTerm: string) => {
     const t = term.toLowerCase();
     const ct = customerTerm.toLowerCase();
     return list.filter((inv) => {
@@ -1029,7 +1048,12 @@ function Invoices() {
         (inv.recipient_name || "").toLowerCase().includes(t);
       const matchesCustomer = !ct || (inv.recipient_name || "").toLowerCase().includes(ct);
       const st = computeStatus(inv);
-      const matchesStatus = status === "all" || st === status;
+      const matchesStatus =
+        status === "all"
+          ? true
+          : status === "active"
+          ? st !== "canceled"
+          : st === status;
       const matchesCategory = categoryKey === "all" || inv.category_label === categoryKey;
       return matchesTerm && matchesCustomer && matchesStatus && matchesCategory;
     });
@@ -1044,7 +1068,7 @@ function Invoices() {
           from: fromDate || undefined,
           to: toDate || undefined,
           customer: customerFilter || undefined,
-          status: statusFilter === "all" ? undefined : [statusFilter],
+          status: [statusFilter],
           category: categoryFilter === "all" ? undefined : categoryFilter,
         }),
         listCategories().catch(() => []),
@@ -1052,6 +1076,7 @@ function Invoices() {
       setInvoices(res);
       setCategories(cats);
       setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter));
+      setSelectedIds((prev) => prev.filter((id) => res.some((inv) => inv.id === id)));
     } catch (err: any) {
       const apiErr = err as ApiError;
       setError(apiErr.message || "Rechnungen konnten nicht geladen werden.");
@@ -1069,9 +1094,13 @@ function Invoices() {
   }, [invoices, search, statusFilter, categoryFilter, customerFilter]);
 
   useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => filtered.some((inv) => inv.id === id)));
+  }, [filtered]);
+
+  useEffect(() => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
-    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (statusFilter !== "active") params.set("status", statusFilter);
     if (categoryFilter !== "all") params.set("category", categoryFilter);
     if (fromDate) params.set("from", fromDate);
     if (toDate) params.set("to", toDate);
@@ -1081,7 +1110,7 @@ function Invoices() {
 
   const resetFilters = () => {
     setSearch("");
-    setStatusFilter("all");
+    setStatusFilter("active");
     setCategoryFilter("all");
     setFromDate("");
     setToDate("");
@@ -1090,12 +1119,57 @@ function Invoices() {
 
   const activeFilters = [
     search ? "Suche" : null,
-    statusFilter !== "all" ? `Status: ${statusFilter}` : null,
+    statusFilter !== "active" ? `Status: ${statusLabel(statusFilter)}` : null,
     categoryFilter !== "all" ? `Kategorie: ${categoryFilter}` : null,
     fromDate ? `Von ${fromDate}` : null,
     toDate ? `Bis ${toDate}` : null,
     customerFilter ? `Kunde: ${customerFilter}` : null,
   ].filter(Boolean);
+
+  const selectedCount = selectedIds.length;
+  const allVisibleSelected = filtered.length > 0 && filtered.every((inv) => selectedIds.includes(inv.id));
+
+  const toggleSelect = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      if (checked) {
+        if (prev.includes(id)) return prev;
+        return [...prev, id];
+      }
+      return prev.filter((item) => item !== id);
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(filtered.map((inv) => inv.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const startBulkCancel = () => {
+    if (!selectedCount) return;
+    setCancelDialog({ open: true, reason: "" });
+  };
+
+  const submitBulkCancel = async () => {
+    if (!selectedCount) return;
+    setBulkBusy(true);
+    setToast(null);
+    try {
+      const res = await bulkCancelInvoices(selectedIds, cancelDialog.reason.trim() || undefined);
+      setToast({ type: "success", message: `${res.updated} Rechnung(en) storniert.` });
+      setCancelDialog({ open: false, reason: "" });
+      setSelectedIds([]);
+      await load();
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      const msg = apiErr.message || "Storno fehlgeschlagen.";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const loadPreview = async (id: number) => {
     setPreview({ loading: true, data: null, error: null });
@@ -1194,6 +1268,7 @@ function Invoices() {
     try {
       await deleteInvoice(id);
       setInvoices((prev) => prev.filter((inv) => inv.id !== id));
+      setSelectedIds((prev) => prev.filter((sid) => sid !== id));
       setToast({ type: "success", message: "Rechnung gelöscht." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -1296,12 +1371,14 @@ function Invoices() {
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="w-40"
+            className="w-52"
           >
-            <option value="all">Alle Status</option>
+            <option value="active">Aktiv (ohne Storno)</option>
+            <option value="all">Alle inkl. Storno</option>
             <option value="open">Offen</option>
             <option value="sent">Gesendet</option>
             <option value="paid">Bezahlt</option>
+            <option value="canceled">Storniert</option>
           </Select>
           <Select
             value={categoryFilter}
@@ -1329,6 +1406,20 @@ function Invoices() {
             ))}
           </div>
         )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white/80 border border-slate-200 rounded-lg px-3 py-2 shadow-sm">
+          <div className="text-sm font-medium text-slate-700">
+            {selectedCount ? `${selectedCount} ausgewählt` : "Keine Auswahl"}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setSelectedIds([])} disabled={!selectedCount || bulkBusy}>
+              Auswahl leeren
+            </Button>
+            <Button variant="danger" onClick={startBulkCancel} disabled={!selectedCount || bulkBusy}>
+              {bulkBusy ? "Storniert..." : `Stornieren (${selectedCount})`}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 space-y-3">
@@ -1345,6 +1436,15 @@ function Invoices() {
         {!loading && filtered.length > 0 && (
           <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
             <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
+              <div className="w-12 text-center">
+                <input
+                  type="checkbox"
+                  aria-label="Alle auswählen"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={allVisibleSelected}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                />
+              </div>
               <div className="flex-1">Rechnung</div>
               <div className="w-28 text-right">Betrag</div>
               <div className="w-10 text-right">…</div>
@@ -1355,14 +1455,28 @@ function Invoices() {
                   {filtered.map((inv) => {
                     const st = computeStatus(inv);
                     const datev = datevLabel(inv);
+                    const isSelected = selectedIds.includes(inv.id);
+                    const isCanceled = st === "canceled";
+                    const cancelReason = (inv.cancel_reason || "").trim();
                     return (
                       <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50 align-top">
+                        <td className="px-3 py-3 w-12 text-center align-top">
+                          <input
+                            type="checkbox"
+                            aria-label="Rechnung auswählen"
+                            className="h-4 w-4 rounded border-slate-300"
+                            checked={isSelected}
+                            onChange={(e) => toggleSelect(inv.id, e.target.checked)}
+                          />
+                        </td>
                         <td className="px-3 py-3">
                           <div className="flex items-start gap-2">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <div className="font-semibold text-slate-900 truncate">{inv.invoice_number}</div>
-                                {st === "paid" ? (
+                                {st === "canceled" ? (
+                                  <Badge tone="gray">Storniert</Badge>
+                                ) : st === "paid" ? (
                                   <Badge tone="green">Bezahlt</Badge>
                                 ) : st === "sent" ? (
                                   <Badge tone="blue">Gesendet</Badge>
@@ -1379,13 +1493,20 @@ function Invoices() {
                                 <span>DATEV: {datev.text}</span>
                               </div>
                               {datev.error && <div className="text-xs text-amber-700 mt-0.5">{datev.error}</div>}
+                              {isCanceled && (
+                                <div className="text-xs text-red-700 mt-1">
+                                  Storniert
+                                  {inv.canceled_at ? ` am ${new Date(inv.canceled_at).toLocaleDateString()}` : ""}
+                                  {cancelReason ? ` – ${cancelReason}` : ""}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
                         <td className="px-3 py-3 w-28 text-right align-top text-slate-900">
                           {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
                         </td>
-                        <td className="px-3 py-3 w-10 text-right align-top">
+                        <td className="px-3 py-3 w-12 text-right align-top">
                           <MoreMenu
                             items={[
                               { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
@@ -1397,9 +1518,9 @@ function Invoices() {
                               },
                               { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
                               { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
-                              { label: "DATEV Export", onClick: () => onDatevExport(inv.id) },
-                              { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id) },
-                              { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id) },
+                              { label: "DATEV Export", onClick: () => onDatevExport(inv.id), disabled: isCanceled },
+                              { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id), disabled: isCanceled },
+                              { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id), disabled: isCanceled },
                               { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
                             ]}
                           />
@@ -1413,6 +1534,32 @@ function Invoices() {
           </div>
         )}
       </div>
+
+      {cancelDialog.open && (
+        <Modal title="Rechnungen stornieren" onClose={() => !bulkBusy && setCancelDialog({ open: false, reason: "" })}>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              {selectedCount} Rechnungen werden storniert. Rechnungsnummern bleiben unverändert.
+            </p>
+            <label className="text-sm text-slate-700 flex flex-col gap-1">
+              <span className="font-medium">Grund (optional)</span>
+              <Textarea
+                value={cancelDialog.reason}
+                onChange={(e) => setCancelDialog((prev) => ({ ...prev, reason: e.target.value }))}
+                className="min-h-[90px]"
+              />
+            </label>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setCancelDialog({ open: false, reason: "" })} disabled={bulkBusy}>
+                Abbrechen
+              </Button>
+              <Button variant="danger" onClick={submitBulkCancel} disabled={bulkBusy || !selectedCount}>
+                {bulkBusy ? "Storniert..." : `Stornieren (${selectedCount})`}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
 
@@ -2139,6 +2286,7 @@ function InvoiceDetailPage() {
 
   const statusBadge = () => {
     if (!detail) return null;
+    if (detail.invoice.canceled_at) return <Badge tone="gray">Storniert</Badge>;
     if (detail.invoice.status_paid_at) return <Badge tone="green">Bezahlt</Badge>;
     if (detail.invoice.status_sent) return <Badge tone="blue">Gesendet</Badge>;
     return <Badge tone="amber">Offen</Badge>;
@@ -2162,6 +2310,10 @@ function InvoiceDetailPage() {
 
   const onMarkSent = async () => {
     if (!detail) return;
+    if (detail.invoice.canceled_at) {
+      setToast({ type: "error", message: "Stornierte Rechnungen können nicht neu markiert werden." });
+      return;
+    }
     setBusy(true);
     setToast(null);
     try {
@@ -2180,6 +2332,10 @@ function InvoiceDetailPage() {
 
   const onMarkPaid = async () => {
     if (!detail) return;
+    if (detail.invoice.canceled_at) {
+      setToast({ type: "error", message: "Stornierte Rechnungen können nicht neu markiert werden." });
+      return;
+    }
     setBusy(true);
     setToast(null);
     try {
@@ -2230,6 +2386,10 @@ function InvoiceDetailPage() {
 
   const onDatevExport = async () => {
     if (!detail) return;
+    if (detail.invoice.canceled_at) {
+      setToast({ type: "error", message: "Stornierte Rechnungen werden nicht exportiert." });
+      return;
+    }
     setBusy(true);
     setToast(null);
     try {
@@ -2273,6 +2433,8 @@ function InvoiceDetailPage() {
   }
 
   const inv = detail.invoice;
+  const isCanceled = Boolean(inv.canceled_at);
+  const cancelReason = (inv.cancel_reason || "").trim();
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -2280,6 +2442,12 @@ function InvoiceDetailPage() {
           <div>
             <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
             <p className="text-slate-600 text-sm">Details und Aktionen</p>
+            {isCanceled && (
+              <p className="text-sm text-red-700 mt-1">
+                Storniert{inv.canceled_at ? ` am ${new Date(inv.canceled_at).toLocaleDateString()}` : ""}
+                {cancelReason ? ` – ${cancelReason}` : ""}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {statusBadge()}
@@ -2292,9 +2460,9 @@ function InvoiceDetailPage() {
               },
               { label: "E-Mail Vorschau", onClick: loadPreview },
               { label: "E-Mail senden", onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
-              { label: "DATEV Export", onClick: onDatevExport },
-              { label: "Als gesendet markieren", onClick: onMarkSent },
-              { label: "Als bezahlt markieren", onClick: onMarkPaid },
+              { label: "DATEV Export", onClick: onDatevExport, disabled: isCanceled },
+              { label: "Als gesendet markieren", onClick: onMarkSent, disabled: isCanceled },
+              { label: "Als bezahlt markieren", onClick: onMarkPaid, disabled: isCanceled },
             ]}
           />
         </div>

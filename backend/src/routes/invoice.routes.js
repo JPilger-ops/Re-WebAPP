@@ -13,6 +13,7 @@ import {
   exportInvoiceToDatev,
   regenerateInvoicePdf,
   deleteInvoice,         // ⬅️ NEU
+  bulkCancelInvoices,
   getInvoiceStatusByReservation,
   updateInvoiceStatusByReservation
 } from "../controllers/invoice.controller.js";
@@ -30,6 +31,7 @@ router.use(authRequired);
 // Status-Routen
 router.post("/:id/status/sent", markSent);
 router.post("/:id/status/paid", markPaid);
+router.post("/bulk-cancel", bulkCancelInvoices);
 router.get("/:id/email-preview", getInvoiceEmailPreview);
 router.post("/:id/send-email", sendInvoiceEmail);
 router.post("/:id/datev-export", exportInvoiceToDatev);

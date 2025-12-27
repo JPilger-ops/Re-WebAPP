@@ -469,6 +469,8 @@ export interface InvoiceListItem {
   status_sent_at?: string | null;
   status_paid_at?: string | null;
   gross_total?: number | null;
+  canceled_at?: string | null;
+  cancel_reason?: string | null;
    datev_export_status?: string | null;
    datev_exported_at?: string | null;
    datev_export_error?: string | null;
@@ -499,6 +501,8 @@ export interface InvoiceDetail {
     gross_total?: number | null;
     b2b?: boolean | null;
     ust_id?: string | null;
+    canceled_at?: string | null;
+    cancel_reason?: string | null;
     recipient: Customer & { id: number | null };
   };
   items: InvoiceItem[];
@@ -582,6 +586,13 @@ export async function updateInvoice(id: number, payload: {
 export async function deleteInvoice(id: number) {
   return apiFetch<{ message: string }>(`/invoices/${id}`, {
     method: "DELETE",
+  });
+}
+
+export async function bulkCancelInvoices(ids: number[], reason?: string) {
+  return apiFetch<{ updated: number }>(`/invoices/bulk-cancel`, {
+    method: "POST",
+    body: JSON.stringify({ ids, reason }),
   });
 }
 

@@ -23,6 +23,8 @@ CREATE TABLE invoices (
     status_sent_at TIMESTAMP,
     status_paid_at TIMESTAMP,
     overdue_since TIMESTAMP,
+    canceled_at TIMESTAMP,
+    cancel_reason TEXT,
     datev_export_status VARCHAR(20) DEFAULT 'NOT_SENT',
     datev_exported_at TIMESTAMP,
     datev_export_error TEXT,

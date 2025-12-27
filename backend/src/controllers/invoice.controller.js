@@ -65,6 +65,29 @@ const getPdfDir = async () => {
   return dir;
 };
 
+const moveInvoicePdfToArchive = async (invoiceNumber) => {
+  try {
+    const pdfDir = await getPdfDir();
+    const archiveDir = path.join(pdfDir, "archive");
+    await fs.promises.mkdir(archiveDir, { recursive: true });
+    const candidates = [`RE-${invoiceNumber}.pdf`, `Rechnung-${invoiceNumber}.pdf`];
+    for (const name of candidates) {
+      const source = path.join(pdfDir, name);
+      if (fs.existsSync(source)) {
+        const parsed = path.parse(name);
+        let target = path.join(archiveDir, name);
+        if (fs.existsSync(target)) {
+          target = path.join(archiveDir, `${parsed.name}-${Date.now()}${parsed.ext}`);
+        }
+        await fs.promises.rename(source, target);
+        console.log(`[Cancel] PDF archiviert: ${name}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Cancel] PDF-Archivierung fehlgeschlagen (${invoiceNumber}):`, err.message);
+  }
+};
+
 let defaultLogoBase64 = "";
 try {
   defaultLogoBase64 = fs.readFileSync(defaultLogoPath, "base64");
@@ -702,12 +725,22 @@ export const getAllInvoices = async (req, res) => {
       };
     }
 
-    // Status-Filter
-    if (status) {
-      const statuses = String(status)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+    // Status-Filter (Standard: stornierte ausblenden)
+    const statusesRaw = status
+      ? String(status)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+    const hasAll = statusesRaw.includes("all");
+    const hasCanceled = statusesRaw.includes("canceled");
+    const hasActive = statusesRaw.includes("active");
+    const statuses = statusesRaw.filter((s) =>
+      ["paid", "sent", "open", "canceled"].includes(s)
+    );
+
+    if (statuses.length && !hasAll && !hasActive) {
       const or = [];
       if (statuses.includes("paid")) {
         or.push({ status_paid_at: { not: null } });
@@ -718,10 +751,17 @@ export const getAllInvoices = async (req, res) => {
       if (statuses.includes("open")) {
         or.push({ status_sent: { not: true }, status_paid_at: null });
       }
+      if (statuses.includes("canceled")) {
+        or.push({ canceled_at: { not: null } });
+      }
       if (or.length) {
         where.AND = where.AND || [];
         where.AND.push({ OR: or });
       }
+    }
+
+    if (!hasAll && !hasCanceled) {
+      where.canceled_at = null;
     }
 
     const take = limit ? Number(limit) : undefined;
@@ -799,6 +839,8 @@ export const getInvoiceById = async (req, res) => {
       vat_7: invoiceRow.vat_7,
       gross_7: invoiceRow.gross_7,
       gross_total: invoiceRow.gross_total,
+      canceled_at: invoiceRow.canceled_at,
+      cancel_reason: invoiceRow.cancel_reason,
       recipient: {
         id: invoiceRow.recipient_id,
         name: invoiceRow.recipients?.name || null,
@@ -2140,6 +2182,60 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/invoices/bulk-cancel
+ * Mehrere Rechnungen stornieren (ohne Löschung)
+ */
+export const bulkCancelInvoices = async (req, res) => {
+  const idsRaw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const reasonRaw = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  const ids = Array.from(
+    new Set(
+      idsRaw
+        .map((v) => Number(v))
+        .filter((n) => Number.isInteger(n) && n > 0)
+    )
+  );
+
+  if (!ids.length) {
+    return res
+      .status(400)
+      .json({ message: "ids muss ein Array mit mindestens einem Element sein." });
+  }
+
+  const cancelReason = reasonRaw ? reasonRaw.slice(0, 500) : null;
+  const now = new Date();
+
+  try {
+    const rows = await prisma.invoices.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, invoice_number: true, canceled_at: true },
+    });
+
+    const toCancel = rows.filter((r) => !r.canceled_at);
+    if (!toCancel.length) {
+      return res.json({ updated: 0 });
+    }
+
+    const updated = await prisma.invoices.updateMany({
+      where: { id: { in: toCancel.map((r) => r.id) }, canceled_at: null },
+      data: {
+        canceled_at: now,
+        cancel_reason: cancelReason,
+      },
+    });
+
+    await Promise.allSettled(
+      toCancel.map((row) => moveInvoicePdfToArchive(row.invoice_number))
+    );
+
+    return res.json({ updated: updated.count || 0 });
+  } catch (err) {
+    console.error("Fehler beim Stornieren mehrerer Rechnungen:", err);
+    return res.status(500).json({ message: "Rechnungen konnten nicht storniert werden." });
+  }
+};
+
 // ...
 /**
  * DELETE /api/invoices/:id
@@ -2200,6 +2296,7 @@ export const getRecentInvoices = async (req, res) => {
   const limit = Math.min(Math.max(limitRaw, 1), 50);
   try {
     const rows = await prisma.invoices.findMany({
+      where: { canceled_at: null },
       orderBy: [
         { date: "desc" },
         { invoice_number: "desc" },
