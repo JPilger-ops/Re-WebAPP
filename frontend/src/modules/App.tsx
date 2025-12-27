@@ -35,6 +35,7 @@ import {
   getHkformsSettings,
   updateHkformsSettings,
   testHkforms,
+  changePassword,
   getInvoiceStats,
   regenerateInvoicePdf,
   listApiKeys,
@@ -3061,14 +3062,93 @@ function NetworkSettingsForm() {
 }
 
 function SecuritySettingsInfo() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+
+  const onChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus(null);
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setStatus({ type: "error", message: "Bitte alle Felder ausfüllen." });
+      return;
+    }
+    if (newPassword.length < 8) {
+      setStatus({ type: "error", message: "Neues Passwort muss mindestens 8 Zeichen haben." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setStatus({ type: "error", message: "Neue Passwörter stimmen nicht überein." });
+      return;
+    }
+    setSaving(true);
+    try {
+      await changePassword({ currentPassword, newPassword });
+      setStatus({ type: "success", message: "Passwort aktualisiert." });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Passwort konnte nicht geändert werden." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-semibold">Sicherheit</h2>
-      <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
-        <li>Rate Limits aktivierbar per RATE_LIMIT_ENABLED (Login-Limit strenger).</li>
-        <li>Cookies: HttpOnly, SameSite=Lax, Secure automatisch bei HTTPS (NPM).</li>
-        <li>API Keys (X-API-Key) in eigenem Tab verwalten.</li>
-      </ul>
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Sicherheit</h2>
+        <ul className="text-sm text-slate-700 list-disc pl-4 space-y-1">
+          <li>Rate Limits aktivierbar per RATE_LIMIT_ENABLED (Login-Limit strenger).</li>
+          <li>Cookies: HttpOnly, SameSite=Lax, Secure automatisch bei HTTPS (NPM).</li>
+          <li>API Keys (X-API-Key) in eigenem Tab verwalten.</li>
+        </ul>
+      </div>
+
+      <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+        <div>
+          <h3 className="text-md font-semibold text-slate-800">Passwort ändern</h3>
+          <p className="text-sm text-slate-600">Aktuelles Passwort bestätigen und ein neues festlegen.</p>
+        </div>
+        {status && <Alert type={status.type === "error" ? "error" : "success"}>{status.message}</Alert>}
+        <form className="grid gap-3 md:grid-cols-2" onSubmit={onChangePassword}>
+          <Field label="Aktuelles Passwort" className="md:col-span-2">
+            <Input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Neues Passwort">
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={8}
+              required
+            />
+          </Field>
+          <Field label="Neues Passwort bestätigen">
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={8}
+              required
+            />
+          </Field>
+          <div className="md:col-span-2 flex items-center gap-2">
+            <Button type="submit" disabled={saving} variant="primary">
+              {saving ? "Speichern ..." : "Passwort aktualisieren"}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

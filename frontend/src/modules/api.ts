@@ -60,6 +60,16 @@ export async function me() {
   return apiFetch<AuthUser>("/auth/me");
 }
 
+export async function changePassword(payload: { currentPassword: string; newPassword: string }) {
+  return apiFetch<{ message: string }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({
+      oldPassword: payload.currentPassword,
+      newPassword: payload.newPassword,
+    }),
+  });
+}
+
 // Settings APIs
 export interface SmtpSettings {
   host: string | null;

@@ -320,10 +320,15 @@ export const verifyCreatePin = (req, res) => {
 export const changePassword = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { oldPassword, newPassword } = req.body;
+    const { oldPassword, newPassword, currentPassword } = req.body;
+    const oldPw = oldPassword || currentPassword;
 
-    if (!oldPassword || !newPassword) {
+    if (!oldPw || !newPassword) {
       return res.status(400).json({ message: "Altes und neues Passwort erforderlich." });
+    }
+
+    if (typeof newPassword !== "string" || newPassword.length < 8) {
+      return res.status(400).json({ message: "Neues Passwort muss mindestens 8 Zeichen lang sein." });
     }
 
     // User laden
@@ -337,7 +342,7 @@ export const changePassword = async (req, res) => {
     }
 
     // Prüfen ob altes Passwort korrekt ist
-    const ok = await bcrypt.compare(oldPassword, userRecord.password_hash);
+    const ok = await bcrypt.compare(oldPw, userRecord.password_hash);
     if (!ok) {
       return res.status(401).json({ message: "Altes Passwort ist falsch." });
     }
