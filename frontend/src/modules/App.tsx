@@ -2848,8 +2848,10 @@ function AdminSettings() {
       {versionInfo && (
         <div className="text-xs text-slate-600">
           Version {versionInfo.version}
-          {versionInfo.build?.sha ? ` (sha ${versionInfo.build.sha})` : ""}{" "}
-          {versionInfo.build?.time ? `– ${versionInfo.build.time}` : ""}
+          {versionInfo.build?.number ? ` (build ${versionInfo.build.number}` : ""}
+          {versionInfo.build?.sha ? `${versionInfo.build?.number ? ", " : " ("}sha ${versionInfo.build.sha}` : ""}
+          {versionInfo.build?.time ? `${versionInfo.build?.number || versionInfo.build?.sha ? ", " : " ("}${versionInfo.build.time}` : ""}
+          {versionInfo.build?.number || versionInfo.build?.sha || versionInfo.build?.time ? ")" : ""}
         </div>
       )}
     </div>
