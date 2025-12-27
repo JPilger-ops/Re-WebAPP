@@ -988,14 +988,17 @@ function Categories() {
 
 function Invoices() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "sent" | "paid">("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
-  const [customerFilter, setCustomerFilter] = useState<string>("");
+  const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "sent" | "paid">(
+    (searchParams.get("status") as any) || "all"
+  );
+  const [categoryFilter, setCategoryFilter] = useState<string>(searchParams.get("category") || "all");
+  const [fromDate, setFromDate] = useState<string>(searchParams.get("from") || "");
+  const [toDate, setToDate] = useState<string>(searchParams.get("to") || "");
+  const [customerFilter, setCustomerFilter] = useState<string>(searchParams.get("customer") || "");
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1063,11 +1066,40 @@ function Invoices() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter]);
 
   useEffect(() => {
     setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter));
   }, [invoices, search, statusFilter, categoryFilter]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (categoryFilter !== "all") params.set("category", categoryFilter);
+    if (fromDate) params.set("from", fromDate);
+    if (toDate) params.set("to", toDate);
+    if (customerFilter.trim()) params.set("customer", customerFilter.trim());
+    setSearchParams(params, { replace: true });
+  }, [search, statusFilter, categoryFilter, fromDate, toDate, customerFilter, setSearchParams]);
+
+  const resetFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setFromDate("");
+    setToDate("");
+    setCustomerFilter("");
+  };
+
+  const activeFilters = [
+    search ? "Suche" : null,
+    statusFilter !== "all" ? `Status: ${statusFilter}` : null,
+    categoryFilter !== "all" ? `Kategorie: ${categoryFilter}` : null,
+    fromDate ? `Von ${fromDate}` : null,
+    toDate ? `Bis ${toDate}` : null,
+    customerFilter ? `Kunde: ${customerFilter}` : null,
+  ].filter(Boolean);
 
   const loadPreview = async (id: number) => {
     setPreview({ loading: true, data: null, error: null });
@@ -1240,7 +1272,7 @@ function Invoices() {
 
         <div className="flex flex-wrap gap-3 items-center">
           <Input
-            placeholder="Suche nach Nummer oder Kunde"
+            placeholder="Suche nach Nummer oder Empfänger"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-64"
@@ -1259,12 +1291,12 @@ function Invoices() {
             className="w-44"
             placeholder="Bis"
           />
-        <Input
-          placeholder="Kunde (Filter)"
-          value={customerFilter}
-          onChange={(e) => setCustomerFilter(e.target.value)}
-          className="w-48"
-        />
+          <Input
+            placeholder="Empfänger/Kunde"
+            value={customerFilter}
+            onChange={(e) => setCustomerFilter(e.target.value)}
+            className="w-56"
+          />
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -1275,19 +1307,32 @@ function Invoices() {
             <option value="sent">Gesendet</option>
             <option value="paid">Bezahlt</option>
           </Select>
-        <Select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="w-48"
-        >
-          <option value="all">Alle Kategorien</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.label}>
-              {c.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+          <Select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="w-48"
+          >
+            <option value="all">Alle Kategorien</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.label}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+          <Button variant="ghost" onClick={resetFilters} disabled={loading}>
+            Filter zurücksetzen
+          </Button>
+        </div>
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="font-medium text-slate-700">Aktive Filter:</span>
+            {activeFilters.map((f, idx) => (
+              <span key={idx} className="px-2 py-1 rounded-full bg-slate-100 border border-slate-200">
+                {f}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 space-y-3">
