@@ -221,11 +221,16 @@ async function seedFaviconSettings() {
 async function seedNetworkSettings() {
   await prisma.network_settings.upsert({
     where: { id: 1 },
-    update: {},
+    update: {
+      auth_cookie_samesite: "lax",
+      auth_token_ttl_minutes: 720,
+    },
     create: {
       id: 1,
       cors_origins: "https://rechnung.intern,http://rechnung.intern",
       trust_proxy: 1,
+      auth_cookie_samesite: "lax",
+      auth_token_ttl_minutes: 720,
     },
   });
 }

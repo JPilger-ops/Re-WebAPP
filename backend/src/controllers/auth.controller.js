@@ -1,10 +1,9 @@
 import { prisma } from "../utils/prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { getAuthCookieSameSite, getAuthTokenTtlMinutes } from "../utils/networkSettings.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
-const JWT_TTL_HOURS = Number(process.env.AUTH_TOKEN_TTL_HOURS || 12);
-const JWT_EXPIRES = `${JWT_TTL_HOURS}h`;
 const isSecureRequest = (req) =>
   req?.secure || req?.get("x-forwarded-proto") === "https";
 
@@ -40,22 +39,17 @@ function clearFailures(username) {
   failedLogins.delete(username);
 }
 
-const sameSiteFromEnv = () => {
-  const value = (process.env.AUTH_COOKIE_SAMESITE || "lax").toLowerCase();
-  if (["lax", "strict", "none"].includes(value)) return value;
-  return "lax";
-};
-
 const buildCookieOptions = (req) => {
   const secureCookie = isSecureRequest(req);
-  const sameSite = sameSiteFromEnv();
+  const sameSite = getAuthCookieSameSite() || "lax";
+  const ttlMinutes = getAuthTokenTtlMinutes();
 
   return {
     httpOnly: true,
     sameSite,
     secure: secureCookie,
     path: "/",
-    maxAge: JWT_TTL_HOURS * 60 * 60 * 1000,
+    maxAge: ttlMinutes * 60 * 1000,
     domain: process.env.COOKIE_DOMAIN || undefined,
   };
 };
@@ -70,6 +64,7 @@ const buildCookieOptions = (req) => {
  *  - permissions (Array von Strings)
  */
 function signToken(user) {
+  const ttlMinutes = getAuthTokenTtlMinutes();
   return jwt.sign(
     {
       id: user.id,
@@ -79,7 +74,7 @@ function signToken(user) {
       permissions: user.permissions || [],
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXPIRES }
+    { expiresIn: `${ttlMinutes}m` }
   );
 }
 

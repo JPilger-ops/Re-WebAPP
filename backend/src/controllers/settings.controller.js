@@ -367,6 +367,8 @@ export const getNetworkSettingsData = async (_req, res) => {
     return res.json({
       cors_origins: settings.cors_origins || [],
       trust_proxy: settings.trust_proxy,
+      auth_cookie_samesite: settings.auth_cookie_samesite || "lax",
+      auth_token_ttl_minutes: settings.auth_token_ttl_minutes || null,
       updated_at: settings.updated_at || null,
     });
   } catch (err) {
@@ -379,7 +381,12 @@ export const updateNetworkSettingsData = async (req, res) => {
   try {
     const cors_origins = req.body?.cors_origins || req.body?.origins || [];
     const trust_proxy = req.body?.trust_proxy;
-    const saved = await saveNetworkSettings({ cors_origins, trust_proxy });
+    const saved = await saveNetworkSettings({
+      cors_origins,
+      trust_proxy,
+      auth_cookie_samesite: req.body?.auth_cookie_samesite,
+      auth_token_ttl_minutes: req.body?.auth_token_ttl_minutes,
+    });
     return res.json({
       ...saved,
       message: "Netzwerk-Einstellungen gespeichert.",
