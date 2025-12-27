@@ -1990,8 +1990,14 @@ function InvoiceFormModal({
               </select>
               <div className="flex justify-end">
                 {items.length > 1 && (
-                  <Button variant="ghost" type="button" onClick={() => removeItem(idx)}>
-                    Entfernen
+                  <Button
+                    variant="danger"
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    className="min-w-[120px]"
+                    title="Position entfernen"
+                  >
+                    🗑 Entfernen
                   </Button>
                 )}
               </div>
@@ -2995,6 +3001,10 @@ function NetworkSettingsForm() {
   const [diagResult, setDiagResult] = useState<any>(null);
   const [originsText, setOriginsText] = useState("https://rechnung.intern\nhttp://rechnung.intern");
   const [trustProxy, setTrustProxy] = useState(true);
+  const [bindHost, setBindHost] = useState("0.0.0.0");
+  const [publicPort, setPublicPort] = useState("3031");
+  const [publicUrl, setPublicUrl] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setStatus(null);
@@ -3002,6 +3012,9 @@ function NetworkSettingsForm() {
       .then((data) => {
         setOriginsText((data.cors_origins || []).join("\n"));
         setTrustProxy(Boolean(data.trust_proxy));
+        if ((data as any).bind_host) setBindHost(String((data as any).bind_host));
+        if ((data as any).public_port) setPublicPort(String((data as any).public_port));
+        if ((data as any).public_url) setPublicUrl(String((data as any).public_url));
       })
       .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "Netzwerk-Einstellungen konnten nicht geladen werden." }))
       .finally(() => setLoading(false));
@@ -3016,9 +3029,16 @@ function NetworkSettingsForm() {
         .split(/\n/)
         .map((o) => o.trim())
         .filter(Boolean);
-      const saved = await updateNetworkSettings({ cors_origins: origins, trust_proxy: trustProxy });
+      const payload: any = { cors_origins: origins, trust_proxy: trustProxy };
+      if (bindHost) payload.bind_host = bindHost;
+      if (publicPort) payload.public_port = Number(publicPort);
+      if (publicUrl) payload.public_url = publicUrl;
+      const saved = await updateNetworkSettings(payload);
       setOriginsText((saved.cors_origins || []).join("\n"));
       setTrustProxy(Boolean(saved.trust_proxy));
+      if ((saved as any).bind_host) setBindHost(String((saved as any).bind_host));
+      if ((saved as any).public_port) setPublicPort(String((saved as any).public_port));
+      if ((saved as any).public_url) setPublicUrl(String((saved as any).public_url));
       setStatus({ type: "success", message: saved.message || "Netzwerk-Einstellungen gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -3044,11 +3064,29 @@ function NetworkSettingsForm() {
     }
   };
 
+  const publicPortValue = publicPort.trim() || "3031";
+  const hostValue = bindHost.trim();
+  const publicUrlValue = publicUrl.trim();
+  const hostValid = !hostValue || /^(([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(?!$)|$)){4})$/.test(hostValue);
+  const portValid = /^\d+$/.test(publicPortValue) && Number(publicPortValue) >= 1 && Number(publicPortValue) <= 65535;
+  const publicUrlValid = !publicUrlValue || /^https?:\/\/[^\/]+$/i.test(publicUrlValue);
   const originsValid = originsText
     .split(/\n/)
     .map((o) => o.trim())
     .filter(Boolean)
     .every((o) => /^https?:\/\/[^\/]+$/i.test(o));
+  const formValid = originsValid && hostValid && portValid && publicUrlValid;
+  const reachabilityUrl = publicUrlValue || `http://${hostValue || "127.0.0.1"}:${publicPortValue || "3031"}`;
+
+  const copyReachabilityUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(reachabilityUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.warn("Copy failed", err);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -3059,6 +3097,63 @@ function NetworkSettingsForm() {
         </p>
       </div>
       <form className="space-y-3" onSubmit={onSave}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="text-sm text-slate-700 block">
+            <span className="font-medium flex items-center gap-2">
+              Bind-Adresse (IP oder Host)
+              <span className="text-xs text-slate-500">(z.B. 127.0.0.1 nur lokal, 0.0.0.0 im Netzwerk)</span>
+            </span>
+            <input
+              type="text"
+              className="input mt-1"
+              value={bindHost}
+              placeholder="0.0.0.0"
+              onChange={(e) => setBindHost(e.target.value)}
+              disabled={loading}
+            />
+            {!hostValid && <p className="text-xs text-red-600 mt-1">Bitte eine gültige IP oder einen Hostnamen ohne Protokoll angeben.</p>}
+          </label>
+          <label className="text-sm text-slate-700 block">
+            <span className="font-medium flex items-center gap-2">
+              Öffentlicher Port
+              <span className="text-xs text-slate-500">(1–65535, Standard 3031)</span>
+            </span>
+            <input
+              type="text"
+              className="input mt-1"
+              value={publicPort}
+              onChange={(e) => setPublicPort(e.target.value)}
+              disabled={loading}
+              inputMode="numeric"
+              pattern="[0-9]*"
+            />
+            {!portValid && <p className="text-xs text-red-600 mt-1">Port muss zwischen 1 und 65535 liegen.</p>}
+          </label>
+          <label className="text-sm text-slate-700 block">
+            <span className="font-medium flex items-center gap-2">
+              Öffentliche URL (optional)
+              <span className="text-xs text-slate-500">z.B. https://rechnung.intern</span>
+            </span>
+            <input
+              type="text"
+              className="input mt-1"
+              value={publicUrl}
+              onChange={(e) => setPublicUrl(e.target.value)}
+              disabled={loading}
+              placeholder="https://rechnung.intern"
+            />
+            {!publicUrlValid && <p className="text-xs text-red-600 mt-1">Bitte eine gültige http/https URL ohne Pfad angeben.</p>}
+          </label>
+          <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <div className="font-medium text-slate-800">Erreichbar unter</div>
+              <div className="text-slate-600 text-xs break-all">{reachabilityUrl}</div>
+            </div>
+            <button type="button" className="btn-secondary text-xs" onClick={copyReachabilityUrl}>
+              {copied ? "Kopiert" : "Kopieren"}
+            </button>
+          </div>
+        </div>
         <label className="text-sm text-slate-700 block">
           <span className="font-medium">CORS Origins (eine pro Zeile)</span>
           <textarea
@@ -3080,7 +3175,7 @@ function NetworkSettingsForm() {
           Trust Proxy aktivieren (empfohlen hinter NPM)
         </label>
         <div className="flex flex-wrap gap-2">
-          <button className="btn-primary" type="submit" disabled={saving || loading || !originsValid}>
+          <button className="btn-primary" type="submit" disabled={saving || loading || !formValid}>
             {saving ? "Speichere ..." : "Speichern"}
           </button>
           <button className="btn-secondary" type="button" onClick={runDiagnostics} disabled={diagnosing || loading}>
