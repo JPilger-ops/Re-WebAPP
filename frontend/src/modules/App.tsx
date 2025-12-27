@@ -1025,17 +1025,19 @@ function Invoices() {
     return { text: "—" };
   };
 
-  const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter, categoryKey: string) => {
+  const applyFilter = (list: InvoiceListItem[], term: string, status: typeof statusFilter, categoryKey: string, customerTerm: string) => {
     const t = term.toLowerCase();
+    const ct = customerTerm.toLowerCase();
     return list.filter((inv) => {
       const matchesTerm =
         !t ||
         inv.invoice_number.toLowerCase().includes(t) ||
         (inv.recipient_name || "").toLowerCase().includes(t);
+      const matchesCustomer = !ct || (inv.recipient_name || "").toLowerCase().includes(ct);
       const st = computeStatus(inv);
       const matchesStatus = status === "all" || st === status;
       const matchesCategory = categoryKey === "all" || inv.category_label === categoryKey;
-      return matchesTerm && matchesStatus && matchesCategory;
+      return matchesTerm && matchesCustomer && matchesStatus && matchesCategory;
     });
   };
 
@@ -1055,7 +1057,7 @@ function Invoices() {
       ]);
       setInvoices(res);
       setCategories(cats);
-      setFiltered(applyFilter(res, search, statusFilter, categoryFilter));
+      setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter));
     } catch (err: any) {
       const apiErr = err as ApiError;
       setError(apiErr.message || "Rechnungen konnten nicht geladen werden.");
@@ -1069,8 +1071,8 @@ function Invoices() {
   }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter]);
 
   useEffect(() => {
-    setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter));
-  }, [invoices, search, statusFilter, categoryFilter]);
+    setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter, customerFilter));
+  }, [invoices, search, statusFilter, categoryFilter, customerFilter]);
 
   useEffect(() => {
     const params = new URLSearchParams();
