@@ -1857,13 +1857,13 @@ function InvoiceFormModal({
           </Select>
         </label>
             <label className="text-sm text-slate-700">
-              <span className="font-medium">HK-Forms-ID (optional)</span>
+              <span className="font-medium">Forms-ID (optional)</span>
               <Input
                 value={form.reservation_request_id}
                 onChange={(e) => setForm((f) => ({ ...f, reservation_request_id: e.target.value }))}
                 placeholder="Reservation Request ID"
               />
-              <span className="text-xs text-slate-500">Für HKForms Sync / Reservation Request.</span>
+              <span className="text-xs text-slate-500">Für Forms-Sync / Reservation Request.</span>
             </label>
             <label className="text-sm text-slate-700">
               <span className="font-medium">Datum</span>
@@ -2210,7 +2210,7 @@ function InvoiceDetailPage() {
               <span>Kategorie: {inv.category || "–"}</span>
               <span>•</span>
               <span>
-                HK-Forms-ID: {inv.reservation_request_id ? <code className="text-[11px]">{inv.reservation_request_id}</code> : "–"}
+                Forms-ID: {inv.reservation_request_id ? <code className="text-[11px]">{inv.reservation_request_id}</code> : "–"}
               </span>
             </div>
             <div className="text-3xl font-semibold">
@@ -2651,7 +2651,7 @@ function AdminSettings() {
     { key: "header", label: "Rechnungskopf" },
     { key: "bank", label: "Bank / Steuer" },
     { key: "datev", label: "DATEV" },
-    { key: "hkforms", label: "HKForms" },
+    { key: "hkforms", label: "Forms-Sync" },
     { key: "network", label: "Netzwerk" },
     { key: "security", label: "Sicherheit" },
   ];
@@ -4636,7 +4636,7 @@ function HkformsSettingsForm() {
           api_key: "",
         })
       )
-      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "HKForms konnte nicht geladen werden." }))
+      .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "Forms-Sync konnte nicht geladen werden." }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -4659,10 +4659,10 @@ function HkformsSettingsForm() {
         has_api_key: Boolean(saved.has_api_key),
         api_key: "",
       }));
-      setStatus({ type: "success", message: "HKForms-Einstellungen gespeichert." });
+      setStatus({ type: "success", message: "Forms-Sync-Einstellungen gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setStatus({ type: "error", message: apiErr.message || "HKForms-Einstellungen konnten nicht gespeichert werden." });
+      setStatus({ type: "error", message: apiErr.message || "Forms-Sync-Einstellungen konnten nicht gespeichert werden." });
     } finally {
       setSaving(false);
     }
@@ -4692,7 +4692,7 @@ function HkformsSettingsForm() {
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">HKForms</h2>
+        <h2 className="text-xl font-semibold">Forms-Sync</h2>
         {loading && <span className="text-sm text-slate-500">Lade ...</span>}
       </div>
       <p className="text-sm text-slate-600">
