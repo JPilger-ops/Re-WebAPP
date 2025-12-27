@@ -1708,20 +1708,16 @@ function InvoiceFormModal({
     }
   };
 
-  const selectRecipient = (idStr: string) => {
-    setForm((f) => ({ ...f, recipient_id: idStr }));
-    const idNum = Number(idStr);
-    const found = customers.find((c) => c.id === idNum);
-    if (found) {
-      setForm((f) => ({
-        ...f,
-        name: found.name || "",
-        street: found.street || "",
-        zip: found.zip || "",
-        city: found.city || "",
-        email: found.email || "",
-      }));
-    }
+  const applyCustomer = (customer: Customer) => {
+    setForm((f) => ({
+      ...f,
+      recipient_id: customer.id ? String(customer.id) : "",
+      name: customer.name || "",
+      street: customer.street || "",
+      zip: customer.zip || "",
+      city: customer.city || "",
+      email: customer.email || "",
+    }));
   };
 
   const updateItem = (idx: number, field: keyof InvoiceItem, value: any) => {
@@ -1823,41 +1819,56 @@ function InvoiceFormModal({
   ) : (
     <>
       <div className="grid md:grid-cols-2 gap-3">
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Empfänger auswählen</span>
-          <Select value={form.recipient_id} onChange={(e) => selectRecipient(e.target.value)}>
-            <option value="">— Manuell erfassen —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
+        <label className="text-sm text-slate-700 md:col-span-1">
+          <span className="font-medium">Empfänger / Name</span>
+          <div className="relative">
+            <input
+              className="input w-full"
+              value={form.name}
+              onChange={(e) => {
+                const val = e.target.value;
+                setForm((f) => ({ ...f, name: val, recipient_id: "" }));
+                if (!val) {
+                  setForm((f) => ({ ...f, street: "", zip: "", city: "", email: "" }));
+                }
+              }}
+              list="recipient-suggestions"
+              placeholder="Empfänger eingeben oder wählen"
+            />
+            <datalist id="recipient-suggestions">
+              {customers.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            Freitext möglich. Wähle einen Vorschlag, um Adressdaten automatisch zu übernehmen.
+          </div>
         </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium flex items-center justify-between gap-2">
-                <span>Rechnungsnummer</span>
-                {mode === "create" && (
-                  <button
-                    type="button"
-                    className="text-xs text-blue-600 hover:underline"
-                    onClick={refreshInvoiceNumber}
-                  >
-                    Neu berechnen
-                  </button>
-                )}
-              </span>
-              <Input
-                value={form.invoice_number}
-                onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Kategorie</span>
-              <Select
-                value={form.category_key}
-                onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
+        <label className="text-sm text-slate-700">
+          <span className="font-medium flex items-center justify-between gap-2">
+            <span>Rechnungsnummer</span>
+            {mode === "create" && (
+              <button
+                type="button"
+                className="text-xs text-blue-600 hover:underline"
+                onClick={refreshInvoiceNumber}
+              >
+                Neu berechnen
+              </button>
+            )}
+          </span>
+          <Input
+            value={form.invoice_number}
+            onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
+            required
+          />
+        </label>
+        <label className="text-sm text-slate-700">
+          <span className="font-medium">Kategorie</span>
+          <Select
+            value={form.category_key}
+            onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
           >
             <option value="">– Keine –</option>
             {categories.map((c) => (
@@ -1905,10 +1916,6 @@ function InvoiceFormModal({
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Name *</span>
-          <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
-        </label>
         <label className="text-sm text-slate-700">
           <span className="font-medium">E-Mail</span>
           <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
