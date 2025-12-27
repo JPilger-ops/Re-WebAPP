@@ -2002,7 +2002,7 @@ function InvoiceFormModal({
         </div>
         <div className="space-y-2">
           {items.map((item, idx) => (
-            <div key={idx} className="grid md:grid-cols-4 gap-2 items-center border border-slate-200 rounded-md p-3">
+            <div key={idx} className="grid md:grid-cols-4 gap-2 items-start border border-slate-200 rounded-md p-3">
               <input
                 className="input md:col-span-2"
                 placeholder="Beschreibung"
@@ -2033,13 +2033,13 @@ function InvoiceFormModal({
                 <option value={1}>19% MwSt</option>
                 <option value={2}>7% MwSt</option>
               </select>
-              <div className="flex justify-end">
+              <div className="flex justify-end md:items-start">
                 {items.length > 1 && (
                   <Button
                     variant="danger"
                     type="button"
                     onClick={() => removeItem(idx)}
-                    className="min-w-[120px]"
+                    className="min-w-[140px] h-10 w-full md:w-auto text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
                     title="Position entfernen"
                   >
                     🗑 Entfernen
