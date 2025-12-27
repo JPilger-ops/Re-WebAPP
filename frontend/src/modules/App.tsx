@@ -5036,6 +5036,7 @@ function StatsPage() {
   const [data, setData] = useState<InvoiceStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
   const initialYear = searchParams.get("year") || "";
   const initialCategory = searchParams.get("category") || "all";
   const [year, setYear] = useState<string>(initialYear);
@@ -5044,18 +5045,41 @@ function StatsPage() {
 
   useEffect(() => {
     if (!canView) return;
-    setLoading(true);
-    setError(null);
-    getInvoiceStats({
-      year: year ? Number(year) : undefined,
-      categories: category !== "all" ? [category] : undefined,
-    })
-      .then((res) => setData(res))
-      .catch((err: ApiError) => {
-        const msg = err.status === 403 ? "Keine Berechtigung für Statistiken." : err.message || "Stats konnten nicht geladen werden.";
+    let isCancelled = false;
+    const fetchStats = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await getInvoiceStats({
+          year: year ? Number(year) : undefined,
+          categories: category !== "all" ? [category] : undefined,
+        });
+        if (isCancelled) return;
+        setData({
+          overall: res.overall || ({} as any),
+          byYear: res.byYear || [],
+          byMonth: res.byMonth || [],
+          categories: res.categories || [],
+          topCustomers: res.topCustomers || [],
+          topCategories: res.topCategories || [],
+        });
+        setLastLoadedAt(new Date());
+      } catch (err: any) {
+        if (isCancelled) return;
+        const apiErr = err as ApiError;
+        const msg =
+          apiErr.status === 403
+            ? "Keine Berechtigung für Statistiken."
+            : apiErr.message || "Stats konnten nicht geladen werden.";
         setError(msg);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+    fetchStats();
+    return () => {
+      isCancelled = true;
+    };
   }, [canView, year, category, refreshFlag]);
 
   useEffect(() => {
@@ -5123,6 +5147,10 @@ function StatsPage() {
             Erneut versuchen
           </Button>
         </Alert>
+      )}
+
+      {!loading && lastLoadedAt && (
+        <div className="text-xs text-slate-500">Zuletzt aktualisiert: {lastLoadedAt.toLocaleString()}</div>
       )}
 
       {!loading && data && (
