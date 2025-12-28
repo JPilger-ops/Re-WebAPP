@@ -9,6 +9,18 @@ prompt() {
   read -r -p "${message} [${default}]: " var
   echo "${var:-$default}"
 }
+prompt_required() {
+  local message="$1" default="$2" value
+  while true; do
+    read -r -p "${message}${default:+ [${default}]}: " value
+    value="${value:-$default}"
+    if [ -n "${value}" ]; then
+      echo "${value}"
+      return
+    fi
+    warn "Wert darf nicht leer sein."
+  done
+}
 set_env_value() {
   local file="$1" key="$2" value="$3"
   if grep -q "^${key}=" "$file" 2>/dev/null; then
@@ -68,7 +80,7 @@ info "Führe Basis-Setup aus (env-Dateien)"
 SETUP_QUIET=1 ./scripts/setup.sh
 
 ENV_FILE="${RELEASE_DIR}/.env"
-info "Frage zentrale .env Werte ab (leer lassen = aktuelle Werte bleiben)"
+info "Frage zentrale .env Werte ab (Pflichtfelder ohne Default)"
 DB_HOST_VAL="$(current_env_value "${ENV_FILE}" "DB_HOST")"
 DB_PORT_VAL="$(current_env_value "${ENV_FILE}" "DB_PORT")"
 DB_NAME_VAL="$(current_env_value "${ENV_FILE}" "DB_NAME")"
@@ -76,20 +88,27 @@ DB_USER_VAL="$(current_env_value "${ENV_FILE}" "DB_USER")"
 DB_PASS_VAL="$(current_env_value "${ENV_FILE}" "DB_PASS")"
 APP_BIND_IP_VAL="$(current_env_value "${ENV_FILE}" "APP_BIND_IP")"
 APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
+APP_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PORT")"
 PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
 PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
 PDF_TRASH_VAL="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
 
-set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
-set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt "DB_PORT" "${DB_PORT_VAL:-5432}")"
-set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt "DB_NAME" "${DB_NAME_VAL:-rechnung_prod}")"
-set_env_value "${ENV_FILE}" "DB_USER" "$(prompt "DB_USER" "${DB_USER_VAL:-rechnung_app}")"
-set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt "DB_PASS" "${DB_PASS_VAL:-change_me}")"
-set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL:-0.0.0.0}")"
-set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
-set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "$(prompt "PDF_STORAGE_PATH (Speicher)" "${PDF_STORAGE_VAL:-/app/pdfs}")"
-set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "$(prompt "PDF_ARCHIVE_PATH (optional Archiv)" "${PDF_ARCHIVE_VAL}")"
-set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "$(prompt "PDF_TRASH_PATH (optional Trash)" "${PDF_TRASH_VAL}")"
+set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt_required "DB_HOST" "${DB_HOST_VAL}")"
+set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt_required "DB_PORT" "${DB_PORT_VAL}")"
+set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt_required "DB_NAME" "${DB_NAME_VAL}")"
+set_env_value "${ENV_FILE}" "DB_USER" "$(prompt_required "DB_USER" "${DB_USER_VAL}")"
+set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt_required "DB_PASS" "${DB_PASS_VAL}")"
+set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt_required "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL}")"
+set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt_required "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL}")"
+set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt_required "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
+set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "$(prompt_required "PDF_STORAGE_PATH (Speicher)" "${PDF_STORAGE_VAL}")"
+set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "$(prompt "PDF_ARCHIVE_PATH (optional Archiv, leer lassen wenn nicht genutzt)" "${PDF_ARCHIVE_VAL}")"
+set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "$(prompt "PDF_TRASH_PATH (optional Trash, leer lassen wenn nicht genutzt)" "${PDF_TRASH_VAL}")"
+
+BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
+JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
+info "Backend-Env (Pflicht: JWT_SECRET, Rest optional und später in UI änderbar)"
+set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL}")"
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env

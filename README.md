@@ -25,7 +25,8 @@ Empfohlen für Server-Rollout mit Versionen und geteilten Daten/PDFs.
 
 1. Stelle sicher, dass das Repo sauber ist (`git status`) und der gewünschte Commit ausgecheckt ist.
 2. Starte den Wizard: `./scripts/deploy-wizard.sh`
-   - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update), Compose-Projektname und zentrale `.env`-Werte (DB_*, APP_BIND_IP/APP_PUBLIC_PORT, PDF_*).
+   - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update), Compose-Projektname.
+   - Fragt zwingend alle zentralen `.env`-Werte ab (DB_*, APP_BIND_IP/APP_PUBLIC_PORT/APP_PORT, PDF_STORAGE_PATH, optional PDF_ARCHIVE/TRASH) sowie `JWT_SECRET` in backend/.env. Keine automatischen Defaults – Eingabe oder vorhandener Wert wird bestätigt.
    - Exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, legt `shared/data` und `shared/pdfs` an und verlinkt sie in das Release (Einstellungen/Kategorien bleiben erhalten).
    - Schreibt Build-Metadaten (SHA/Number/Time) in `.env`, setzt optional `COMPOSE_PROJECT_NAME`.
    - Führt `docker compose build`, `prisma migrate deploy`, optional `prisma db seed` (legt admin/admin an, falls fehlend) und `docker compose up -d` aus.
