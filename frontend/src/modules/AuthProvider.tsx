@@ -11,21 +11,24 @@ type AuthState = {
   setError: (msg: string | null) => void;
   idleWarning: boolean;
   resetIdleTimer: () => void;
+  idleMsRemaining: number;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 Minuten
-const WARNING_MS = 2 * 60 * 1000; // 2 Minuten vor Logout warnen
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 Minuten
+const WARNING_MS = 60 * 1000; // 1 Minute vor Logout warnen
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-   const [idleWarning, setIdleWarning] = useState(false);
+  const [idleWarning, setIdleWarning] = useState(false);
+  const [idleMsRemaining, setIdleMsRemaining] = useState(IDLE_TIMEOUT_MS);
   const lastActiveRef = useRef<number>(Date.now());
   const warnTimerRef = useRef<number | null>(null);
   const logoutTimerRef = useRef<number | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     me()
@@ -68,8 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearIdleTimers = () => {
     if (warnTimerRef.current) window.clearTimeout(warnTimerRef.current);
     if (logoutTimerRef.current) window.clearTimeout(logoutTimerRef.current);
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
     warnTimerRef.current = null;
     logoutTimerRef.current = null;
+    intervalRef.current = null;
   };
 
   const scheduleIdleTimers = () => {
@@ -77,6 +82,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const now = Date.now();
     lastActiveRef.current = now;
     setIdleWarning(false);
+    setIdleMsRemaining(IDLE_TIMEOUT_MS);
+    intervalRef.current = window.setInterval(() => {
+      const remaining = Math.max(0, IDLE_TIMEOUT_MS - (Date.now() - lastActiveRef.current));
+      setIdleMsRemaining(remaining);
+      if (remaining <= 0) {
+        autoLogout();
+      } else if (remaining <= WARNING_MS) {
+        setIdleWarning(true);
+      }
+    }, 1000);
     warnTimerRef.current = window.setTimeout(() => {
       setIdleWarning(true);
     }, Math.max(0, IDLE_TIMEOUT_MS - WARNING_MS));
@@ -137,8 +152,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh, error, setError, idleWarning, resetIdleTimer: scheduleIdleTimers }),
-    [user, loading, error, idleWarning]
+    () => ({
+      user,
+      loading,
+      login,
+      logout,
+      refresh,
+      error,
+      setError,
+      idleWarning,
+      resetIdleTimer: scheduleIdleTimers,
+      idleMsRemaining,
+    }),
+    [user, loading, error, idleWarning, idleMsRemaining]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

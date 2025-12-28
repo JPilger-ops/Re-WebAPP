@@ -213,6 +213,8 @@ model api_keys {
 model pdf_settings {
   id            Int     @id @default(1)
   storage_path  String  @db.Text
+  archive_path  String? @db.Text
+  trash_path    String? @db.Text
 }
 
 model email_templates {

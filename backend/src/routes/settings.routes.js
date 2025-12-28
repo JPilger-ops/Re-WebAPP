@@ -6,6 +6,7 @@ import {
   getDatevData,
   updateDatevData,
   downloadCaCertificate,
+  uploadCaCertificate,
   getHkformsData,
   updateHkformsData,
   testHkformsConnection,
@@ -96,6 +97,11 @@ router.get(
   "/ca-cert",
   requireRole("admin"),
   downloadCaCertificate
+);
+router.post(
+  "/ca-cert",
+  requireRole("admin"),
+  uploadCaCertificate
 );
 
 router.get(

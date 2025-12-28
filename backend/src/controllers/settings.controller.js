@@ -22,6 +22,9 @@ import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { prisma } from "../utils/prisma.js";
 
+const CERT_DIR = path.resolve("certificates/ca");
+const CERT_FILE = path.join(CERT_DIR, "ca.crt");
+
 const isValidBic = (bic) => /^[A-Z0-9]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test((bic || "").toUpperCase());
 
 const isValidIban = (ibanRaw) => {
@@ -121,15 +124,29 @@ export const updateDatevData = async (req, res) => {
 
 export const downloadCaCertificate = async (_req, res) => {
   try {
-    const certPath = path.resolve("certificates/ca/ca.crt");
-    await fs.promises.access(certPath, fs.constants.R_OK);
-    return res.download(certPath, "ca.crt");
+    await fs.promises.access(CERT_FILE, fs.constants.R_OK);
+    return res.download(CERT_FILE, "ca.crt");
   } catch (err) {
     if (err.code === "ENOENT") {
       return res.status(404).json({ message: "CA-Zertifikat nicht gefunden. Bitte certificates/ca/ca.crt hinterlegen." });
     }
     console.error("CA-Zertifikat kann nicht ausgeliefert werden:", err);
     return res.status(500).json({ message: "CA-Zertifikat nicht verfügbar." });
+  }
+};
+
+export const uploadCaCertificate = async (req, res) => {
+  try {
+    const pem = (req.body?.pem || "").trim();
+    if (!pem) {
+      return res.status(400).json({ message: "PEM-Inhalt fehlt." });
+    }
+    await fs.promises.mkdir(CERT_DIR, { recursive: true });
+    await fs.promises.writeFile(CERT_FILE, pem, { encoding: "utf-8" });
+    return res.json({ message: "Zertifikat gespeichert.", filename: "ca.crt" });
+  } catch (err) {
+    console.error("CA-Zertifikat Upload fehlgeschlagen:", err);
+    return res.status(500).json({ message: "Zertifikat konnte nicht gespeichert werden." });
   }
 };
 
@@ -178,7 +195,9 @@ export const getPdfSettingsData = async (_req, res) => {
 export const updatePdfSettingsData = async (req, res) => {
   try {
     const path = (req.body?.storage_path || "").trim();
-    const saved = await savePdfSettings({ storage_path: path });
+    const archive = (req.body?.archive_path || "").trim();
+    const trash = (req.body?.trash_path || "").trim();
+    const saved = await savePdfSettings({ storage_path: path, archive_path: archive, trash_path: trash });
     return res.json({ ...saved, message: "PDF-Einstellungen gespeichert." });
   } catch (err) {
     console.error("PDF-Einstellungen speichern fehlgeschlagen:", err);

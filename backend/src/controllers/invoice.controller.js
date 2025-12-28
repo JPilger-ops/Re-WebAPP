@@ -1,5 +1,5 @@
 import { prisma } from "../utils/prisma.js";
-import { getResolvedPdfPath } from "../utils/pdfSettings.js";
+import { getResolvedPdfPath, getPdfSettings } from "../utils/pdfSettings.js";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import fs from "fs";
@@ -59,17 +59,20 @@ const __dirname = path.dirname(__filename);
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
 const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
 
-const getPdfDir = async () => {
-  const dir = await getResolvedPdfPath();
-  await fs.promises.mkdir(dir, { recursive: true }).catch(() => {});
-  return dir;
+const getPdfPaths = async () => {
+  const base = await getPdfSettings();
+  const storage = base.storage_path || await getResolvedPdfPath();
+  const archive = base.archive_path || storage;
+  const trash = base.trash_path || path.join(storage, "trash");
+  await fs.promises.mkdir(storage, { recursive: true }).catch(() => {});
+  await fs.promises.mkdir(archive, { recursive: true }).catch(() => {});
+  await fs.promises.mkdir(trash, { recursive: true }).catch(() => {});
+  return { storage, archive, trash };
 };
 
 const moveInvoicePdfToArchive = async (invoiceNumber) => {
   try {
-    const pdfDir = await getPdfDir();
-    const archiveDir = path.join(pdfDir, "archive");
-    await fs.promises.mkdir(archiveDir, { recursive: true });
+    const { archive: archiveDir, storage: pdfDir } = await getPdfPaths();
     const candidates = [`RE-${invoiceNumber}.pdf`, `Rechnung-${invoiceNumber}.pdf`];
     for (const name of candidates) {
       const source = path.join(pdfDir, name);
@@ -956,7 +959,7 @@ export const updateInvoice = async (req, res) => {
 
     // PDF nach Bearbeitung direkt neu erstellen (bestehende wird ersetzt)
     try {
-      const pdfDir = await getPdfDir();
+      const { storage: pdfDir } = await getPdfPaths();
       const filename = `RE-${invoiceNumber}.pdf`;
       const filepath = path.join(pdfDir, filename);
       if (fs.existsSync(filepath)) {
@@ -1228,7 +1231,7 @@ export const getInvoicePdf = async (req, res) => {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const pdfDir = await getPdfDir();
+    const { storage: pdfDir, trash: trashDir } = await getPdfPaths();
     const filename = `RE-${invoiceMeta.invoice_number}.pdf`;
     const filepath = path.join(pdfDir, filename);
     const exists = fs.existsSync(filepath);
@@ -1269,8 +1272,6 @@ export const getInvoicePdf = async (req, res) => {
 
     if (exists && force) {
       try {
-        const trashDir = path.join(pdfDir, "trash");
-        if (!fs.existsSync(trashDir)) fs.mkdirSync(trashDir, { recursive: true });
         const trashName = `${path.parse(filename).name}-${Date.now()}.pdf`;
         fs.renameSync(filepath, path.join(trashDir, trashName));
       } catch (err) {
@@ -1309,7 +1310,7 @@ export const regenerateInvoicePdf = async (req, res) => {
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
   try {
-    const pdfDir = await getPdfDir();
+    const { storage: pdfDir } = await getPdfPaths();
     const invoiceRow = await prisma.invoices.findUnique({
       where: { id },
       select: { invoice_number: true },
@@ -1504,7 +1505,7 @@ async function ensureInvoicePdf(id) {
     };
 
     // Dateinamen/Pfade aus Settings ableiten
-    const pdfDir = await getPdfDir();
+    const { storage: pdfDir } = await getPdfPaths();
     const filename = `RE-${invoiceRow.invoice_number}.pdf`;
     const filepath = path.join(pdfDir, filename);
     const filepathInline = path.join(pdfDir, `inline-${filename}`);
@@ -2641,7 +2642,7 @@ export const deleteInvoice = async (req, res) => {
 
     // PDF-Datei (falls vorhanden) löschen
     try {
-      const pdfDir = await getPdfDir();
+      const { storage: pdfDir } = await getPdfPaths();
       const filename = `Rechnung-${invoiceRow.invoice_number}.pdf`;
       const filepath = path.join(pdfDir, filename);
       if (fs.existsSync(filepath)) {

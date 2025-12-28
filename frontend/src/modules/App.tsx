@@ -89,6 +89,7 @@ import {
   getFaviconSettings,
   uploadFavicon,
   resetFavicon,
+  uploadCaCertificate,
 } from "./api";
 import { API_BASE } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
@@ -394,7 +395,7 @@ function ProtectedLayout() {
 }
 
 function Shell() {
-  const { user, logout, idleWarning, resetIdleTimer } = useAuth();
+  const { user, logout, idleWarning, resetIdleTimer, idleMsRemaining } = useAuth();
   const isAdmin = user?.role_name === "admin";
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -532,6 +533,10 @@ function Shell() {
               <span className="text-slate-600 hidden sm:inline">
                 {user?.username} {isAdmin ? "(Admin)" : ""}
               </span>
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                Auto-Logout: {Math.max(0, Math.floor(idleMsRemaining / 1000 / 60)).toString().padStart(1, "0")}:
+                {Math.max(0, Math.floor((idleMsRemaining / 1000) % 60)).toString().padStart(2, "0")}
+              </span>
               <Button variant="secondary" onClick={logout}>
                 Logout
               </Button>
@@ -545,7 +550,10 @@ function Shell() {
               {idleWarning && (
                 <Alert type="info">
                   <div className="flex flex-wrap items-center gap-3">
-                    <span>Du wirst in 2 Minuten automatisch abgemeldet.</span>
+                    <span>
+                      Du wirst in Kürze automatisch abgemeldet. Verbleibend:{" "}
+                      {Math.max(0, Math.floor(idleMsRemaining / 1000))}s
+                    </span>
                     <Button variant="secondary" onClick={resetIdleTimer}>
                       Angemeldet bleiben
                     </Button>
@@ -3726,12 +3734,21 @@ function PdfSettingsInfo() {
   const [testing, setTesting] = useState(false);
   const [status, setStatus] = useState<FormStatus>(null);
   const [testStatus, setTestStatus] = useState<FormStatus>(null);
-  const [form, setForm] = useState<{ storage_path: string; default_path?: string }>({ storage_path: "" });
+  const [form, setForm] = useState<{ storage_path: string; archive_path?: string | null; trash_path?: string | null; default_path?: string; default_archive?: string | null; default_trash?: string | null }>({ storage_path: "" });
 
   useEffect(() => {
     setStatus(null);
     getPdfSettings()
-      .then((data) => setForm({ storage_path: data.storage_path || "", default_path: data.default_path }))
+      .then((data) =>
+        setForm({
+          storage_path: data.storage_path || "",
+          archive_path: data.archive_path || "",
+          trash_path: data.trash_path || "",
+          default_path: data.default_path,
+          default_archive: data.default_archive,
+          default_trash: data.default_trash,
+        })
+      )
       .catch((err: ApiError) => setStatus({ type: "error", message: err.message || "Konnte PDF-Einstellungen nicht laden." }))
       .finally(() => setLoading(false));
   }, []);
@@ -3741,8 +3758,19 @@ function PdfSettingsInfo() {
     setSaving(true);
     setStatus(null);
     try {
-      const saved = await updatePdfSettings({ storage_path: form.storage_path });
-      setForm((f) => ({ ...f, storage_path: saved.storage_path }));
+      const saved = await updatePdfSettings({
+        storage_path: form.storage_path,
+        archive_path: form.archive_path || null,
+        trash_path: form.trash_path || null,
+      });
+      setForm((f) => ({
+        ...f,
+        storage_path: saved.storage_path,
+        archive_path: saved.archive_path || "",
+        trash_path: saved.trash_path || "",
+        default_archive: saved.default_archive,
+        default_trash: saved.default_trash,
+      }));
       setStatus({ type: "success", message: "PDF-Pfad gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -3756,18 +3784,23 @@ function PdfSettingsInfo() {
     setTesting(true);
     setTestStatus(null);
     try {
-      const res = await testPdfPath({ path: form.storage_path });
-      setTestStatus({ type: "success", message: `Pfad ist schreibbar: ${res.path}` });
-    } catch (err: any) {
-      const apiErr = err as ApiError;
-      setTestStatus({ type: "error", message: apiErr.message || "Pfad-Test fehlgeschlagen." });
-    } finally {
-      setTesting(false);
-    }
-  };
+    const res = await testPdfPath({ path: form.storage_path });
+    setTestStatus({ type: "success", message: `Pfad ist schreibbar: ${res.path}` });
+  } catch (err: any) {
+    const apiErr = err as ApiError;
+    setTestStatus({ type: "error", message: apiErr.message || "Pfad-Test fehlgeschlagen." });
+  } finally {
+    setTesting(false);
+  }
+};
 
   const resetDefault = () => {
-    if (form.default_path) setForm((f) => ({ ...f, storage_path: form.default_path || "" }));
+    setForm((f) => ({
+      ...f,
+      storage_path: f.default_path || "",
+      archive_path: f.default_archive || "",
+      trash_path: f.default_trash || "",
+    }));
   };
 
   return (
@@ -3788,6 +3821,28 @@ function PdfSettingsInfo() {
             disabled={loading}
           />
         </label>
+        <div className="grid md:grid-cols-2 gap-3">
+          <label className="text-sm text-slate-700 block">
+            <span className="font-medium">Archiv-Pfad (optional)</span>
+            <input
+              className="input mt-1"
+              value={form.archive_path || ""}
+              onChange={(e) => setForm((f) => ({ ...f, archive_path: e.target.value }))}
+              disabled={loading}
+              placeholder={form.default_archive || "/app/pdfs/archive"}
+            />
+          </label>
+          <label className="text-sm text-slate-700 block">
+            <span className="font-medium">Trash-Pfad (optional)</span>
+            <input
+              className="input mt-1"
+              value={form.trash_path || ""}
+              onChange={(e) => setForm((f) => ({ ...f, trash_path: e.target.value }))}
+              disabled={loading}
+              placeholder={form.default_trash || "/app/pdfs/trash"}
+            />
+          </label>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" type="submit" disabled={saving || loading}>
             {saving ? "Speichere ..." : "Speichern"}
@@ -4014,6 +4069,28 @@ function NetworkSettingsForm() {
           CORS-Origins und Trust-Proxy steuern den Betrieb hinter NPM/Reverse Proxy. Änderungen werden sofort wirksam, Trust Proxy wird live gesetzt.
         </p>
       </div>
+      <div className="flex flex-wrap gap-2 text-sm">
+        <Button variant="secondary" type="button" onClick={runDiagnostics} disabled={diagnosing || loading}>
+          {diagnosing ? "Diagnose..." : "Diagnose starten"}
+        </Button>
+        <Button variant="secondary" type="button" onClick={copyReachabilityUrl} disabled={copied}>
+          {copied ? "Kopiert" : "URL kopieren"}
+        </Button>
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={() => {
+            setOriginsText("");
+            setBindHost("");
+            setPublicPort("3031");
+            setPublicUrl("");
+            setTrustProxy(true);
+            setStatus(null);
+          }}
+        >
+          Auf Standard setzen
+        </Button>
+      </div>
       <form className="space-y-3" onSubmit={onSave}>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="text-sm text-slate-700 block">
@@ -4123,6 +4200,8 @@ function SecuritySettingsInfo() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<FormStatus>(null);
+  const [certPem, setCertPem] = useState("");
+  const [certStatus, setCertStatus] = useState<FormStatus>(null);
 
   const onChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4151,6 +4230,23 @@ function SecuritySettingsInfo() {
       setStatus({ type: "error", message: apiErr.message || "Passwort konnte nicht geändert werden." });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onUploadCert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCertStatus(null);
+    if (!certPem.trim()) {
+      setCertStatus({ type: "error", message: "PEM-Inhalt einfügen." });
+      return;
+    }
+    try {
+      await uploadCaCertificate({ pem: certPem.trim() });
+      setCertStatus({ type: "success", message: "Zertifikat gespeichert." });
+      setCertPem("");
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setCertStatus({ type: "error", message: apiErr.message || "Zertifikat konnte nicht gespeichert werden." });
     }
   };
 
@@ -4201,6 +4297,32 @@ function SecuritySettingsInfo() {
           <div className="md:col-span-2 flex items-center gap-2">
             <Button type="submit" disabled={saving} variant="primary">
               {saving ? "Speichern ..." : "Passwort aktualisieren"}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+        <div>
+          <h3 className="text-md font-semibold text-slate-800">Zertifikate</h3>
+          <p className="text-sm text-slate-600">CA-Zertifikat hinterlegen oder herunterladen.</p>
+        </div>
+        {certStatus && <Alert type={certStatus.type === "error" ? "error" : "success"}>{certStatus.message}</Alert>}
+        <form className="space-y-3" onSubmit={onUploadCert}>
+          <Field label="PEM-Inhalt">
+            <Textarea
+              value={certPem}
+              onChange={(e) => setCertPem(e.target.value)}
+              placeholder="-----BEGIN CERTIFICATE-----"
+              className="min-h-[140px]"
+            />
+          </Field>
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" variant="primary" disabled={!certPem.trim()}>
+              Speichern
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => window.open("/api/settings/ca-cert", "_blank")}>
+              Zertifikat herunterladen
             </Button>
           </div>
         </form>
@@ -5561,8 +5683,7 @@ function RoleModal({
 
 function BankTaxSettingsForm() {
   const [loading, setLoading] = useState(true);
-  const [savingBank, setSavingBank] = useState(false);
-  const [savingTax, setSavingTax] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<FormStatus>(null);
   const [bank, setBank] = useState<BankSettings>({
     account_holder: "",
@@ -5594,9 +5715,9 @@ function BankTaxSettingsForm() {
       .finally(() => setLoading(false));
   }, []);
 
-  const saveBank = async (e: React.FormEvent) => {
+  const saveAll = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavingBank(true);
+    setSaving(true);
     setStatus(null);
     try {
       await updateBankSettings({
@@ -5605,30 +5726,16 @@ function BankTaxSettingsForm() {
         iban: bank.iban,
         bic: bank.bic,
       });
-      setStatus({ type: "success", message: "Bankdaten gespeichert." });
-    } catch (err: any) {
-      const apiErr = err as ApiError;
-      setStatus({ type: "error", message: apiErr.message || "Bankdaten konnten nicht gespeichert werden." });
-    } finally {
-      setSavingBank(false);
-    }
-  };
-
-  const saveTax = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingTax(true);
-    setStatus(null);
-    try {
       await updateTaxSettings({
         tax_number: tax.tax_number || null,
         vat_id: tax.vat_id || null,
       });
-      setStatus({ type: "success", message: "Steuerdaten gespeichert." });
+      setStatus({ type: "success", message: "Bank- und Steuerdaten gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setStatus({ type: "error", message: apiErr.message || "Steuerdaten konnten nicht gespeichert werden." });
+      setStatus({ type: "error", message: apiErr.message || "Daten konnten nicht gespeichert werden." });
     } finally {
-      setSavingTax(false);
+      setSaving(false);
     }
   };
 
@@ -5639,7 +5746,7 @@ function BankTaxSettingsForm() {
         {loading && <span className="text-sm text-slate-500">Lade ...</span>}
       </div>
 
-      <form className="grid gap-3 md:grid-cols-2" onSubmit={saveBank}>
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={saveAll}>
         <Field label="Kontoinhaber">
           <Input
             value={bank.account_holder}
@@ -5668,14 +5775,6 @@ function BankTaxSettingsForm() {
             required
           />
         </Field>
-        <div className="md:col-span-2 flex justify-end">
-          <Button type="submit" disabled={savingBank || loading}>
-            {savingBank ? "Speichert ..." : "Bankdaten speichern"}
-          </Button>
-        </div>
-      </form>
-
-      <form className="grid gap-3 md:grid-cols-2" onSubmit={saveTax}>
         <Field label="Steuernummer">
           <Input value={tax.tax_number || ""} onChange={(e) => setTax((f) => ({ ...f, tax_number: e.target.value }))} />
         </Field>
@@ -5683,8 +5782,8 @@ function BankTaxSettingsForm() {
           <Input value={tax.vat_id || ""} onChange={(e) => setTax((f) => ({ ...f, vat_id: e.target.value }))} />
         </Field>
         <div className="md:col-span-2 flex justify-end">
-          <Button type="submit" disabled={savingTax || loading}>
-            {savingTax ? "Speichert ..." : "Steuerdaten speichern"}
+          <Button type="submit" disabled={saving || loading}>
+            {saving ? "Speichert ..." : "Bank- & Steuerdaten speichern"}
           </Button>
         </div>
       </form>
@@ -5986,8 +6085,8 @@ function StatsPage() {
         <MoreMenu items={[{ label: "Aktualisieren", onClick: () => setRefreshFlag((v) => v + 1) }]} />
       </div>
 
-      <div className="flex flex-wrap gap-3 items-center">
-        <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-40">
+      <div className="grid gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 text-sm">
+        <Select value={year} onChange={(e) => setYear(e.target.value)} className="h-9 text-sm">
           <option value="">Alle Jahre</option>
           {years.map((y) => (
             <option key={y} value={y}>
@@ -5995,7 +6094,7 @@ function StatsPage() {
             </option>
           ))}
         </Select>
-        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="w-48">
+        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="h-9 text-sm col-span-2 sm:col-span-1">
           <option value="all">Alle Kategorien</option>
           {data?.categories?.map((c) => (
             <option key={c.key} value={c.key}>
@@ -6003,7 +6102,9 @@ function StatsPage() {
             </option>
           ))}
         </Select>
-        <Button variant="ghost" onClick={clearFilters}>Filter zurücksetzen</Button>
+        <Button variant="ghost" onClick={clearFilters} className="h-9 text-sm col-span-2 sm:col-span-1">
+          Filter zurücksetzen
+        </Button>
       </div>
 
       {loading && (

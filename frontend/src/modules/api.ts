@@ -153,6 +153,10 @@ export interface HkformsSettings {
 export interface PdfSettings {
   storage_path: string;
   default_path?: string;
+  archive_path?: string | null;
+  trash_path?: string | null;
+  default_archive?: string | null;
+  default_trash?: string | null;
 }
 
 export interface EmailTemplateSettings {
@@ -273,7 +277,7 @@ export async function getPdfSettings() {
   return apiFetch<PdfSettings>("/settings/pdf");
 }
 
-export async function updatePdfSettings(payload: { storage_path: string }) {
+export async function updatePdfSettings(payload: { storage_path: string; archive_path?: string | null; trash_path?: string | null }) {
   return apiFetch<PdfSettings & { message: string }>("/settings/pdf", {
     method: "PUT",
     body: JSON.stringify(payload),
@@ -289,6 +293,13 @@ export async function testPdfPath(payload: { path: string }) {
 
 export async function getEmailTemplates() {
   return apiFetch<EmailTemplateSettings>("/settings/email-templates");
+}
+
+export async function uploadCaCertificate(payload: { pem: string }) {
+  return apiFetch<{ message: string; filename?: string }>("/settings/ca-cert", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function saveEmailTemplates(payload: {
