@@ -1074,10 +1074,6 @@ function Invoices() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [cancelDialog, setCancelDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: "" });
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [pdfConflict, setPdfConflict] = useState<{ open: boolean; invoiceId: number | null; message?: string; filename?: string }>({
-    open: false,
-    invoiceId: null,
-  });
   const [createProgress, setCreateProgress] = useState<{
     open: boolean;
     status: "idle" | "submitting" | "success" | "error";
@@ -1335,16 +1331,6 @@ function Invoices() {
     setPdfBusyId(id);
     try {
       const res = await fetch(url, { credentials: "include" });
-      if (res.status === 409) {
-        const data = await res.json().catch(() => ({}));
-        setPdfConflict({
-          open: true,
-          invoiceId: id,
-          message: data?.message || "PDF existiert bereits. Überschreiben?",
-          filename: data?.filename,
-        });
-        return;
-      }
       if (res.status === 423) {
         const data = await res.json().catch(() => ({}));
         alert(data?.message || "PDF ist gesperrt (DATEV).");
@@ -1359,15 +1345,6 @@ function Invoices() {
       window.open(blobUrl, "_blank", "noopener,noreferrer");
     } finally {
       setPdfBusyId(null);
-    }
-  };
-
-  const confirmPdfConflict = async (overwrite: boolean) => {
-    if (!pdfConflict.invoiceId) return setPdfConflict({ open: false, invoiceId: null });
-    const targetId = pdfConflict.invoiceId;
-    setPdfConflict({ open: false, invoiceId: null });
-    if (overwrite) {
-      await handlePdfOpen(targetId, true);
     }
   };
 
@@ -1773,22 +1750,6 @@ function Invoices() {
           </div>
         </Modal>
       )}
-
-      {pdfConflict.open && (
-        <Modal title="PDF bereits vorhanden" onClose={() => confirmPdfConflict(false)}>
-          <div className="space-y-3 text-sm text-slate-700">
-            <p>{pdfConflict.message || "Es existiert bereits ein PDF für diese Rechnung."}</p>
-            {pdfConflict.filename && <p className="text-xs text-slate-500 break-all">Datei: {pdfConflict.filename}</p>}
-            <div className="flex flex-wrap justify-end gap-3 pt-2">
-              <Button variant="secondary" onClick={() => confirmPdfConflict(false)}>
-                Abbrechen
-              </Button>
-              <Button onClick={() => confirmPdfConflict(true)}>Überschreiben</Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
       {createProgress.open && (
         <Modal
           title={
@@ -2249,17 +2210,37 @@ function InvoiceFormModal({
     }
   };
 
-  const applyCustomer = (customer: Customer) => {
-    setForm((f) => ({
-      ...f,
-      recipient_id: customer.id ? String(customer.id) : "",
-      company: customer.company || "",
-      name: customer.name || "",
-      street: customer.street || "",
-      zip: customer.zip || "",
-      city: customer.city || "",
-      email: customer.email || "",
-    }));
+  const findCustomerByName = (value: string) => {
+    const needle = value.trim().toLowerCase();
+    if (!needle) return null;
+    return customers.find((c) => (c.name || "").trim().toLowerCase() === needle) || null;
+  };
+
+  const handleRecipientNameChange = (value: string) => {
+    const match = findCustomerByName(value);
+    const trimmed = value.trim();
+    setForm((f) => {
+      const base = {
+        ...f,
+        name: value,
+        recipient_id: match ? String(match.id) : "",
+      };
+      if (!trimmed) {
+        return { ...base, company: "", street: "", zip: "", city: "", email: "" };
+      }
+      if (match) {
+        return {
+          ...base,
+          company: match.company || "",
+          name: match.name || value,
+          street: match.street || "",
+          zip: match.zip || "",
+          city: match.city || "",
+          email: match.email || "",
+        };
+      }
+      return base;
+    });
   };
 
   const updateItem = (idx: number, field: keyof InvoiceItem, value: any) => {
@@ -2319,6 +2300,7 @@ function InvoiceFormModal({
     try {
       const payload = {
         recipient: {
+          id: form.recipient_id ? Number(form.recipient_id) : undefined,
           company: form.company.trim() || null,
           name: form.name.trim(),
           street: form.street.trim(),
@@ -2350,7 +2332,7 @@ function InvoiceFormModal({
         if (onSubmitSuccess) onSubmitSuccess(createdId, invNumber);
         if (!asPage) {
           // Reset for modal usage
-          setItems([{ description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
+          setItems([{ description: "", quantity: 1, unit_price_gross: 0, unit_price_input: "", vat_key: 1 }]);
         }
       } else if (id) {
         await updateInvoice(id, payload);
@@ -2395,13 +2377,7 @@ function InvoiceFormModal({
                 <input
                   className="input w-full"
                   value={form.name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setForm((f) => ({ ...f, name: val, recipient_id: "" }));
-                    if (!val) {
-                      setForm((f) => ({ ...f, street: "", zip: "", city: "", email: "" }));
-                    }
-                  }}
+                  onChange={(e) => handleRecipientNameChange(e.target.value)}
                   list="recipient-suggestions"
                   placeholder="Empfänger eingeben oder wählen"
                   required
@@ -2574,7 +2550,7 @@ function InvoiceFormModal({
                       className="min-w-[140px] h-10 w-full md:w-auto text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
                       title="Position entfernen"
                     >
-                    Entfernen
+                      Entfernen
                     </Button>
                   )}
                 </div>

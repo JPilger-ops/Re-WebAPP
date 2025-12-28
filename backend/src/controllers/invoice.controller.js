@@ -576,12 +576,23 @@ if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Rechnungsdatum ist erforderlich." });
     }
 
+    const rawRecipientId = recipient.recipient_id ?? recipient.id ?? null;
+    const recipientId =
+      rawRecipientId === null || rawRecipientId === undefined || rawRecipientId === ""
+        ? null
+        : Number(rawRecipientId);
+    if (recipientId !== null && !Number.isFinite(recipientId)) {
+      return res.status(400).json({ message: "Ungültige Empfänger-ID." });
+    }
+
     // Whitespace etwas bereinigen, um doppelte Treffer zu vermeiden
-    const rName   = (recipient.name   || "").trim();
-    const rStreet = (recipient.street || "").trim();
-    const rZip    = (recipient.zip    || "").trim();
-    const rCity   = (recipient.city   || "").trim();
-    const rCompany = (recipient.company || "").trim();
+    let rName   = (recipient.name   || "").trim();
+    let rStreet = (recipient.street || "").trim();
+    let rZip    = (recipient.zip    || "").trim();
+    let rCity   = (recipient.city   || "").trim();
+    let rCompany = (recipient.company || "").trim();
+    let rEmail   = (recipient.email || "").trim();
+    let rPhone   = (recipient.phone || "").trim();
 
     // Gesamtsummen berechnen
     const totals = calculateTotals(normalizedItems);
@@ -613,36 +624,77 @@ if (!Array.isArray(items) || items.length === 0) {
       }
     }
 
+    let existingRecipient = null;
+    if (recipientId) {
+      existingRecipient = await prisma.recipients.findUnique({
+        where: { id: recipientId },
+        select: { id: true, name: true, company: true, street: true, zip: true, city: true, email: true, phone: true },
+      });
+      if (!existingRecipient) {
+        return res.status(400).json({ message: "Empfänger konnte nicht gefunden werden." });
+      }
+      rName = existingRecipient.name?.trim() || rName;
+      rStreet = existingRecipient.street?.trim() || rStreet;
+      rZip = existingRecipient.zip?.trim() || rZip;
+      rCity = existingRecipient.city?.trim() || rCity;
+      rCompany = existingRecipient.company?.trim() || rCompany;
+      rEmail = existingRecipient.email?.trim() || rEmail;
+      rPhone = existingRecipient.phone?.trim() || rPhone;
+    }
+
     const txResult = await prisma.$transaction(async (tx) => {
       // Empfänger suchen/erstellen
-      let recipientRow = await tx.recipients.findFirst({
-        where: {
-          name: rName,
-          street: rStreet,
-          zip: rZip,
-          city: rCity,
-        },
-        select: { id: true, company: true },
-      });
-
-      if (!recipientRow) {
-        recipientRow = await tx.recipients.create({
-          data: {
+      let recipientRow = null;
+      if (existingRecipient) {
+        recipientRow = { id: existingRecipient.id };
+        if (rCompany && !existingRecipient.company) {
+          await tx.recipients.update({
+            where: { id: existingRecipient.id },
+            data: { company: rCompany },
+          });
+        }
+        if (rEmail && !existingRecipient.email) {
+          await tx.recipients.update({
+            where: { id: existingRecipient.id },
+            data: { email: rEmail },
+          });
+        }
+        if (rPhone && !existingRecipient.phone) {
+          await tx.recipients.update({
+            where: { id: existingRecipient.id },
+            data: { phone: rPhone },
+          });
+        }
+      } else {
+        recipientRow = await tx.recipients.findFirst({
+          where: {
             name: rName,
-            company: rCompany || null,
-            street: rStreet || null,
-            zip: rZip || null,
-            city: rCity || null,
-            email: recipient.email || null,
-            phone: recipient.phone || null,
+            street: rStreet,
+            zip: rZip,
+            city: rCity,
           },
-          select: { id: true },
+          select: { id: true, company: true },
         });
-      } else if (rCompany && !recipientRow.company) {
-        await tx.recipients.update({
-          where: { id: recipientRow.id },
-          data: { company: rCompany },
-        });
+
+        if (!recipientRow) {
+          recipientRow = await tx.recipients.create({
+            data: {
+              name: rName,
+              company: rCompany || null,
+              street: rStreet || null,
+              zip: rZip || null,
+              city: rCity || null,
+              email: rEmail || null,
+              phone: rPhone || null,
+            },
+            select: { id: true },
+          });
+        } else if (rCompany && !recipientRow.company) {
+          await tx.recipients.update({
+            where: { id: recipientRow.id },
+            data: { company: rCompany },
+          });
+        }
       }
 
       const invoiceRow = await tx.invoices.create({
@@ -961,20 +1013,32 @@ export const getInvoicePdf = async (req, res) => {
     const exists = fs.existsSync(filepath);
 
     if (exists && invoiceMeta.datev_export_status === "SUCCESS") {
-      return res.status(423).json({
-        message: "PDF ist durch DATEV-Export gesperrt und kann nicht überschrieben werden.",
-        locked: true,
-        filename,
-      });
+      // DATEV-Export: niemals überschreiben
+      try {
+        const buf = fs.readFileSync(filepath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", force ? "inline" : `inline; filename=\"${filename}\"`);
+        return res.send(buf);
+      } catch (err) {
+        console.error("[PDF] DATEV-gesperrte Datei konnte nicht gelesen werden:", err.message);
+        return res.status(423).json({
+          message: "PDF ist durch DATEV-Export gesperrt und kann nicht überschrieben werden.",
+          locked: true,
+          filename,
+        });
+      }
     }
 
     if (exists && !force) {
-      return res.status(409).json({
-        message: "Es existiert bereits ein PDF für diese Rechnung. Überschreiben?",
-        conflict: true,
-        filename,
-        size: fs.statSync(filepath)?.size || null,
-      });
+      // Bestehendes PDF einfach ausliefern, nicht neu rendern
+      try {
+        const buf = fs.readFileSync(filepath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename=\"${filename}\"`);
+        return res.send(buf);
+      } catch (err) {
+        console.warn("[PDF] Konnte bestehendes PDF nicht lesen, rendere neu:", err.message);
+      }
     }
 
     if (exists && force) {
