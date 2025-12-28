@@ -62,4 +62,5 @@
 5) UI-Verbesserungen Rechnungen  
    - Filter kompakt und intuitiver darstellen (kleinere Controls, klarere Platzhalter).  
    - Zusätzlich separater Filter für Rechnungsnummer (präziser Treffer).
+   - Reihenfolge-Filter (Alt/Neu) für Liste ergänzen.
    - PDF-Aktionen im Detail an neue Logik anbinden (410-Handling, Confirm vor Neu-Render).

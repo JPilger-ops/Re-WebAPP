@@ -1058,6 +1058,9 @@ function Invoices() {
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [invoiceNumberFilter, setInvoiceNumberFilter] = useState(searchParams.get("inv") || "");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(
+    (searchParams.get("order") as "asc" | "desc") || "desc"
+  );
   const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>(initialStatus);
   const [categoryFilter, setCategoryFilter] = useState<string>(searchParams.get("category") || "all");
   const [fromDate, setFromDate] = useState<string>(searchParams.get("from") || "");
@@ -1118,28 +1121,40 @@ function Invoices() {
     status: InvoiceStatusFilter,
     categoryKey: string,
     customerTerm: string,
-    invoiceNoTerm: string
+    invoiceNoTerm: string,
+    order: "asc" | "desc"
   ) => {
     const t = term.toLowerCase();
     const ct = customerTerm.toLowerCase();
     const it = invoiceNoTerm.toLowerCase();
-    return list.filter((inv) => {
-      const matchesInvoiceNumber = !it || inv.invoice_number.toLowerCase().includes(it);
-      const matchesTerm =
-        !t ||
-        inv.invoice_number.toLowerCase().includes(t) ||
-        (inv.recipient_name || "").toLowerCase().includes(t);
-      const matchesCustomer = !ct || (inv.recipient_name || "").toLowerCase().includes(ct);
-      const st = computeStatus(inv);
-      const matchesStatus =
-        status === "all"
-          ? true
-          : status === "active"
-          ? st !== "canceled"
-          : st === status;
-      const matchesCategory = categoryKey === "all" || inv.category_label === categoryKey;
-      return matchesTerm && matchesCustomer && matchesStatus && matchesCategory && matchesInvoiceNumber;
-    });
+    return list
+      .filter((inv) => {
+        const matchesInvoiceNumber = !it || inv.invoice_number.toLowerCase().includes(it);
+        const matchesTerm =
+          !t ||
+          inv.invoice_number.toLowerCase().includes(t) ||
+          (inv.recipient_name || "").toLowerCase().includes(t);
+        const matchesCustomer = !ct || (inv.recipient_name || "").toLowerCase().includes(ct);
+        const st = computeStatus(inv);
+        const matchesStatus =
+          status === "all"
+            ? true
+            : status === "active"
+            ? st !== "canceled"
+            : st === status;
+        const matchesCategory = categoryKey === "all" || inv.category_label === categoryKey;
+        return matchesTerm && matchesCustomer && matchesStatus && matchesCategory && matchesInvoiceNumber;
+      })
+      .sort((a, b) => {
+        const aDate = a.date ? new Date(a.date).getTime() : 0;
+        const bDate = b.date ? new Date(b.date).getTime() : 0;
+        if (aDate === bDate) {
+          const aNum = a.invoice_number.toLowerCase();
+          const bNum = b.invoice_number.toLowerCase();
+          return order === "asc" ? aNum.localeCompare(bNum) : bNum.localeCompare(aNum);
+        }
+        return order === "asc" ? aDate - bDate : bDate - aDate;
+      });
   };
 
   const load = async () => {
@@ -1158,7 +1173,7 @@ function Invoices() {
       ]);
       setInvoices(res);
       setCategories(cats);
-      setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter));
+      setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter, sortOrder));
       setSelectedIds((prev) => prev.filter((id) => res.some((inv) => inv.id === id)));
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -1170,11 +1185,13 @@ function Invoices() {
 
   useEffect(() => {
     load();
-  }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter, invoiceNumberFilter]);
+  }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter, invoiceNumberFilter, sortOrder]);
 
   useEffect(() => {
-    setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter));
-  }, [invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter]);
+    setFiltered(
+      applyFilter(invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter, sortOrder)
+    );
+  }, [invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter, sortOrder]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => filtered.some((inv) => inv.id === id)));
@@ -1189,8 +1206,9 @@ function Invoices() {
     if (toDate) params.set("to", toDate);
     if (customerFilter.trim()) params.set("customer", customerFilter.trim());
     if (invoiceNumberFilter.trim()) params.set("inv", invoiceNumberFilter.trim());
+    if (sortOrder !== "desc") params.set("order", sortOrder);
     setSearchParams(params, { replace: true });
-  }, [search, statusFilter, categoryFilter, fromDate, toDate, customerFilter, invoiceNumberFilter, setSearchParams]);
+  }, [search, statusFilter, categoryFilter, fromDate, toDate, customerFilter, invoiceNumberFilter, sortOrder, setSearchParams]);
 
   const resetFilters = () => {
     setSearch("");
@@ -1200,6 +1218,7 @@ function Invoices() {
     setToDate("");
     setCustomerFilter("");
     setInvoiceNumberFilter("");
+    setSortOrder("desc");
   };
 
   const activeFilters = [
@@ -1210,6 +1229,7 @@ function Invoices() {
     fromDate ? `Von ${fromDate}` : null,
     toDate ? `Bis ${toDate}` : null,
     customerFilter ? `Kunde: ${customerFilter}` : null,
+    sortOrder === "asc" ? "Sortierung: Alt → Neu" : null,
   ].filter(Boolean);
 
   const selectedCount = selectedIds.length;
@@ -1457,54 +1477,62 @@ function Invoices() {
           </div>
         </div>
 
-        <div className="grid gap-2 text-sm lg:grid-cols-6 md:grid-cols-4 grid-cols-2">
-          <Input
-            placeholder="Nummer/Empfänger"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 text-sm"
-          />
-          <Input
-            placeholder="Rechnungsnr."
-            value={invoiceNumberFilter}
-            onChange={(e) => setInvoiceNumberFilter(e.target.value)}
-            className="h-9 text-sm"
-          />
-          <Input
-            placeholder="Kunde"
-            value={customerFilter}
-            onChange={(e) => setCustomerFilter(e.target.value)}
-            className="h-9 text-sm"
-          />
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="h-9 text-sm"
-          >
-            <option value="active">Aktiv</option>
-            <option value="all">Alle</option>
-            <option value="open">Offen</option>
-            <option value="sent">Gesendet</option>
-            <option value="paid">Bezahlt</option>
-            <option value="canceled">Storniert</option>
-          </Select>
-          <Select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="h-9 text-sm"
-          >
-            <option value="all">Alle Kategorien</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.label}>
-                {c.label}
-              </option>
-            ))}
-          </Select>
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="h-9 text-sm"
+      <div className="grid gap-2 text-sm lg:grid-cols-6 md:grid-cols-4 grid-cols-2">
+        <Input
+          placeholder="Nummer/Empfänger"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-9 text-sm"
+        />
+        <Input
+          placeholder="Rechnungsnr."
+          value={invoiceNumberFilter}
+          onChange={(e) => setInvoiceNumberFilter(e.target.value)}
+          className="h-9 text-sm"
+        />
+        <Input
+          placeholder="Kunde"
+          value={customerFilter}
+          onChange={(e) => setCustomerFilter(e.target.value)}
+          className="h-9 text-sm"
+        />
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as any)}
+          className="h-9 text-sm"
+        >
+          <option value="active">Aktiv</option>
+          <option value="all">Alle</option>
+          <option value="open">Offen</option>
+          <option value="sent">Gesendet</option>
+          <option value="paid">Bezahlt</option>
+          <option value="canceled">Storniert</option>
+        </Select>
+        <Select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="h-9 text-sm"
+        >
+          <option value="all">Alle Kategorien</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.label}>
+              {c.label}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={sortOrder}
+          onChange={(e) => setSortOrder((e.target.value as "asc" | "desc") || "desc")}
+          className="h-9 text-sm"
+        >
+          <option value="desc">Neu → Alt</option>
+          <option value="asc">Alt → Neu</option>
+        </Select>
+        <Input
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          className="h-9 text-sm"
             placeholder="Von"
           />
           <Input
