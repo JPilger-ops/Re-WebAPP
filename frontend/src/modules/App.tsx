@@ -90,6 +90,7 @@ import {
   uploadFavicon,
   resetFavicon,
 } from "./api";
+import { API_BASE } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
 import { Alert, Button, Checkbox, Confirm, EmptyState, Input, Modal, Spinner, Textarea, Badge, SidebarLink, Select, MoreMenu } from "./ui";
 
@@ -420,6 +421,14 @@ function Shell() {
   }, []);
 
   const versionBadgeLabel = useMemo(() => formatVersionBadge(versionInfo), [versionInfo]);
+  const apiDebugLabel = useMemo(() => {
+    if (!import.meta.env.DEV) return null;
+    const buildNumber = extractBuildNumber(versionInfo);
+    const sha = versionInfo?.build?.sha || "";
+    const buildPart = buildNumber && buildNumber > 0 ? `#${buildNumber}` : versionInfo?.version || "";
+    const shaPart = sha && sha !== "unknown" ? ` (${sha})` : "";
+    return `API ${API_BASE} · build ${buildPart}${shaPart}`;
+  }, [versionInfo]);
 
   const links = [
     { to: "/dashboard", label: "Dashboard" },
@@ -507,6 +516,11 @@ function Shell() {
               <div className="font-semibold text-slate-800">RechnungsAPP</div>
             </div>
             <div className="flex items-center gap-3 text-sm">
+              {apiDebugLabel && (
+                <span className="text-[11px] text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-1 hidden sm:inline">
+                  {apiDebugLabel}
+                </span>
+              )}
               {versionBadgeLabel && (
                 <span
                   className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-1 whitespace-nowrap hidden sm:inline"
