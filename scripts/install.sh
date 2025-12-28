@@ -31,8 +31,8 @@ fi
 info "Baue Images (inkl. Build-Metadaten aus Git)"
 ./scripts/build-meta.sh
 
-info "Starte Container (docker compose up -d)"
-docker compose up -d
+info "Starte Container (docker compose up -d --build)"
+docker compose up -d --build
 
 info "Container Status:"
 docker compose ps

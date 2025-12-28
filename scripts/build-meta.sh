@@ -61,4 +61,4 @@ upsert_env_var "BUILD_TIME" "${BUILD_TIME}"
 export BUILD_SHA BUILD_NUMBER BUILD_TIME
 echo "Build-Metadaten gesetzt: sha=${BUILD_SHA}, number=${BUILD_NUMBER}, time=${BUILD_TIME}"
 
-docker compose build "$@"
+DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose build "$@"

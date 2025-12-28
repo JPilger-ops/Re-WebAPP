@@ -7,14 +7,14 @@ Interne Rechnungs- und Verwaltungs-App mit Backend (Node/Express/Prisma), Fronte
 - Architektur: Backend (Express + Prisma) liefert API + statische Assets (Vite build unter backend/public). DB: Postgres. Puppeteer/Chromium im Container für PDFs. Reverse Proxy (NPM) terminiert TLS; App spricht intern HTTP.
 
 ## 2) Quickstart (Server/Local)
-Voraussetzungen: Docker + Docker Compose.
+Voraussetzungen: Docker Engine >= 20.x, Docker Compose v2 (BuildKit empfohlen/Default).
 
 Schritte:
 1. `git clone <repo>`
 2. `./scripts/setup.sh` (legt .env an, wenn fehlt)
 3. `.env` anpassen (mindestens DB_PASS, DB_USER, DB_NAME setzen)
-4. `./scripts/build-meta.sh` (schreibt BUILD_SHA/BUILD_NUMBER/BUILD_TIME in `.env` und ruft `docker compose build`)
-5. `docker compose up -d`
+4. `./scripts/build-meta.sh` (schreibt BUILD_SHA/BUILD_NUMBER/BUILD_TIME in `.env` und ruft `docker compose build` mit BuildKit)
+5. `docker compose up -d --build` (Standard-Workflow, nutzt BuildKit-Cache)
 6. Smoke-Checks (im Repo):
    - `npm --prefix backend run check:api`
    - `npm --prefix backend run check:pdf`
@@ -89,7 +89,7 @@ Frontend:
 - `npm --prefix frontend run build`
 
 Build-Metadaten/Version:
-- `./scripts/build-meta.sh` ermittelt SHA + Commit-Count aus Git, aktualisiert `.env` (BUILD_SHA, BUILD_NUMBER, BUILD_TIME) und ruft `docker compose build`.
+- `./scripts/build-meta.sh` ermittelt SHA + Commit-Count aus Git, aktualisiert `.env` (BUILD_SHA, BUILD_NUMBER, BUILD_TIME) und ruft `docker compose build` mit BuildKit.
 - `/api/version` gibt Version + Build aus; lokal testen mit `curl http://127.0.0.1:3031/api/version`.
 
 Team-Workflow: Nach Meilensteinen commit/push auf dev_Prisma; Compose/Smoke grün halten.
