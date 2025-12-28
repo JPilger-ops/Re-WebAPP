@@ -132,7 +132,7 @@ export const getInvoiceStats = async (req, res) => {
       FROM invoices i
       LEFT JOIN invoice_categories c ON c.key = i.category
       ${whereClause ? whereClause.replace("WHERE", "WHERE") : ""}
-      GROUP BY label, key
+      GROUP BY i.category, c.label
       ORDER BY sum_total DESC NULLS LAST
       LIMIT 5
       `,
