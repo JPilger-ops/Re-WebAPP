@@ -2363,6 +2363,92 @@ function InvoiceDetailPage() {
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
   const [sendModal, setSendModal] = useState<{ open: boolean; to?: string }>({ open: false });
   const [pdfBusy, setPdfBusy] = useState(false);
+  const inv = detail?.invoice;
+  const isCanceled = Boolean(inv?.canceled_at);
+  const cancelReason = (inv?.cancel_reason || "").trim();
+  const pdfUrl = detail?.pdf?.url || (inv ? `/api/invoices/${inv.id}/pdf?mode=inline` : "");
+  const pdfFilename =
+    detail?.pdf?.filename ||
+    (() => {
+      if (detail?.pdf?.location) {
+        const parts = detail.pdf.location.split(/[\\/]/);
+        const last = parts[parts.length - 1];
+        if (last) {
+          try {
+            return decodeURIComponent(last);
+          } catch {
+            return last;
+          }
+        }
+      }
+      if (pdfUrl) {
+        try {
+          const parsed = new URL(pdfUrl, window.location.origin);
+          const seg = parsed.pathname.split("/").filter(Boolean).pop();
+          if (seg) return decodeURIComponent(seg);
+        } catch {
+          // ignore
+        }
+      }
+      return inv ? `RE-${inv.invoice_number}.pdf` : "–";
+    })();
+  const pdfLocation = detail?.pdf?.location || "";
+  const shortLocation =
+    pdfLocation && pdfLocation.length > 64
+      ? `${pdfLocation.slice(0, 28)}…${pdfLocation.slice(-18)}`
+      : pdfLocation || "–";
+  const items = detail?.items ?? [];
+
+  const vatSummary = useMemo(() => {
+    if (!inv) {
+      return { rows: [], totalNet: 0, totalVat: 0, totalGross: 0 };
+    }
+    const rows: { rateLabel: string; net: number; vat: number; gross: number }[] = [];
+    const addRow = (rateLabel: string, net?: number | null, vat?: number | null, gross?: number | null) => {
+      const netVal = Number(net ?? 0);
+      const vatVal = Number(vat ?? 0);
+      const grossVal = Number.isFinite(Number(gross)) ? Number(gross) : netVal + vatVal;
+      if (Math.abs(netVal) < 0.0001 && Math.abs(vatVal) < 0.0001 && Math.abs(grossVal) < 0.0001) return;
+      rows.push({ rateLabel, net: netVal, vat: vatVal, gross: grossVal });
+    };
+
+    const hasAggregates =
+      inv.net_19 != null || inv.vat_19 != null || inv.gross_19 != null || inv.net_7 != null || inv.vat_7 != null || inv.gross_7 != null;
+
+    if (hasAggregates) {
+      addRow("19%", inv.net_19, inv.vat_19, inv.gross_19 ?? (inv.net_19 ?? 0) + (inv.vat_19 ?? 0));
+      addRow("7%", inv.net_7, inv.vat_7, inv.gross_7 ?? (inv.net_7 ?? 0) + (inv.vat_7 ?? 0));
+    }
+
+    const itemMap = new Map<number, { net: number; vat: number; gross: number }>();
+    items.forEach((it) => {
+      const rate = Number(it.vat_key);
+      if (!Number.isFinite(rate)) return;
+      const quantity = Number(it.quantity) || 0;
+      const gross = Number(it.line_total_gross ?? it.unit_price_gross * quantity) || 0;
+      const net = rate >= 0 ? gross / (1 + rate / 100) : gross;
+      const vat = gross - net;
+      const prev = itemMap.get(rate) || { net: 0, vat: 0, gross: 0 };
+      itemMap.set(rate, { net: prev.net + net, vat: prev.vat + vat, gross: prev.gross + gross });
+    });
+
+    itemMap.forEach((vals, rate) => {
+      const label = `${Number(rate).toLocaleString("de-DE", { maximumFractionDigits: 2 })}%`;
+      if (!rows.some((r) => r.rateLabel === label)) {
+        addRow(label, vals.net, vals.vat, vals.gross);
+      }
+    });
+
+    if (!rows.length && inv.gross_total != null) {
+      addRow("Gesamt", (inv.net_19 || 0) + (inv.net_7 || 0), (inv.vat_19 || 0) + (inv.vat_7 || 0), inv.gross_total);
+    }
+
+    const totalNet = rows.reduce((sum, r) => sum + (r.net || 0), 0);
+    const totalVat = rows.reduce((sum, r) => sum + (r.vat || 0), 0);
+    const totalGross = rows.reduce((sum, r) => sum + (r.gross || 0), 0);
+
+    return { rows, totalNet, totalVat, totalGross };
+  }, [inv, items]);
 
   const load = async () => {
     if (!id) return;
@@ -2524,7 +2610,7 @@ function InvoiceDetailPage() {
     );
   }
 
-  if (error || !detail) {
+  if (error || !detail || !inv) {
     return (
       <div className="space-y-3">
         <Alert type="error">{error || "Rechnung nicht gefunden."}</Alert>
@@ -2534,111 +2620,6 @@ function InvoiceDetailPage() {
       </div>
     );
   }
-
-  const inv = detail.invoice;
-  const isCanceled = Boolean(inv.canceled_at);
-  const cancelReason = (inv.cancel_reason || "").trim();
-  const pdfUrl = detail.pdf?.url || `/api/invoices/${inv.id}/pdf?mode=inline`;
-  const pdfFilename =
-    detail.pdf?.filename ||
-    (() => {
-      if (detail.pdf?.location) {
-        const parts = detail.pdf.location.split(/[\\/]/);
-        const last = parts[parts.length - 1];
-        if (last) {
-          try {
-            return decodeURIComponent(last);
-          } catch {
-            return last;
-          }
-        }
-      }
-      try {
-        const parsed = new URL(pdfUrl, window.location.origin);
-        const seg = parsed.pathname.split("/").filter(Boolean).pop();
-        if (seg) return decodeURIComponent(seg);
-      } catch {
-        // ignore
-      }
-      return `RE-${inv.invoice_number}.pdf`;
-    })();
-  const pdfLocation = detail.pdf?.location || "";
-  const shortLocation =
-    pdfLocation && pdfLocation.length > 64
-      ? `${pdfLocation.slice(0, 28)}…${pdfLocation.slice(-18)}`
-      : pdfLocation || "–";
-  const items = detail.items ?? [];
-
-  const vatSummary = useMemo(() => {
-    if (!detail?.invoice) {
-      return { rows: [], totalNet: 0, totalVat: 0, totalGross: 0 };
-    }
-    const rows: { rateLabel: string; net: number; vat: number; gross: number }[] = [];
-    const addRow = (rateLabel: string, net?: number | null, vat?: number | null, gross?: number | null) => {
-      const netVal = Number(net ?? 0);
-      const vatVal = Number(vat ?? 0);
-      const grossVal = Number.isFinite(Number(gross)) ? Number(gross) : netVal + vatVal;
-      if (Math.abs(netVal) < 0.0001 && Math.abs(vatVal) < 0.0001 && Math.abs(grossVal) < 0.0001) return;
-      rows.push({ rateLabel, net: netVal, vat: vatVal, gross: grossVal });
-    };
-
-    const hasAggregates =
-      detail.invoice.net_19 != null ||
-      detail.invoice.vat_19 != null ||
-      detail.invoice.gross_19 != null ||
-      detail.invoice.net_7 != null ||
-      detail.invoice.vat_7 != null ||
-      detail.invoice.gross_7 != null;
-
-    if (hasAggregates) {
-      addRow(
-        "19%",
-        detail.invoice.net_19,
-        detail.invoice.vat_19,
-        detail.invoice.gross_19 ?? (detail.invoice.net_19 ?? 0) + (detail.invoice.vat_19 ?? 0)
-      );
-      addRow(
-        "7%",
-        detail.invoice.net_7,
-        detail.invoice.vat_7,
-        detail.invoice.gross_7 ?? (detail.invoice.net_7 ?? 0) + (detail.invoice.vat_7 ?? 0)
-      );
-    }
-
-    const itemMap = new Map<number, { net: number; vat: number; gross: number }>();
-    items.forEach((it) => {
-      const rate = Number(it.vat_key);
-      if (!Number.isFinite(rate)) return;
-      const quantity = Number(it.quantity) || 0;
-      const gross = Number(it.line_total_gross ?? it.unit_price_gross * quantity) || 0;
-      const net = rate >= 0 ? gross / (1 + rate / 100) : gross;
-      const vat = gross - net;
-      const prev = itemMap.get(rate) || { net: 0, vat: 0, gross: 0 };
-      itemMap.set(rate, { net: prev.net + net, vat: prev.vat + vat, gross: prev.gross + gross });
-    });
-
-    itemMap.forEach((vals, rate) => {
-      const label = `${Number(rate).toLocaleString("de-DE", { maximumFractionDigits: 2 })}%`;
-      if (!rows.some((r) => r.rateLabel === label)) {
-        addRow(label, vals.net, vals.vat, vals.gross);
-      }
-    });
-
-    if (!rows.length && detail.invoice.gross_total != null) {
-      addRow(
-        "Gesamt",
-        (detail.invoice.net_19 || 0) + (detail.invoice.net_7 || 0),
-        (detail.invoice.vat_19 || 0) + (detail.invoice.vat_7 || 0),
-        detail.invoice.gross_total
-      );
-    }
-
-    const totalNet = rows.reduce((sum, r) => sum + (r.net || 0), 0);
-    const totalVat = rows.reduce((sum, r) => sum + (r.vat || 0), 0);
-    const totalGross = rows.reduce((sum, r) => sum + (r.gross || 0), 0);
-
-    return { rows, totalNet, totalVat, totalGross };
-  }, [detail]);
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -3189,13 +3170,7 @@ function AdminSettings() {
   const { user } = useAuth();
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const versionDetail = useMemo(() => formatVersionDetail(versionInfo), [versionInfo]);
-  if (user?.role_name !== "admin") {
-    return (
-      <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4">
-        Keine Berechtigung. Nur Admins können die Einstellungen bearbeiten.
-      </div>
-    );
-  }
+  const isAdminUser = user?.role_name === "admin";
 
   const tabs = [
     { key: "pdf", label: "PDF" },
@@ -3257,46 +3232,48 @@ function AdminSettings() {
         </p>
       </header>
 
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-col md:flex-row gap-4">
-        <div className="w-full md:w-60 flex-shrink-0">
-          <div className="hidden md:block">
-            <nav className="flex flex-col gap-1">
-              {tabs.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setActive(t.key)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition border ${
-                    active === t.key
-                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : "border-transparent hover:bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-          <div className="md:hidden">
-            <select
-              value={active}
-              onChange={(e) => setActive(e.target.value)}
-              className="input"
-            >
-              {tabs.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+      {!isAdminUser ? (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4">
+          Keine Berechtigung. Nur Admins können die Einstellungen bearbeiten.
         </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-col md:flex-row gap-4">
+          <div className="w-full md:w-60 flex-shrink-0">
+            <div className="hidden md:block">
+              <nav className="flex flex-col gap-1">
+                {tabs.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setActive(t.key)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition border ${
+                      active === t.key
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "border-transparent hover:bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
+            <div className="md:hidden">
+              <select value={active} onChange={(e) => setActive(e.target.value)} className="input">
+                {tabs.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="border border-slate-200 rounded-2xl shadow-sm bg-white p-4 space-y-4">
-            {activeContent(active)}
+          <div className="flex-1 min-w-0">
+            <div className="border border-slate-200 rounded-2xl shadow-sm bg-white p-4 space-y-4">
+              {activeContent(active)}
+            </div>
           </div>
         </div>
-      </div>
+      )}
       {versionDetail && <div className="text-xs text-slate-600">{versionDetail}</div>}
     </div>
   );
