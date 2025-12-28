@@ -10,12 +10,12 @@ prompt() {
   echo "${var:-$default}"
 }
 prompt_required() {
-  local message="$1" default="$2" value
+  local message="$1" default="$2" var
   while true; do
-    read -r -p "${message}${default:+ [${default}]}: " value
-    value="${value:-$default}"
-    if [ -n "${value}" ]; then
-      echo "${value}"
+    read -r -p "${message}${default:+ [${default}]}: " var
+    var="${var:-$default}"
+    if [ -n "${var}" ]; then
+      echo "${var}"
       return
     fi
     warn "Wert darf nicht leer sein."
@@ -80,35 +80,46 @@ info "Führe Basis-Setup aus (env-Dateien)"
 SETUP_QUIET=1 ./scripts/setup.sh
 
 ENV_FILE="${RELEASE_DIR}/.env"
-info "Frage zentrale .env Werte ab (Pflichtfelder ohne Default)"
+info "Frage zentrale .env Werte ab (nur nicht-UI Settings, mit sinnvollen Defaults)"
 DB_HOST_VAL="$(current_env_value "${ENV_FILE}" "DB_HOST")"
 DB_PORT_VAL="$(current_env_value "${ENV_FILE}" "DB_PORT")"
 DB_NAME_VAL="$(current_env_value "${ENV_FILE}" "DB_NAME")"
+DB_SCHEMA_VAL="$(current_env_value "${ENV_FILE}" "DB_SCHEMA")"
 DB_USER_VAL="$(current_env_value "${ENV_FILE}" "DB_USER")"
 DB_PASS_VAL="$(current_env_value "${ENV_FILE}" "DB_PASS")"
+DATABASE_URL_VAL="$(current_env_value "${ENV_FILE}" "DATABASE_URL")"
 APP_BIND_IP_VAL="$(current_env_value "${ENV_FILE}" "APP_BIND_IP")"
 APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
 APP_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PORT")"
+APP_HTTPS_DISABLE_VAL="$(current_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE")"
+
+set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
+set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt "DB_PORT" "${DB_PORT_VAL:-5432}")"
+set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt "DB_NAME" "${DB_NAME_VAL:-rechnung_prod}")"
+set_env_value "${ENV_FILE}" "DB_SCHEMA" "$(prompt "DB_SCHEMA" "${DB_SCHEMA_VAL:-public}")"
+set_env_value "${ENV_FILE}" "DB_USER" "$(prompt "DB_USER" "${DB_USER_VAL:-rechnung_app}")"
+set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt_required "DB_PASS" "${DB_PASS_VAL:-}")"
+set_env_value "${ENV_FILE}" "DATABASE_URL" "$(prompt "DATABASE_URL" "${DATABASE_URL_VAL:-postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public}")"
+set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL:-0.0.0.0}")"
+set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
+set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
+set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "${APP_HTTPS_DISABLE_VAL:-true}")"
+
+# PDF-Pfade automatisch setzen (UI-pflegbar, aber für Schreibbarkeit initialisieren)
 PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
 PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
 PDF_TRASH_VAL="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
+set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "${PDF_STORAGE_VAL:-/app/pdfs}"
+set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "${PDF_ARCHIVE_VAL:-/app/pdfs/archive}"
+set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "${PDF_TRASH_VAL:-/app/pdfs/trash}"
 
-set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt_required "DB_HOST" "${DB_HOST_VAL}")"
-set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt_required "DB_PORT" "${DB_PORT_VAL}")"
-set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt_required "DB_NAME" "${DB_NAME_VAL}")"
-set_env_value "${ENV_FILE}" "DB_USER" "$(prompt_required "DB_USER" "${DB_USER_VAL}")"
-set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt_required "DB_PASS" "${DB_PASS_VAL}")"
-set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt_required "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL}")"
-set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt_required "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL}")"
-set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt_required "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
-set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "$(prompt_required "PDF_STORAGE_PATH (Speicher)" "${PDF_STORAGE_VAL}")"
-set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "$(prompt "PDF_ARCHIVE_PATH (optional Archiv, leer lassen wenn nicht genutzt)" "${PDF_ARCHIVE_VAL}")"
-set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "$(prompt "PDF_TRASH_PATH (optional Trash, leer lassen wenn nicht genutzt)" "${PDF_TRASH_VAL}")"
-
-BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
-JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
-info "Backend-Env (Pflicht: JWT_SECRET, Rest optional und später in UI änderbar)"
-set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL}")"
+# Verzeichnisse anlegen, damit PDF-Pfade existieren
+PDF_STORAGE_PATH="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
+PDF_ARCHIVE_PATH="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
+PDF_TRASH_PATH="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
+[ -n "${PDF_STORAGE_PATH}" ] && mkdir -p "${PDF_STORAGE_PATH}"
+[ -n "${PDF_ARCHIVE_PATH}" ] && mkdir -p "${PDF_ARCHIVE_PATH}"
+[ -n "${PDF_TRASH_PATH}" ] && mkdir -p "${PDF_TRASH_PATH}"
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
@@ -116,6 +127,11 @@ fi
 
 info "Schreibe Build-Metadaten in .env (ohne Build)"
 BUILD_SHA="${RELEASE_SHA}" BUILD_NUMBER="${RELEASE_NUMBER}" BUILD_TIME="${RELEASE_TIME}" SKIP_DOCKER_COMPOSE=1 ./scripts/build-meta.sh
+
+BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
+JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
+info "Backend-Env (JWT_SECRET wird benötigt; andere Keys später in der UI konfigurierbar)"
+set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
 
 export COMPOSE_PROJECT_NAME="${PROJECT_NAME}"
 

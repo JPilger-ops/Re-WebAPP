@@ -26,7 +26,8 @@ Empfohlen für Server-Rollout mit Versionen und geteilten Daten/PDFs.
 1. Stelle sicher, dass das Repo sauber ist (`git status`) und der gewünschte Commit ausgecheckt ist.
 2. Starte den Wizard: `./scripts/deploy-wizard.sh`
    - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update), Compose-Projektname.
-   - Fragt zwingend alle zentralen `.env`-Werte ab (DB_*, APP_BIND_IP/APP_PUBLIC_PORT/APP_PORT, PDF_STORAGE_PATH, optional PDF_ARCHIVE/TRASH) sowie `JWT_SECRET` in backend/.env. Keine automatischen Defaults – Eingabe oder vorhandener Wert wird bestätigt.
+   - Fragt nur nicht-UI-konfigurierbare `.env`-Werte ab: DB_HOST/PORT/NAME/SCHEMA/USER/PASS, DATABASE_URL, APP_BIND_IP, APP_PUBLIC_PORT, APP_PORT, APP_HTTPS_DISABLE sowie `JWT_SECRET` in backend/.env. Defaults: DB_HOST=db, DB_PORT=5432, DB_NAME=rechnung_prod, DB_SCHEMA=public, DB_USER=rechnung_app, DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public, APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031, APP_PORT=3030, APP_HTTPS_DISABLE=true. DB_PASS und JWT_SECRET müssen gesetzt werden.
+   - PDF-Pfade werden initial auf `/app/pdfs`, `/app/pdfs/archive`, `/app/pdfs/trash` gesetzt und Verzeichnisse angelegt (später in der UI änderbar).
    - Exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, legt `shared/data` und `shared/pdfs` an und verlinkt sie in das Release (Einstellungen/Kategorien bleiben erhalten).
    - Schreibt Build-Metadaten (SHA/Number/Time) in `.env`, setzt optional `COMPOSE_PROJECT_NAME`.
    - Führt `docker compose build`, `prisma migrate deploy`, optional `prisma db seed` (legt admin/admin an, falls fehlend) und `docker compose up -d` aus.
