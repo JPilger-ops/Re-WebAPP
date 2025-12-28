@@ -944,9 +944,52 @@ export const getInvoicePdf = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
+  const force = String(req.query.force || "").toLowerCase() === "true" || req.query.force === "1";
+
   try {
+    const invoiceMeta = await prisma.invoices.findUnique({
+      where: { id },
+      select: { invoice_number: true, datev_export_status: true },
+    });
+    if (!invoiceMeta) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const pdfDir = await getPdfDir();
+    const filename = `RE-${invoiceMeta.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+    const exists = fs.existsSync(filepath);
+
+    if (exists && invoiceMeta.datev_export_status === "SUCCESS") {
+      return res.status(423).json({
+        message: "PDF ist durch DATEV-Export gesperrt und kann nicht überschrieben werden.",
+        locked: true,
+        filename,
+      });
+    }
+
+    if (exists && !force) {
+      return res.status(409).json({
+        message: "Es existiert bereits ein PDF für diese Rechnung. Überschreiben?",
+        conflict: true,
+        filename,
+        size: fs.statSync(filepath)?.size || null,
+      });
+    }
+
+    if (exists && force) {
+      try {
+        const trashDir = path.join(pdfDir, "trash");
+        if (!fs.existsSync(trashDir)) fs.mkdirSync(trashDir, { recursive: true });
+        const trashName = `${path.parse(filename).name}-${Date.now()}.pdf`;
+        fs.renameSync(filepath, path.join(trashDir, trashName));
+      } catch (err) {
+        console.warn("[PDF] Konnte vorhandenes PDF nicht verschieben:", err.message);
+      }
+    }
+
     console.log(`[PDF] starte Generierung für Invoice ${id}`);
-    const { buffer, filename } = await ensureInvoicePdf(id);
+    const { buffer } = await ensureInvoicePdf(id);
     console.log(`[PDF] fertig für Invoice ${id}: ${filename} (${buffer.length} bytes)`);
     const mode = req.query.mode;
 
@@ -1240,19 +1283,6 @@ async function ensureInvoicePdf(id) {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     } catch (cleanupErr) {
       console.warn(`[PDF] Konnte temp HTML nicht löschen (${tempPath}):`, cleanupErr);
-    }
-
-    // Falls bereits final vorhanden und gültig: direkt zurückgeben (Concurrency-Fall)
-    try {
-      if (fs.existsSync(filepath)) {
-        const stats = fs.statSync(filepath);
-        if (stats.size > 0) {
-          const existingBuffer = fs.readFileSync(filepath);
-          return { buffer: existingBuffer, filename, filepath, invoiceRow };
-        }
-      }
-    } catch (fsErr) {
-      console.warn(`[PDF] Konnte bestehende Datei nicht prüfen: ${fsErr.message}`);
     }
 
     const tmpPath = `${filepath}.tmp-${Date.now()}`;

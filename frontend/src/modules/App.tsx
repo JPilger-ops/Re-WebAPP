@@ -1319,10 +1319,31 @@ function Invoices() {
     }
   };
 
-  const openPdf = async (id: number) => {
+  const handlePdfOpen = async (id: number, force = false) => {
+    const url = `/api/invoices/${id}/pdf?mode=inline${force ? "&force=1" : ""}`;
     setPdfBusyId(id);
     try {
-      window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
+      const res = await fetch(url, { credentials: "include" });
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        const wants = window.confirm(data?.message || "PDF existiert bereits. Überschreiben?");
+        if (wants) {
+          return handlePdfOpen(id, true);
+        }
+        return;
+      }
+      if (res.status === 423) {
+        const data = await res.json().catch(() => ({}));
+        alert(data?.message || "PDF ist gesperrt (DATEV).");
+        return;
+      }
+      if (!res.ok) {
+        alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
     } finally {
       setPdfBusyId(null);
     }
@@ -1579,7 +1600,7 @@ function Invoices() {
                               { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
                               {
                                 label: pdfBusyId === inv.id ? "PDF …" : "PDF öffnen",
-                                onClick: () => openPdf(inv.id),
+                                onClick: () => handlePdfOpen(inv.id),
                                 disabled: pdfBusyId === inv.id,
                               },
                               { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
@@ -1748,14 +1769,32 @@ function InvoiceCreatePage() {
     else formEl?.submit();
   };
 
-  const openPdf = () => {
+  const openPdf = async () => {
     if (!createModal.invoiceId) return;
-    const url = createModal.pdfUrl || `/api/invoices/${createModal.invoiceId}/pdf?mode=inline`;
-    try {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      // ignore
-    }
+    const url = `/api/invoices/${createModal.invoiceId}/pdf?mode=inline`;
+    const fetchPdf = async (force = false) => {
+      const res = await fetch(force ? `${url}&force=1` : url, { credentials: "include" });
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        const wants = window.confirm(data?.message || "PDF existiert bereits. Überschreiben?");
+        if (wants) return fetchPdf(true);
+        return null;
+      }
+      if (res.status === 423) {
+        const data = await res.json().catch(() => ({}));
+        alert(data?.message || "PDF ist gesperrt (DATEV).");
+        return null;
+      }
+      if (!res.ok) {
+        alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
+        return null;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      return blobUrl;
+    };
+    const blobUrl = await fetchPdf(false);
+    if (blobUrl) window.open(blobUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -2575,27 +2614,9 @@ function InvoiceDetailPage() {
       addRow("7%", inv.net_7, inv.vat_7, inv.gross_7 ?? (inv.net_7 ?? 0) + (inv.vat_7 ?? 0));
     }
 
-    const itemMap = new Map<number, { net: number; vat: number; gross: number }>();
-    items.forEach((it) => {
-      const rate = Number(it.vat_key);
-      if (!Number.isFinite(rate)) return;
-      const quantity = Number(it.quantity) || 0;
-      const gross = Number(it.line_total_gross ?? it.unit_price_gross * quantity) || 0;
-      const net = rate >= 0 ? gross / (1 + rate / 100) : gross;
-      const vat = gross - net;
-      const prev = itemMap.get(rate) || { net: 0, vat: 0, gross: 0 };
-      itemMap.set(rate, { net: prev.net + net, vat: prev.vat + vat, gross: prev.gross + gross });
-    });
-
-    itemMap.forEach((vals, rate) => {
-      const label = `${Number(rate).toLocaleString("de-DE", { maximumFractionDigits: 2 })}%`;
-      if (!rows.some((r) => r.rateLabel === label)) {
-        addRow(label, vals.net, vals.vat, vals.gross);
-      }
-    });
-
     if (!rows.length && inv.gross_total != null) {
-      addRow("Gesamt", (inv.net_19 || 0) + (inv.net_7 || 0), (inv.vat_19 || 0) + (inv.vat_7 || 0), inv.gross_total);
+      addRow("19%", inv.net_19, inv.vat_19, inv.gross_19 ?? (inv.net_19 || 0) + (inv.vat_19 || 0));
+      addRow("7%", inv.net_7, inv.vat_7, inv.gross_7 ?? (inv.net_7 || 0) + (inv.vat_7 || 0));
     }
 
     const totalNet = rows.reduce((sum, r) => sum + (r.net || 0), 0);
