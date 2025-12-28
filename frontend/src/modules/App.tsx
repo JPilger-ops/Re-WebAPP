@@ -1728,6 +1728,35 @@ function Invoices() {
 function InvoiceCreatePage() {
   const navigate = useNavigate();
   const [toast, setToast] = useState<FormStatus>(null);
+  const [createModal, setCreateModal] = useState<{
+    open: boolean;
+    status: "idle" | "submitting" | "success" | "error";
+    invoiceId?: number | null;
+    invoiceNumber?: string;
+    pdfUrl?: string;
+    error?: string | null;
+  }>({ open: false, status: "idle" });
+
+  const closeCreateModal = () => {
+    setCreateModal({ open: false, status: "idle", invoiceId: null, invoiceNumber: undefined, pdfUrl: undefined, error: null });
+  };
+
+  const retryCreate = () => {
+    setCreateModal((prev) => ({ ...prev, status: "submitting", error: null, open: true }));
+    const formEl = document.getElementById("invoice-form-main") as HTMLFormElement | null;
+    if (formEl?.requestSubmit) formEl.requestSubmit();
+    else formEl?.submit();
+  };
+
+  const openPdf = () => {
+    if (!createModal.invoiceId) return;
+    const url = createModal.pdfUrl || `/api/invoices/${createModal.invoiceId}/pdf?mode=inline`;
+    try {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -1738,12 +1767,77 @@ function InvoiceCreatePage() {
         titleOverride="Neue Rechnung"
         onClose={() => navigate("/invoices")}
         onCancel={() => navigate("/invoices")}
+        onSubmitStart={() =>
+          setCreateModal({ open: true, status: "submitting", invoiceId: null, invoiceNumber: undefined, pdfUrl: undefined, error: null })
+        }
         onSaved={(id, num) => {
           setToast({ type: "success", message: `Rechnung ${num} erstellt.` });
-          navigate(`/invoices/${id}`);
         }}
+        onSubmitSuccess={(id, num) =>
+          setCreateModal({
+            open: true,
+            status: "success",
+            invoiceId: id,
+            invoiceNumber: num,
+            pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
+            error: null,
+          })
+        }
         onError={(msg) => setToast({ type: "error", message: msg })}
+        onSubmitError={(msg) =>
+          setCreateModal({ open: true, status: "error", invoiceId: null, invoiceNumber: undefined, pdfUrl: undefined, error: msg || "Fehler" })
+        }
       />
+      {createModal.open && (
+        <Modal
+          title={
+            createModal.status === "success"
+              ? "Rechnung erstellt"
+              : createModal.status === "error"
+              ? "Fehler bei der Erstellung"
+              : "Rechnung wird erstellt"
+          }
+          onClose={closeCreateModal}
+        >
+          {createModal.status === "submitting" && (
+            <div className="space-y-4 text-center">
+              <div className="flex items-center justify-center">
+                <Spinner />
+              </div>
+              <div className="text-sm text-slate-700">Rechnung wird erstellt. Bitte warten ...</div>
+              <div className="flex justify-center gap-3">
+                <Button variant="secondary" onClick={closeCreateModal} disabled>
+                  Abbrechen
+                </Button>
+              </div>
+            </div>
+          )}
+          {createModal.status === "success" && (
+            <div className="space-y-4 text-center">
+              <div className="text-sm text-slate-700">
+                Rechnung {createModal.invoiceNumber || ""} wurde erstellt.
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button onClick={openPdf}>Rechnung öffnen</Button>
+                <Button variant="secondary" onClick={() => navigate("/invoices")}>
+                  Rechnungsübersicht
+                </Button>
+              </div>
+            </div>
+          )}
+          {createModal.status === "error" && (
+            <div className="space-y-4 text-center">
+              <div className="text-sm text-red-700">{createModal.error || "Erstellung fehlgeschlagen."}</div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button onClick={retryCreate}>Erneut versuchen</Button>
+                <Button variant="secondary" onClick={closeCreateModal}>
+                  Schließen
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1878,6 +1972,9 @@ function InvoiceFormModal({
   asPage = false,
   titleOverride,
   onCancel,
+  onSubmitStart,
+  onSubmitSuccess,
+  onSubmitError,
 }: {
   mode: "create" | "edit";
   id?: number;
@@ -1887,6 +1984,9 @@ function InvoiceFormModal({
   asPage?: boolean;
   titleOverride?: string;
   onCancel?: () => void;
+  onSubmitStart?: () => void;
+  onSubmitSuccess?: (invoiceId: number, invoiceNumber: string) => void;
+  onSubmitError?: (msg: string) => void;
 }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -2065,6 +2165,7 @@ function InvoiceFormModal({
     }
 
     setSaving(true);
+    if (onSubmitStart) onSubmitStart();
     try {
       const payload = {
         recipient: {
@@ -2093,7 +2194,10 @@ function InvoiceFormModal({
 
       if (mode === "create") {
         const res = await createInvoice(payload);
-        onSaved(res.invoice_id, payload.invoice.invoice_number);
+        const createdId = res.invoice_id;
+        const invNumber = payload.invoice.invoice_number;
+        onSaved(createdId, invNumber);
+        if (onSubmitSuccess) onSubmitSuccess(createdId, invNumber);
         if (!asPage) {
           // Reset for modal usage
           setItems([{ description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
@@ -2110,6 +2214,7 @@ function InvoiceFormModal({
       const msg = apiErr.message || "Rechnung konnte nicht gespeichert werden.";
       setError(msg);
       if (onError) onError(msg);
+      if (onSubmitError) onSubmitError(msg);
       // Bei 409 einen neuen Vorschlag übernehmen, falls vorhanden
       const suggested = (err as any)?.data?.suggested_next_number;
       if (apiErr.status === 409 && suggested) {
