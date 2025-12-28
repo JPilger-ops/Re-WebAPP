@@ -34,7 +34,11 @@ set_env_value() {
 }
 current_env_value() {
   local file="$1" key="$2"
-  grep -m1 "^${key}=" "$file" 2>/dev/null | cut -d= -f2-
+  local line
+  line="$(grep -m1 "^${key}=" "$file" 2>/dev/null || true)"
+  if [ -n "${line}" ]; then
+    echo "${line#*=}"
+  fi
 }
 
 command -v docker >/dev/null 2>&1 || fail "Docker nicht gefunden. Bitte installieren."
