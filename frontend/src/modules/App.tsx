@@ -2493,135 +2493,137 @@ function InvoiceFormModal({
   ) : (
     <>
       <div className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Kundendaten</h4>
-            <span className="text-xs text-slate-500">Empfänger zuerst erfassen.</span>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">Kundendaten</h4>
+              <span className="text-xs text-slate-500">Empfänger zuerst erfassen.</span>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <label className="text-sm text-slate-700 md:col-span-2">
+                <span className="font-medium">Empfänger / Name *</span>
+                <div className="relative">
+                  <input
+                    className="input w-full"
+                    value={form.name}
+                    onChange={(e) => handleRecipientNameChange(e.target.value)}
+                    list="recipient-suggestions"
+                    placeholder="Empfänger eingeben oder wählen"
+                    required
+                  />
+                  <datalist id="recipient-suggestions">
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Freitext möglich. Wähle einen Vorschlag, um Adressdaten automatisch zu übernehmen.
+                </div>
+              </label>
+              <label className="text-sm text-slate-700 md:col-span-2">
+                <span className="font-medium">Firma (optional)</span>
+                <Input
+                  value={form.company}
+                  onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+                  placeholder="Firmenname (optional)"
+                  maxLength={120}
+                />
+                <div className="text-xs text-slate-500 mt-1">Wird gespeichert und angezeigt, wenn ausgefüllt.</div>
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">Straße *</span>
+                <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">PLZ *</span>
+                <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">Ort *</span>
+                <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">E-Mail (optional)</span>
+                <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+              </label>
+            </div>
           </div>
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="text-sm text-slate-700 md:col-span-2">
-              <span className="font-medium">Empfänger / Name *</span>
-              <div className="relative">
-                <input
-                  className="input w-full"
-                  value={form.name}
-                  onChange={(e) => handleRecipientNameChange(e.target.value)}
-                  list="recipient-suggestions"
-                  placeholder="Empfänger eingeben oder wählen"
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">Rechnungsdaten</h4>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <label className="text-sm text-slate-700">
+                <span className="font-medium flex items-center justify-between gap-2">
+                  <span>Rechnungsnummer</span>
+                  {mode === "create" && (
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={refreshInvoiceNumber}
+                    >
+                      Neu berechnen
+                    </button>
+                  )}
+                </span>
+                <Input
+                  value={form.invoice_number}
+                  onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
                   required
                 />
-                <datalist id="recipient-suggestions">
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.name} />
-                  ))}
-                </datalist>
-              </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Freitext möglich. Wähle einen Vorschlag, um Adressdaten automatisch zu übernehmen.
-              </div>
-            </label>
-            <label className="text-sm text-slate-700 md:col-span-2">
-              <span className="font-medium">Firma (optional)</span>
-              <Input
-                value={form.company}
-                onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-                placeholder="Firmenname (optional)"
-                maxLength={120}
-              />
-              <div className="text-xs text-slate-500 mt-1">Wird gespeichert und angezeigt, wenn ausgefüllt.</div>
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Straße *</span>
-              <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">PLZ *</span>
-              <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Ort *</span>
-              <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">E-Mail (optional)</span>
-              <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-            </label>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold">Rechnungsdaten</h4>
-          </div>
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="text-sm text-slate-700">
-              <span className="font-medium flex items-center justify-between gap-2">
-                <span>Rechnungsnummer</span>
-                {mode === "create" && (
-                  <button
-                    type="button"
-                    className="text-xs text-blue-600 hover:underline"
-                    onClick={refreshInvoiceNumber}
-                  >
-                    Neu berechnen
-                  </button>
-                )}
-              </span>
-              <Input
-                value={form.invoice_number}
-                onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Datum</span>
-              <Input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Kategorie</span>
-              <Select
-                value={form.category_key}
-                onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
-              >
-                <option value="">– Keine –</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Forms-ID (optional)</span>
-              <Input
-                value={form.reservation_request_id}
-                onChange={(e) => setForm((f) => ({ ...f, reservation_request_id: e.target.value }))}
-                placeholder="Reservation Request ID"
-              />
-              <span className="text-xs text-slate-500">Für Forms-Sync / Reservation Request.</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
-              <input
-                type="checkbox"
-                checked={form.b2b}
-                onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
-              />
-              <span>B2B (USt-ID Pflicht)</span>
-            </label>
-            {form.b2b && (
-              <label className="text-sm text-slate-700 md:col-span-2">
-                <span className="font-medium">USt-ID</span>
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">Datum</span>
                 <Input
-                  value={form.ust_id}
-                  onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                  required
                 />
               </label>
-            )}
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">Kategorie</span>
+                <Select
+                  value={form.category_key}
+                  onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
+                >
+                  <option value="">– Keine –</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="text-sm text-slate-700">
+                <span className="font-medium">Forms-ID (optional)</span>
+                <Input
+                  value={form.reservation_request_id}
+                  onChange={(e) => setForm((f) => ({ ...f, reservation_request_id: e.target.value }))}
+                  placeholder="Reservation Request ID"
+                />
+                <span className="text-xs text-slate-500">Für Forms-Sync / Reservation Request.</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.b2b}
+                  onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
+                />
+                <span>B2B (USt-ID Pflicht)</span>
+              </label>
+              {form.b2b && (
+                <label className="text-sm text-slate-700 md:col-span-2">
+                  <span className="font-medium">USt-ID</span>
+                  <Input
+                    value={form.ust_id}
+                    onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
+                  />
+                </label>
+              )}
+            </div>
           </div>
         </div>
 

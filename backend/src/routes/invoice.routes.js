@@ -9,6 +9,7 @@ import {
   getInvoiceEmailPreview,
   sendInvoiceEmail,
   getNextInvoiceNumber,
+  updateInvoice,
   markPaid,
   exportInvoiceToDatev,
   regenerateInvoicePdf,
@@ -43,6 +44,7 @@ router.get("/", getAllInvoices);
 router.get("/:id", getInvoiceById);
 router.get("/:id/pdf", getInvoicePdf);
 router.post("/:id/pdf/regenerate", requireRole("admin"), regenerateInvoicePdf);
+router.put("/:id", updateInvoice);
 router.post("/", createInvoice);
 
 // Löschen

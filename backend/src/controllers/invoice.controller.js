@@ -762,6 +762,227 @@ if (!Array.isArray(items) || items.length === 0) {
   }
 };
 
+export const updateInvoice = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID." });
+
+  const { recipient, invoice, items } = req.body || {};
+
+  if (!recipient) return res.status(400).json({ message: "Empfängerdaten fehlen." });
+  if (!recipient.name || recipient.name.trim() === "") return res.status(400).json({ message: "Empfängername fehlt." });
+  if (!recipient.street || recipient.street.trim() === "") return res.status(400).json({ message: "Straße fehlt." });
+  if (!recipient.zip || recipient.zip.trim() === "") return res.status(400).json({ message: "PLZ fehlt." });
+  if (!recipient.city || recipient.city.trim() === "") return res.status(400).json({ message: "Ort fehlt." });
+
+  if (!invoice) return res.status(400).json({ message: "Rechnungsdaten fehlen." });
+  if (!invoice.date || invoice.date.trim() === "") return res.status(400).json({ message: "Rechnungsdatum fehlt." });
+  if (!invoice.invoice_number || invoice.invoice_number.trim() === "") {
+    return res.status(400).json({ message: "Rechnungsnummer fehlt." });
+  }
+  if (invoice.b2b && (!invoice.ust_id || invoice.ust_id.trim() === "")) {
+    return res.status(400).json({ message: "Für B2B ist eine USt-ID erforderlich." });
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
+  }
+
+  const normalizedItems = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const desc = (item.description || "").trim();
+    const quantity = parseDecimalInput(item.quantity);
+    const unitPrice = parseDecimalInput(item.unit_price_gross);
+    const vatKey = Number(item.vat_key);
+
+    if (!desc) return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
+    if (quantity === null || !Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+    if (unitPrice === null || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+    if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
+      return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+
+    normalizedItems.push({
+      description: desc,
+      quantity,
+      unit_price_gross: unitPrice,
+      vat_key: vatKey,
+      line_total_gross: n(quantity) * n(unitPrice),
+    });
+  }
+
+  try {
+    const existing = await prisma.invoices.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        invoice_number: true,
+        datev_export_status: true,
+        reservation_request_id: true,
+        category: true,
+        external_reference: true,
+        recipient_id: true,
+      },
+    });
+
+    if (!existing) return res.status(404).json({ message: "Rechnung nicht gefunden." });
+    if (existing.datev_export_status === "SUCCESS") {
+      return res.status(423).json({ message: "Rechnung wurde bereits an DATEV exportiert und kann nicht bearbeitet werden." });
+    }
+
+    const totals = calculateTotals(normalizedItems);
+    const invoiceDate = parseDateInput(invoice.date, "date");
+    const category = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
+    const reservationRequestId =
+      invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
+    const externalReference =
+      invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : existing.external_reference || null;
+    const isB2B = invoice.b2b === true;
+    const ustId = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
+
+    let invoiceNumber = (invoice.invoice_number || "").toString().trim();
+    if (invoiceNumber !== existing.invoice_number) {
+      const conflict = await prisma.invoices.findFirst({
+        where: { invoice_number: invoiceNumber, NOT: { id } },
+        select: { id: true },
+      });
+      if (conflict) {
+        return res.status(409).json({ message: "Rechnungsnummer bereits vergeben." });
+      }
+    }
+
+    const rawRecipientId = recipient.recipient_id ?? recipient.id ?? null;
+    const recipientId = rawRecipientId === null || rawRecipientId === undefined || rawRecipientId === "" ? null : Number(rawRecipientId);
+    if (recipientId !== null && !Number.isFinite(recipientId)) {
+      return res.status(400).json({ message: "Ungültige Empfänger-ID." });
+    }
+
+    const rName = (recipient.name || "").trim();
+    const rStreet = (recipient.street || "").trim();
+    const rZip = (recipient.zip || "").trim();
+    const rCity = (recipient.city || "").trim();
+    const rCompany = (recipient.company || "").trim();
+    const rEmail = (recipient.email || "").trim();
+    const rPhone = (recipient.phone || "").trim();
+
+    await prisma.$transaction(async (tx) => {
+      let recipientRow = null;
+      if (recipientId) {
+        recipientRow = await tx.recipients.findUnique({
+          where: { id: recipientId },
+          select: { id: true, company: true, email: true, phone: true },
+        });
+        if (!recipientRow) {
+          throw Object.assign(new Error("Empfänger nicht gefunden."), { code: "RECIPIENT_NOT_FOUND" });
+        }
+        await tx.recipients.update({
+          where: { id: recipientId },
+          data: {
+            name: rName,
+            company: rCompany || null,
+            street: rStreet || null,
+            zip: rZip || null,
+            city: rCity || null,
+            email: rEmail || null,
+            phone: rPhone || null,
+          },
+        });
+      } else {
+        recipientRow = await tx.recipients.findFirst({
+          where: { name: rName, street: rStreet, zip: rZip, city: rCity },
+          select: { id: true, company: true, email: true, phone: true },
+        });
+
+        if (!recipientRow) {
+          recipientRow = await tx.recipients.create({
+            data: {
+              name: rName,
+              company: rCompany || null,
+              street: rStreet || null,
+              zip: rZip || null,
+              city: rCity || null,
+              email: rEmail || null,
+              phone: rPhone || null,
+            },
+            select: { id: true },
+          });
+        } else if (rCompany && !recipientRow.company) {
+          await tx.recipients.update({
+            where: { id: recipientRow.id },
+            data: { company: rCompany },
+          });
+        }
+      }
+
+      await tx.invoice_items.deleteMany({ where: { invoice_id: id } });
+      if (normalizedItems.length) {
+        await tx.invoice_items.createMany({
+          data: normalizedItems.map((i) => ({
+            invoice_id: id,
+            description: i.description,
+            quantity: i.quantity,
+            unit_price_gross: i.unit_price_gross,
+            vat_key: i.vat_key,
+            line_total_gross: i.line_total_gross,
+          })),
+        });
+      }
+
+      await tx.invoices.update({
+        where: { id },
+        data: {
+          invoice_number: invoiceNumber,
+          date: invoiceDate,
+          recipient_id: recipientRow.id,
+          category,
+          reservation_request_id: reservationRequestId,
+          external_reference: externalReference,
+          b2b: isB2B,
+          ust_id: ustId,
+          net_19: totals.net_19,
+          vat_19: totals.vat_19,
+          gross_19: totals.gross_19,
+          net_7: totals.net_7,
+          vat_7: totals.vat_7,
+          gross_7: totals.gross_7,
+          gross_total: totals.gross_total,
+        },
+      });
+    });
+
+    // PDF nach Bearbeitung direkt neu erstellen (bestehende wird ersetzt)
+    try {
+      const pdfDir = await getPdfDir();
+      const filename = `RE-${invoiceNumber}.pdf`;
+      const filepath = path.join(pdfDir, filename);
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+      }
+    } catch (err) {
+      console.warn("[PDF] Konnte bestehendes PDF vor Neu-Generierung nicht löschen:", err.message);
+    }
+    await ensureInvoicePdf(id);
+
+    return res.json({ message: "Rechnung aktualisiert", invoice_id: id });
+  } catch (err) {
+    if (err?.code === "RECIPIENT_NOT_FOUND") {
+      return res.status(400).json({ message: "Empfänger konnte nicht gefunden werden." });
+    }
+    if (err?.code === "BAD_DATE") {
+      return res.status(400).json({ message: err.message || "Ungültiges Datum." });
+    }
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden." });
+    }
+    console.error("Fehler beim Aktualisieren der Rechnung:", err);
+    return res.status(500).json({ error: "Es ist ein Fehler beim Aktualisieren der Rechnung aufgetreten." });
+  }
+};
+
 /**
  * GET /api/invoices
  * Liste aller Rechnungen
