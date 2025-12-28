@@ -121,6 +121,7 @@ model invoices {
 model recipients {
   id         Int        @id @default(autoincrement())
   name       String     @db.VarChar(255)
+  company    String?    @db.VarChar(255)
   street     String?    @db.VarChar(255)
   zip        String?    @db.VarChar(20)
   city       String?    @db.VarChar(255)

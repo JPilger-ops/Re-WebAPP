@@ -1763,6 +1763,7 @@ function CustomerFormModal({
 }) {
   const [form, setForm] = useState({
     name: customer?.name || "",
+    company: customer?.company || "",
     street: customer?.street || "",
     zip: customer?.zip || "",
     city: customer?.city || "",
@@ -1783,6 +1784,7 @@ function CustomerFormModal({
     try {
       const payload = {
         name: form.name.trim(),
+        company: form.company.trim() || null,
         street: form.street.trim() || null,
         zip: form.zip.trim() || null,
         city: form.city.trim() || null,
@@ -1818,6 +1820,10 @@ function CustomerFormModal({
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               required
             />
+          </label>
+          <label className="text-sm text-slate-700">
+            <span className="font-medium">Firma (optional)</span>
+            <Input value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))} />
           </label>
           <label className="text-sm text-slate-700">
             <span className="font-medium">E-Mail</span>
@@ -1889,6 +1895,7 @@ function InvoiceFormModal({
   ]);
   const [form, setForm] = useState({
     recipient_id: "",
+    company: "",
     name: "",
     street: "",
     zip: "",
@@ -1945,6 +1952,7 @@ function InvoiceFormModal({
         const data = await getInvoice(id);
         setForm({
           recipient_id: data.invoice.recipient.id ? String(data.invoice.recipient.id) : "",
+          company: (data.invoice.recipient as any)?.company || "",
           name: data.invoice.recipient.name || "",
           street: data.invoice.recipient.street || "",
           zip: data.invoice.recipient.zip || "",
@@ -1996,6 +2004,7 @@ function InvoiceFormModal({
     setForm((f) => ({
       ...f,
       recipient_id: customer.id ? String(customer.id) : "",
+      company: customer.company || "",
       name: customer.name || "",
       street: customer.street || "",
       zip: customer.zip || "",
@@ -2059,6 +2068,7 @@ function InvoiceFormModal({
     try {
       const payload = {
         recipient: {
+          company: form.company.trim() || null,
           name: form.name.trim(),
           street: form.street.trim(),
           zip: form.zip.trim(),
@@ -2117,66 +2127,116 @@ function InvoiceFormModal({
     </div>
   ) : (
     <>
-      <div className="grid md:grid-cols-2 gap-3">
-        <label className="text-sm text-slate-700 md:col-span-1">
-          <span className="font-medium">Empfänger / Name</span>
-          <div className="relative">
-            <input
-              className="input w-full"
-              value={form.name}
-              onChange={(e) => {
-                const val = e.target.value;
-                setForm((f) => ({ ...f, name: val, recipient_id: "" }));
-                if (!val) {
-                  setForm((f) => ({ ...f, street: "", zip: "", city: "", email: "" }));
-                }
-              }}
-              list="recipient-suggestions"
-              placeholder="Empfänger eingeben oder wählen"
-            />
-            <datalist id="recipient-suggestions">
-              {customers.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Kundendaten</h4>
+            <span className="text-xs text-slate-500">Empfänger zuerst erfassen.</span>
           </div>
-          <div className="text-xs text-slate-500 mt-1">
-            Freitext möglich. Wähle einen Vorschlag, um Adressdaten automatisch zu übernehmen.
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="text-sm text-slate-700 md:col-span-2">
+              <span className="font-medium">Empfänger / Name *</span>
+              <div className="relative">
+                <input
+                  className="input w-full"
+                  value={form.name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setForm((f) => ({ ...f, name: val, recipient_id: "" }));
+                    if (!val) {
+                      setForm((f) => ({ ...f, street: "", zip: "", city: "", email: "" }));
+                    }
+                  }}
+                  list="recipient-suggestions"
+                  placeholder="Empfänger eingeben oder wählen"
+                  required
+                />
+                <datalist id="recipient-suggestions">
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.name} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Freitext möglich. Wähle einen Vorschlag, um Adressdaten automatisch zu übernehmen.
+              </div>
+            </label>
+            <label className="text-sm text-slate-700 md:col-span-2">
+              <span className="font-medium">Firma (optional)</span>
+              <Input
+                value={form.company}
+                onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+                placeholder="Firmenname (optional)"
+                maxLength={120}
+              />
+              <div className="text-xs text-slate-500 mt-1">Wird gespeichert und angezeigt, wenn ausgefüllt.</div>
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Straße *</span>
+              <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">PLZ *</span>
+              <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Ort *</span>
+              <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">E-Mail (optional)</span>
+              <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            </label>
           </div>
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium flex items-center justify-between gap-2">
-            <span>Rechnungsnummer</span>
-            {mode === "create" && (
-              <button
-                type="button"
-                className="text-xs text-blue-600 hover:underline"
-                onClick={refreshInvoiceNumber}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Rechnungsdaten</h4>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <label className="text-sm text-slate-700">
+              <span className="font-medium flex items-center justify-between gap-2">
+                <span>Rechnungsnummer</span>
+                {mode === "create" && (
+                  <button
+                    type="button"
+                    className="text-xs text-blue-600 hover:underline"
+                    onClick={refreshInvoiceNumber}
+                  >
+                    Neu berechnen
+                  </button>
+                )}
+              </span>
+              <Input
+                value={form.invoice_number}
+                onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Datum</span>
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Kategorie</span>
+              <Select
+                value={form.category_key}
+                onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
               >
-                Neu berechnen
-              </button>
-            )}
-          </span>
-          <Input
-            value={form.invoice_number}
-            onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))}
-            required
-          />
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Kategorie</span>
-          <Select
-            value={form.category_key}
-            onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
-          >
-            <option value="">– Keine –</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.key}>
-                {c.label}
-              </option>
-            ))}
-          </Select>
-        </label>
+                <option value="">– Keine –</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.key}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
             <label className="text-sm text-slate-700">
               <span className="font-medium">Forms-ID (optional)</span>
               <Input
@@ -2186,108 +2246,82 @@ function InvoiceFormModal({
               />
               <span className="text-xs text-slate-500">Für Forms-Sync / Reservation Request.</span>
             </label>
-            <label className="text-sm text-slate-700">
-              <span className="font-medium">Datum</span>
-              <Input
-                type="date"
-                value={form.date}
-            onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-            required
-          />
-        </label>
-        <label className="flex items-center gap-2 text-sm text-slate-700 mt-6">
-          <input
-            type="checkbox"
-            checked={form.b2b}
-            onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
-          />
-          <span>B2B (USt-ID Pflicht)</span>
-        </label>
-        {form.b2b && (
-          <label className="text-sm text-slate-700">
-            <span className="font-medium">USt-ID</span>
-            <Input
-              value={form.ust_id}
-              onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
-            />
-          </label>
-        )}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-3">
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">E-Mail</span>
-          <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Straße *</span>
-          <Input value={form.street} onChange={(e) => setForm((f) => ({ ...f, street: e.target.value }))} />
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">PLZ *</span>
-          <Input value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} />
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="font-medium">Ort *</span>
-          <Input value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
-        </label>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h4 className="font-semibold">Positionen</h4>
-          <Button variant="secondary" type="button" onClick={addItem}>
-            Position hinzufügen
-          </Button>
+            <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.b2b}
+                onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
+              />
+              <span>B2B (USt-ID Pflicht)</span>
+            </label>
+            {form.b2b && (
+              <label className="text-sm text-slate-700 md:col-span-2">
+                <span className="font-medium">USt-ID</span>
+                <Input
+                  value={form.ust_id}
+                  onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
+                />
+              </label>
+            )}
+          </div>
         </div>
+
         <div className="space-y-2">
-          {items.map((item, idx) => (
-            <div key={idx} className="grid md:grid-cols-4 gap-2 items-start border border-slate-200 rounded-md p-3">
-              <input
-                className="input md:col-span-2"
-                placeholder="Beschreibung"
-                value={item.description}
-                onChange={(e) => updateItem(idx, "description", e.target.value)}
-              />
-              <input
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={item.quantity}
-                onChange={(e) => updateItem(idx, "quantity", normalizeNumberInput(e.target.value))}
-              />
-              <input
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={item.unit_price_gross}
-                onChange={(e) => updateItem(idx, "unit_price_gross", normalizeNumberInput(e.target.value))}
-              />
-              <select
-                className="input"
-                value={item.vat_key}
-                onChange={(e) => updateItem(idx, "vat_key", Number(e.target.value))}
-              >
-                <option value={1}>19% MwSt</option>
-                <option value={2}>7% MwSt</option>
-              </select>
-              <div className="flex justify-end md:items-start">
-                {items.length > 1 && (
-                  <Button
-                    variant="danger"
-                    type="button"
-                    onClick={() => removeItem(idx)}
-                    className="min-w-[140px] h-10 w-full md:w-auto text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
-                    title="Position entfernen"
-                  >
-                    🗑 Entfernen
-                  </Button>
-                )}
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Positionen</h4>
+            <Button variant="secondary" type="button" onClick={addItem}>
+              Position hinzufügen
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {items.map((item, idx) => (
+              <div key={idx} className="grid md:grid-cols-4 gap-2 items-start border border-slate-200 rounded-md p-3">
+                <input
+                  className="input md:col-span-2"
+                  placeholder="Beschreibung"
+                  value={item.description}
+                  onChange={(e) => updateItem(idx, "description", e.target.value)}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(idx, "quantity", normalizeNumberInput(e.target.value))}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={item.unit_price_gross}
+                  onChange={(e) => updateItem(idx, "unit_price_gross", normalizeNumberInput(e.target.value))}
+                />
+                <select
+                  className="input"
+                  value={item.vat_key}
+                  onChange={(e) => updateItem(idx, "vat_key", Number(e.target.value))}
+                >
+                  <option value={1}>19% MwSt</option>
+                  <option value={2}>7% MwSt</option>
+                </select>
+                <div className="flex justify-end md:items-start">
+                  {items.length > 1 && (
+                    <Button
+                      variant="danger"
+                      type="button"
+                      onClick={() => removeItem(idx)}
+                      className="min-w-[140px] h-10 w-full md:w-auto text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
+                      title="Position entfernen"
+                    >
+                      🗑 Entfernen
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
@@ -2698,7 +2732,8 @@ function InvoiceDetailPage() {
 
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
             <div className="text-xs uppercase text-slate-500">Empfänger</div>
-            <div className="text-slate-900 font-semibold">{inv.recipient.name}</div>
+            {inv.recipient.company && <div className="text-slate-900 font-semibold">{inv.recipient.company}</div>}
+            <div className="text-slate-900 font-semibold">{inv.recipient.name || "–"}</div>
             <div className="text-slate-600 text-sm">
               {[inv.recipient.street, `${inv.recipient.zip || ""} ${inv.recipient.city || ""}`.trim()].filter(Boolean).join(", ") || "–"}
             </div>

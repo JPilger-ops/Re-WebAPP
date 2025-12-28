@@ -231,6 +231,7 @@ const shapeInvoiceListRow = (invoice, recipient, category) => {
   return {
     ...base,
     recipient_name: recipient?.name || null,
+    recipient_company: recipient?.company || null,
     recipient_email: recipient?.email || null,
     category_id: category?.id || null,
     category_label: category?.label || null,
@@ -273,6 +274,7 @@ const loadInvoiceWithCategory = async (id) => {
   const row = normalizeInvoiceDecimals({
     ...invoice,
     recipient_name: invoice.recipients?.name || null,
+    recipient_company: invoice.recipients?.company || null,
     recipient_street: invoice.recipients?.street || null,
     recipient_zip: invoice.recipients?.zip || null,
     recipient_city: invoice.recipients?.city || null,
@@ -516,9 +518,9 @@ if (!recipient.city || recipient.city.trim() === "") {
 
 
 // --- Rechnungsdaten prüfen ---
-if (!invoice) {
-  return res.status(400).json({ message: "Rechnungsdaten fehlen." });
-}
+  if (!invoice) {
+    return res.status(400).json({ message: "Rechnungsdaten fehlen." });
+  }
 
 if (!invoice.date || invoice.date.trim() === "") {
   return res.status(400).json({ message: "Rechnungsdatum fehlt." });
@@ -579,6 +581,7 @@ if (!Array.isArray(items) || items.length === 0) {
     const rStreet = (recipient.street || "").trim();
     const rZip    = (recipient.zip    || "").trim();
     const rCity   = (recipient.city   || "").trim();
+    const rCompany = (recipient.company || "").trim();
 
     // Gesamtsummen berechnen
     const totals = calculateTotals(normalizedItems);
@@ -620,13 +623,14 @@ if (!Array.isArray(items) || items.length === 0) {
           zip: rZip,
           city: rCity,
         },
-        select: { id: true },
+        select: { id: true, company: true },
       });
 
       if (!recipientRow) {
         recipientRow = await tx.recipients.create({
           data: {
             name: rName,
+            company: rCompany || null,
             street: rStreet || null,
             zip: rZip || null,
             city: rCity || null,
@@ -634,6 +638,11 @@ if (!Array.isArray(items) || items.length === 0) {
             phone: recipient.phone || null,
           },
           select: { id: true },
+        });
+      } else if (rCompany && !recipientRow.company) {
+        await tx.recipients.update({
+          where: { id: recipientRow.id },
+          data: { company: rCompany },
         });
       }
 
@@ -863,6 +872,7 @@ export const getInvoiceById = async (req, res) => {
       recipient: {
         id: invoiceRow.recipient_id,
         name: invoiceRow.recipients?.name || null,
+        company: invoiceRow.recipients?.company || null,
         street: invoiceRow.recipients?.street || null,
         zip: invoiceRow.recipients?.zip || null,
         city: invoiceRow.recipients?.city || null,
@@ -1045,6 +1055,7 @@ async function ensureInvoicePdf(id) {
       gross_total: n(invoiceRow.gross_total),
       recipient: {
         name: invoiceRow.recipients?.name || "",
+        company: invoiceRow.recipients?.company || "",
         street: invoiceRow.recipients?.street || "",
         zip: invoiceRow.recipients?.zip || "",
         city: invoiceRow.recipients?.city || "",
@@ -1522,9 +1533,10 @@ function generateInvoiceHtml(
   </div>
 
   <div class="recipient">
-    <strong>${invoice.recipient.name}</strong><br/>
-    ${invoice.recipient.street}<br/>
-    ${invoice.recipient.zip} ${invoice.recipient.city}
+    ${invoice.recipient.company ? `${escapeHtml(invoice.recipient.company)}<br/>` : ""}
+    <strong>${escapeHtml(invoice.recipient.name)}</strong><br/>
+    ${escapeHtml(invoice.recipient.street)}<br/>
+    ${escapeHtml(invoice.recipient.zip)} ${escapeHtml(invoice.recipient.city)}
   </div>
 
   <div class="content">

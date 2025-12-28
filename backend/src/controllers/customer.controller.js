@@ -6,6 +6,7 @@ export const getAllCustomers = async (req, res) => {
       select: {
         id: true,
         name: true,
+        company: true,
         street: true,
         zip: true,
         city: true,
@@ -23,7 +24,7 @@ export const getAllCustomers = async (req, res) => {
 };
 
 export const createCustomer = async (req, res) => {
-  const { name, street, zip, city, email, phone } = req.body;
+  const { name, company, street, zip, city, email, phone } = req.body;
 
   if (!name) {
     return res.status(400).json({ message: "Name ist erforderlich" });
@@ -33,6 +34,7 @@ export const createCustomer = async (req, res) => {
     const result = await prisma.recipients.create({
       data: {
         name,
+        company: company || null,
         street,
         zip,
         city,
@@ -51,7 +53,7 @@ export const createCustomer = async (req, res) => {
 
 export const updateCustomer = async (req, res) => {
   const id = Number(req.params.id);
-  const { name, street, zip, city, email, phone } = req.body;
+  const { name, company, street, zip, city, email, phone } = req.body;
 
   if (!id) return res.status(400).json({ message: "Ungültige Kunden-ID" });
 
@@ -60,6 +62,7 @@ export const updateCustomer = async (req, res) => {
       where: { id },
       data: {
         name,
+        company: company || null,
         street,
         zip,
         city,

@@ -438,6 +438,7 @@ export async function getInvoiceStats(params?: { year?: number; categories?: str
 export interface Customer {
   id: number;
   name: string;
+  company?: string | null;
   street?: string | null;
   zip?: string | null;
   city?: string | null;
@@ -475,6 +476,7 @@ export interface InvoiceListItem {
   invoice_number: string;
   date: string;
   recipient_name: string | null;
+  recipient_company?: string | null;
   recipient_email: string | null;
   category_id: number | null;
   category_label: string | null;
