@@ -1057,6 +1057,7 @@ function Invoices() {
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [filtered, setFiltered] = useState<InvoiceListItem[]>([]);
   const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [invoiceNumberFilter, setInvoiceNumberFilter] = useState(searchParams.get("inv") || "");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>(initialStatus);
   const [categoryFilter, setCategoryFilter] = useState<string>(searchParams.get("category") || "all");
   const [fromDate, setFromDate] = useState<string>(searchParams.get("from") || "");
@@ -1111,10 +1112,19 @@ function Invoices() {
     return labels[s];
   };
 
-  const applyFilter = (list: InvoiceListItem[], term: string, status: InvoiceStatusFilter, categoryKey: string, customerTerm: string) => {
+  const applyFilter = (
+    list: InvoiceListItem[],
+    term: string,
+    status: InvoiceStatusFilter,
+    categoryKey: string,
+    customerTerm: string,
+    invoiceNoTerm: string
+  ) => {
     const t = term.toLowerCase();
     const ct = customerTerm.toLowerCase();
+    const it = invoiceNoTerm.toLowerCase();
     return list.filter((inv) => {
+      const matchesInvoiceNumber = !it || inv.invoice_number.toLowerCase().includes(it);
       const matchesTerm =
         !t ||
         inv.invoice_number.toLowerCase().includes(t) ||
@@ -1128,7 +1138,7 @@ function Invoices() {
           ? st !== "canceled"
           : st === status;
       const matchesCategory = categoryKey === "all" || inv.category_label === categoryKey;
-      return matchesTerm && matchesCustomer && matchesStatus && matchesCategory;
+      return matchesTerm && matchesCustomer && matchesStatus && matchesCategory && matchesInvoiceNumber;
     });
   };
 
@@ -1148,7 +1158,7 @@ function Invoices() {
       ]);
       setInvoices(res);
       setCategories(cats);
-      setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter));
+      setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter));
       setSelectedIds((prev) => prev.filter((id) => res.some((inv) => inv.id === id)));
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -1160,11 +1170,11 @@ function Invoices() {
 
   useEffect(() => {
     load();
-  }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter]);
+  }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter, invoiceNumberFilter]);
 
   useEffect(() => {
-    setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter, customerFilter));
-  }, [invoices, search, statusFilter, categoryFilter, customerFilter]);
+    setFiltered(applyFilter(invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter));
+  }, [invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => filtered.some((inv) => inv.id === id)));
@@ -1178,8 +1188,9 @@ function Invoices() {
     if (fromDate) params.set("from", fromDate);
     if (toDate) params.set("to", toDate);
     if (customerFilter.trim()) params.set("customer", customerFilter.trim());
+    if (invoiceNumberFilter.trim()) params.set("inv", invoiceNumberFilter.trim());
     setSearchParams(params, { replace: true });
-  }, [search, statusFilter, categoryFilter, fromDate, toDate, customerFilter, setSearchParams]);
+  }, [search, statusFilter, categoryFilter, fromDate, toDate, customerFilter, invoiceNumberFilter, setSearchParams]);
 
   const resetFilters = () => {
     setSearch("");
@@ -1188,10 +1199,12 @@ function Invoices() {
     setFromDate("");
     setToDate("");
     setCustomerFilter("");
+    setInvoiceNumberFilter("");
   };
 
   const activeFilters = [
     search ? "Suche" : null,
+    invoiceNumberFilter ? `Rechnungsnr.: ${invoiceNumberFilter}` : null,
     statusFilter !== "active" ? `Status: ${statusLabel(statusFilter)}` : null,
     categoryFilter !== "all" ? `Kategorie: ${categoryFilter}` : null,
     fromDate ? `Von ${fromDate}` : null,
@@ -1449,6 +1462,12 @@ function Invoices() {
             placeholder="Nummer/Empfänger"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="h-9 text-sm"
+          />
+          <Input
+            placeholder="Rechnungsnr."
+            value={invoiceNumberFilter}
+            onChange={(e) => setInvoiceNumberFilter(e.target.value)}
             className="h-9 text-sm"
           />
           <Input
