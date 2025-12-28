@@ -1074,6 +1074,13 @@ function Invoices() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [cancelDialog, setCancelDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: "" });
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [createProgress, setCreateProgress] = useState<{
+    open: boolean;
+    status: "idle" | "submitting" | "success" | "error";
+    invoiceId?: number | null;
+    invoiceNumber?: string;
+    error?: string | null;
+  }>({ open: false, status: "idle" });
 
   const computeStatus = (inv: InvoiceListItem): "open" | "sent" | "paid" | "canceled" => {
     if (inv.canceled_at) return "canceled";
@@ -1655,12 +1662,21 @@ function Invoices() {
           mode={modal.mode}
           id={modal.id}
           onClose={() => setModal(null)}
+          onSubmitStart={() =>
+            setCreateProgress({ open: true, status: "submitting", invoiceId: null, invoiceNumber: undefined, error: null })
+          }
           onSaved={(invoiceId, invNumber) => {
             setToast({ type: "success", message: `Rechnung ${invNumber} gespeichert.` });
             navigate(`/invoices/${invoiceId}`);
             load();
           }}
+          onSubmitSuccess={(invoiceId, invNumber) =>
+            setCreateProgress({ open: true, status: "success", invoiceId, invoiceNumber: invNumber, error: null })
+          }
           onError={(msg) => setToast({ type: "error", message: msg })}
+          onSubmitError={(msg) =>
+            setCreateProgress({ open: true, status: "error", invoiceId: null, invoiceNumber: undefined, error: msg || "Fehler" })
+          }
         />
       )}
 
@@ -1740,6 +1756,59 @@ function Invoices() {
               </Button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {createProgress.open && (
+        <Modal
+          title={
+            createProgress.status === "success"
+              ? "Rechnung erstellt"
+              : createProgress.status === "error"
+              ? "Fehler bei der Erstellung"
+              : "Rechnung wird erstellt"
+          }
+          onClose={() => setCreateProgress({ open: false, status: "idle", invoiceId: null, invoiceNumber: undefined, error: null })}
+        >
+          {createProgress.status === "submitting" && (
+            <div className="space-y-4 text-center">
+              <div className="flex items-center justify-center">
+                <Spinner />
+              </div>
+              <div className="text-sm text-slate-700">Rechnung wird erstellt. Bitte warten ...</div>
+            </div>
+          )}
+          {createProgress.status === "success" && (
+            <div className="space-y-4 text-center">
+              <div className="text-sm text-slate-700">Rechnung {createProgress.invoiceNumber || ""} wurde erstellt.</div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button onClick={() => handlePdfOpen(createProgress.invoiceId || 0)}>Rechnung öffnen</Button>
+                <Button variant="secondary" onClick={() => navigate("/invoices")}>
+                  Rechnungsübersicht
+                </Button>
+              </div>
+            </div>
+          )}
+          {createProgress.status === "error" && (
+            <div className="space-y-4 text-center">
+              <div className="text-sm text-red-700">{createProgress.error || "Erstellung fehlgeschlagen."}</div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button
+                  onClick={() =>
+                    setCreateProgress((prev) => ({ ...prev, status: "submitting", error: null, open: true }))
+                  }
+                >
+                  Erneut versuchen
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setCreateProgress({ open: false, status: "idle", invoiceId: null, invoiceNumber: undefined, error: null })}
+                >
+                  Schließen
+                </Button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </div>
