@@ -37,3 +37,7 @@ logs/
 *.swp
 backend/core/
 .npmrc
+
+# Logos/Assets (nur Standard-Favicon erlauben)
+backend/public/logos/*
+!backend/public/logos/RE-WebAPP.png

@@ -25,13 +25,13 @@ Empfohlen für Server-Rollout mit Versionen und geteilten Daten/PDFs.
 
 1. Stelle sicher, dass das Repo sauber ist (`git status`) und der gewünschte Commit ausgecheckt ist.
 2. Starte den Wizard: `./scripts/deploy-wizard.sh`
-   - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update) und Compose-Projektname.
-   - Exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, legt `shared/data` und `shared/pdfs` an und verlinkt sie in das Release.
+   - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update), Compose-Projektname und zentrale `.env`-Werte (DB_*, APP_BIND_IP/APP_PUBLIC_PORT, PDF_*).
+   - Exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, legt `shared/data` und `shared/pdfs` an und verlinkt sie in das Release (Einstellungen/Kategorien bleiben erhalten).
    - Schreibt Build-Metadaten (SHA/Number/Time) in `.env`, setzt optional `COMPOSE_PROJECT_NAME`.
-   - Führt `docker compose build`, `prisma migrate deploy`, `prisma db seed` (legt admin/admin an, falls fehlend) und `docker compose up -d` aus.
+   - Führt `docker compose build`, `prisma migrate deploy`, optional `prisma db seed` (legt admin/admin an, falls fehlend) und `docker compose up -d` aus.
    - Aktiviert das Release über den Symlink `<BASE>/current`.
 3. Healthcheck (Wizard macht optional): `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
-4. Standard-Login nach frischem Setup: admin / admin (bitte direkt ändern).
+4. Standard-Login nach frischem Setup: admin / admin (bitte direkt ändern; bei Updates bleibt bestehendes Passwort unverändert, wenn Seed übersprungen wird).
 
 Defaults:
 - Host-IP: 192.200.255.225
@@ -85,6 +85,19 @@ Settings-Tabs (UI, Admin-only):
   - PDF-Fehler: PDF-Path in Settings prüfen, Test-Path Endpoint nutzen.
   - Mail: EMAIL_SEND_DISABLED/REDIRECT beachten; SMTP-Konfig prüfen.
   - DATEV: Status/Timestamp in Invoice (list/detail); parity scripts nutzen.
+
+## 7) Prereqs: Docker/Compose installieren (Ubuntu/Debian Beispiel)
+```bash
+sudo apt-get update
+sudo apt-get install -y gnupg ca-certificates curl lsb-release apt-transport-https
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+docker --version
+docker compose version
+```
 
 ## 6) Developer / Scripts
 Backend-Smokes/Special:

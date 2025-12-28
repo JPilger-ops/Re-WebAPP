@@ -9,6 +9,18 @@ prompt() {
   read -r -p "${message} [${default}]: " var
   echo "${var:-$default}"
 }
+set_env_value() {
+  local file="$1" key="$2" value="$3"
+  if grep -q "^${key}=" "$file" 2>/dev/null; then
+    sed -i "s#^${key}=.*#${key}=${value}#g" "$file"
+  else
+    echo "${key}=${value}" >> "$file"
+  fi
+}
+current_env_value() {
+  local file="$1" key="$2"
+  grep -m1 "^${key}=" "$file" 2>/dev/null | cut -d= -f2-
+}
 
 command -v docker >/dev/null 2>&1 || fail "Docker nicht gefunden. Bitte installieren."
 command -v docker compose >/dev/null 2>&1 || fail "docker compose (V2) nicht gefunden. Bitte installieren."
@@ -55,6 +67,30 @@ cd "${RELEASE_DIR}"
 info "Führe Basis-Setup aus (env-Dateien)"
 SETUP_QUIET=1 ./scripts/setup.sh
 
+ENV_FILE="${RELEASE_DIR}/.env"
+info "Frage zentrale .env Werte ab (leer lassen = aktuelle Werte bleiben)"
+DB_HOST_VAL="$(current_env_value "${ENV_FILE}" "DB_HOST")"
+DB_PORT_VAL="$(current_env_value "${ENV_FILE}" "DB_PORT")"
+DB_NAME_VAL="$(current_env_value "${ENV_FILE}" "DB_NAME")"
+DB_USER_VAL="$(current_env_value "${ENV_FILE}" "DB_USER")"
+DB_PASS_VAL="$(current_env_value "${ENV_FILE}" "DB_PASS")"
+APP_BIND_IP_VAL="$(current_env_value "${ENV_FILE}" "APP_BIND_IP")"
+APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
+PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
+PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
+PDF_TRASH_VAL="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
+
+set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
+set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt "DB_PORT" "${DB_PORT_VAL:-5432}")"
+set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt "DB_NAME" "${DB_NAME_VAL:-rechnung_prod}")"
+set_env_value "${ENV_FILE}" "DB_USER" "$(prompt "DB_USER" "${DB_USER_VAL:-rechnung_app}")"
+set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt "DB_PASS" "${DB_PASS_VAL:-change_me}")"
+set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL:-0.0.0.0}")"
+set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
+set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "$(prompt "PDF_STORAGE_PATH (Speicher)" "${PDF_STORAGE_VAL:-/app/pdfs}")"
+set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "$(prompt "PDF_ARCHIVE_PATH (optional Archiv)" "${PDF_ARCHIVE_VAL}")"
+set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "$(prompt "PDF_TRASH_PATH (optional Trash)" "${PDF_TRASH_VAL}")"
+
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
 fi
@@ -70,8 +106,17 @@ DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose --project-name "${PR
 info "Prisma Migrationen anwenden"
 docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma migrate deploy
 
-info "Admin-User sicherstellen (admin / admin, bitte später ändern)"
-DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin}" docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma db seed
+RUN_SEED_DEFAULT="ja"
+if [[ "${MODE,,}" == "update" ]]; then
+  RUN_SEED_DEFAULT="nein"
+fi
+RUN_SEED="$(prompt "Admin-Seed ausführen (legt admin/admin an, ändert kein bestehendes PW)" "${RUN_SEED_DEFAULT}")"
+if [[ "${RUN_SEED,,}" == "ja" || "${RUN_SEED,,}" == "y" ]]; then
+  info "Admin-User sicherstellen (admin / admin, bitte später ändern)"
+  DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin}" docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma db seed
+else
+  info "Admin-Seed übersprungen (bestehende Benutzer bleiben unverändert)"
+fi
 
 info "Container starten"
 docker compose --project-name "${PROJECT_NAME}" up -d
