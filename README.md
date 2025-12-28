@@ -18,7 +18,7 @@ docker compose version
 ## Schnellstart (Compose)
 ```bash
 git clone https://github.com/JPilger-ops/Re-WebAPP
-cd rechnungsapp
+cd Re-WebAPP
 ./scripts/setup.sh                 # legt .env + backend/.env an, falls fehlen
 ./scripts/build-meta.sh            # setzt BUILD_* und baut Images (BuildKit)
 docker compose up -d               # startet DB + App
@@ -28,7 +28,7 @@ Login: `admin` / `admin` (bitte direkt ändern).
 
 ## Deployment mit Wizard
 ```bash
-cd rechnungsapp
+cd Re-WebAPP
 ./scripts/deploy-wizard.sh
 ```
 - Fragt nur nicht-UI-konfigurierbare ENV: DB_HOST/PORT/NAME/SCHEMA/USER/PASS, DATABASE_URL, APP_BIND_IP, APP_PUBLIC_PORT, APP_PORT, APP_HTTPS_DISABLE, JWT_SECRET. Defaults: DB_HOST=db, DB_PORT=5432, DB_NAME=rechnung_prod, DB_SCHEMA=public, DB_USER=rechnung_app, DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public, APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031, APP_PORT=3030, APP_HTTPS_DISABLE=true. DB_PASS und JWT_SECRET müssen angegeben werden.
