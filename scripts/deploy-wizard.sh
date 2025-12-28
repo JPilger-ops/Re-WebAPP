@@ -21,6 +21,9 @@ prompt_required() {
     warn "Wert darf nicht leer sein."
   done
 }
+section() {
+  printf "\n--- %s ---\n" "$1"
+}
 set_env_value() {
   local file="$1" key="$2" value="$3"
   if grep -q "^${key}=" "$file" 2>/dev/null; then
@@ -46,6 +49,7 @@ RELEASE_TIME="$(git -C "${ROOT_DIR}" show -s --format=%cI HEAD)"
 
 info "Deployment-Wizard startet. Aktueller Commit: ${RELEASE_SHA} (count ${RELEASE_NUMBER})"
 
+section "Schritt 1: Basisangaben"
 BASE_DIR="$(prompt "Installationspfad" "/opt/rechnungsapp")"
 MODE="$(prompt "Modus (install/update)" "update")"
 PROJECT_NAME="$(prompt "Compose Projektname" "rechnungsapp")"
@@ -80,7 +84,8 @@ info "Führe Basis-Setup aus (env-Dateien)"
 SETUP_QUIET=1 ./scripts/setup.sh
 
 ENV_FILE="${RELEASE_DIR}/.env"
-info "Frage zentrale .env Werte ab (nur nicht-UI Settings, mit sinnvollen Defaults)"
+section "Schritt 2: .env konfigurieren"
+info "Nur nicht-UI Settings. Enter = Default, [] = Pflicht."
 DB_HOST_VAL="$(current_env_value "${ENV_FILE}" "DB_HOST")"
 DB_PORT_VAL="$(current_env_value "${ENV_FILE}" "DB_PORT")"
 DB_NAME_VAL="$(current_env_value "${ENV_FILE}" "DB_NAME")"
@@ -109,14 +114,14 @@ set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "$
 PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
 PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
 PDF_TRASH_VAL="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
-set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "${PDF_STORAGE_VAL:-/app/pdfs}"
-set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "${PDF_ARCHIVE_VAL:-/app/pdfs/archive}"
-set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "${PDF_TRASH_VAL:-/app/pdfs/trash}"
+PDF_STORAGE_PATH="${PDF_STORAGE_VAL:-/app/pdfs}"
+PDF_ARCHIVE_PATH="${PDF_ARCHIVE_VAL:-/app/pdfs/archive}"
+PDF_TRASH_PATH="${PDF_TRASH_VAL:-/app/pdfs/trash}"
+set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "${PDF_STORAGE_PATH}"
+set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "${PDF_ARCHIVE_PATH}"
+set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "${PDF_TRASH_PATH}"
 
 # Verzeichnisse anlegen, damit PDF-Pfade existieren
-PDF_STORAGE_PATH="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
-PDF_ARCHIVE_PATH="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
-PDF_TRASH_PATH="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
 [ -n "${PDF_STORAGE_PATH}" ] && mkdir -p "${PDF_STORAGE_PATH}"
 [ -n "${PDF_ARCHIVE_PATH}" ] && mkdir -p "${PDF_ARCHIVE_PATH}"
 [ -n "${PDF_TRASH_PATH}" ] && mkdir -p "${PDF_TRASH_PATH}"
@@ -125,13 +130,14 @@ if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
 fi
 
-info "Schreibe Build-Metadaten in .env (ohne Build)"
-BUILD_SHA="${RELEASE_SHA}" BUILD_NUMBER="${RELEASE_NUMBER}" BUILD_TIME="${RELEASE_TIME}" SKIP_DOCKER_COMPOSE=1 ./scripts/build-meta.sh
-
 BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
 JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
 info "Backend-Env (JWT_SECRET wird benötigt; andere Keys später in der UI konfigurierbar)"
 set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
+
+section "Schritt 3: Build & Deploy"
+info "Schreibe Build-Metadaten in .env (ohne Build)"
+BUILD_SHA="${RELEASE_SHA}" BUILD_NUMBER="${RELEASE_NUMBER}" BUILD_TIME="${RELEASE_TIME}" SKIP_DOCKER_COMPOSE=1 ./scripts/build-meta.sh
 
 export COMPOSE_PROJECT_NAME="${PROJECT_NAME}"
 
