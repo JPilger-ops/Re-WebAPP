@@ -1662,9 +1662,22 @@ function Invoices() {
             navigate(`/invoices/${invoiceId}`);
             load();
           }}
-          onSubmitSuccess={(invoiceId, invNumber) =>
-            setCreateProgress({ open: true, status: "success", invoiceId, invoiceNumber: invNumber, error: null })
-          }
+          onSubmitSuccess={async (invoiceId, invNumber) => {
+            setCreateProgress({ open: true, status: "submitting", invoiceId, invoiceNumber: invNumber, error: null });
+            try {
+              await regenerateInvoicePdf(invoiceId);
+              setCreateProgress({ open: true, status: "success", invoiceId, invoiceNumber: invNumber, error: null });
+            } catch (err: any) {
+              const apiErr = err as ApiError;
+              setCreateProgress({
+                open: true,
+                status: "error",
+                invoiceId,
+                invoiceNumber: invNumber,
+                error: apiErr.message || "PDF konnte nicht erstellt werden.",
+              });
+            }
+          }}
           onError={(msg) => setToast({ type: "error", message: msg })}
           onSubmitError={(msg) =>
             setCreateProgress({ open: true, status: "error", invoiceId: null, invoiceNumber: undefined, error: msg || "Fehler" })
@@ -1774,8 +1787,11 @@ function Invoices() {
               <div className="text-sm text-slate-700">Rechnung {createProgress.invoiceNumber || ""} wurde erstellt.</div>
               <div className="flex flex-wrap justify-center gap-3">
                 <Button onClick={() => handlePdfOpen(createProgress.invoiceId || 0)}>Rechnung öffnen</Button>
-                <Button variant="secondary" onClick={() => navigate("/invoices")}>
-                  Rechnungsübersicht
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate(createProgress.invoiceId ? `/invoices/${createProgress.invoiceId}` : "/invoices")}
+                >
+                  Details öffnen
                 </Button>
               </div>
             </div>
@@ -1785,11 +1801,13 @@ function Invoices() {
               <div className="text-sm text-red-700">{createProgress.error || "Erstellung fehlgeschlagen."}</div>
               <div className="flex flex-wrap justify-center gap-3">
                 <Button
-                  onClick={() =>
-                    setCreateProgress((prev) => ({ ...prev, status: "submitting", error: null, open: true }))
-                  }
+                  onClick={() => {
+                    const confirmed = window.confirm("Bist du sicher? Aktuellen Versuch verwerfen und neu erstellen?");
+                    if (!confirmed) return;
+                    setCreateProgress({ open: false, status: "idle", invoiceId: null, invoiceNumber: undefined, error: null });
+                  }}
                 >
-                  Erneut versuchen
+                  Löschen und Neu erstellen
                 </Button>
                 <Button
                   variant="secondary"
@@ -1872,16 +1890,37 @@ function InvoiceCreatePage() {
         onSaved={(id, num) => {
           setToast({ type: "success", message: `Rechnung ${num} erstellt.` });
         }}
-        onSubmitSuccess={(id, num) =>
+        onSubmitSuccess={async (id, num) => {
           setCreateModal({
             open: true,
-            status: "success",
+            status: "submitting",
             invoiceId: id,
             invoiceNumber: num,
             pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
             error: null,
-          })
-        }
+          });
+          try {
+            await regenerateInvoicePdf(id);
+            setCreateModal({
+              open: true,
+              status: "success",
+              invoiceId: id,
+              invoiceNumber: num,
+              pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
+              error: null,
+            });
+          } catch (err: any) {
+            const apiErr = err as ApiError;
+            setCreateModal({
+              open: true,
+              status: "error",
+              invoiceId: id,
+              invoiceNumber: num,
+              pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
+              error: apiErr.message || "PDF konnte nicht erstellt werden.",
+            });
+          }
+        }}
         onError={(msg) => setToast({ type: "error", message: msg })}
         onSubmitError={(msg) =>
           setCreateModal({ open: true, status: "error", invoiceId: null, invoiceNumber: undefined, pdfUrl: undefined, error: msg || "Fehler" })
@@ -1918,8 +1957,11 @@ function InvoiceCreatePage() {
               </div>
               <div className="flex flex-wrap justify-center gap-3">
                 <Button onClick={openPdf}>Rechnung öffnen</Button>
-                <Button variant="secondary" onClick={() => navigate("/invoices")}>
-                  Rechnungsübersicht
+                <Button
+                  variant="secondary"
+                  onClick={() => navigate(createModal.invoiceId ? `/invoices/${createModal.invoiceId}` : "/invoices")}
+                >
+                  Details öffnen
                 </Button>
               </div>
             </div>
@@ -1928,7 +1970,15 @@ function InvoiceCreatePage() {
             <div className="space-y-4 text-center">
               <div className="text-sm text-red-700">{createModal.error || "Erstellung fehlgeschlagen."}</div>
               <div className="flex flex-wrap justify-center gap-3">
-                <Button onClick={retryCreate}>Erneut versuchen</Button>
+                <Button
+                  onClick={() => {
+                    const confirmed = window.confirm("Aktuellen Versuch verwerfen und neu erstellen?");
+                    if (!confirmed) return;
+                    retryCreate();
+                  }}
+                >
+                  Löschen und Neu erstellen
+                </Button>
                 <Button variant="secondary" onClick={closeCreateModal}>
                   Schließen
                 </Button>
@@ -2567,7 +2617,7 @@ function InvoiceFormModal({
           Abbrechen
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? "Speichern ..." : "Speichern"}
+          {saving ? (mode === "create" ? "Erstellen ..." : "Speichern ...") : mode === "create" ? "Erstellen" : "Speichern"}
         </Button>
       </div>
     </>
@@ -2590,10 +2640,10 @@ function InvoiceFormModal({
                 {saving ? (
                   <span className="inline-flex items-center gap-2">
                     <Spinner />
-                    Speichern ...
+                    {mode === "create" ? "Erstellen ..." : "Speichern ..."}
                   </span>
                 ) : (
-                  "Speichern"
+                  mode === "create" ? "Erstellen" : "Speichern"
                 )}
               </Button>
             )}

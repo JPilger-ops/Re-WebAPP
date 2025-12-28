@@ -18,7 +18,11 @@
    - Beim Öffnen vorhandene Datei direkt liefern; kein Re-Render.  
    - Force/Neu-render nur via explizitem Trigger (verschiebt alte Datei in `pdfs/trash/`).  
    - UI: Kein Hard-Reload des PDFs nötig.
-4) Qualität & Nachweise  
+4) UI-Verbesserungen (aktuell)  
+   - Erstellen-Flow: Button-Beschriftungen anpassen („Erstellen“, „Details öffnen“).  
+   - Fehler-Dialog: Button „Löschen und Neu erstellen“ mit Sicherheitsabfrage.  
+   - PDF direkt nach erfolgreichem Erstellen generieren/speichern.  
+5) Qualität & Nachweise  
    - `npm --prefix frontend run typecheck`  
    - `docker compose build` (BuildKit aktiv).  
    - `curl /api/version` mit gesetztem sha/number.  
