@@ -1990,8 +1990,8 @@ function InvoiceFormModal({
 }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [items, setItems] = useState<InvoiceItem[]>([
-    { description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 },
+  const [items, setItems] = useState<(InvoiceItem & { unit_price_input?: string })[]>([
+    { description: "", quantity: 1, unit_price_gross: 0, unit_price_input: "", vat_key: 1 },
   ]);
   const [form, setForm] = useState({
     recipient_id: "",
@@ -2033,6 +2033,16 @@ function InvoiceFormModal({
     return Number(val);
   };
 
+  const parsePriceInput = (input: string) => {
+    if (input === null || input === undefined) return NaN;
+    const raw = String(input).trim();
+    if (!raw) return NaN;
+    if (raw.endsWith(",") || raw.endsWith(".")) return NaN;
+    const normalized = raw.replace(",", ".");
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : NaN;
+  };
+
   const loadBase = async () => {
     setLoading(true);
     setError(null);
@@ -2071,6 +2081,7 @@ function InvoiceFormModal({
             description: i.description,
             quantity: Number(i.quantity),
             unit_price_gross: Number(i.unit_price_gross),
+            unit_price_input: i.unit_price_gross !== undefined && i.unit_price_gross !== null ? String(i.unit_price_gross) : "",
             vat_key: Number(i.vat_key),
           }))
         );
@@ -2117,7 +2128,8 @@ function InvoiceFormModal({
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   };
 
-  const addItem = () => setItems((prev) => [...prev, { description: "", quantity: 1, unit_price_gross: 0, vat_key: 1 }]);
+  const addItem = () =>
+    setItems((prev) => [...prev, { description: "", quantity: 1, unit_price_gross: 0, unit_price_input: "", vat_key: 1 }]);
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -2139,7 +2151,7 @@ function InvoiceFormModal({
     const normalizedItems = items.map((i) => ({
       ...i,
       quantity: parseNumberValue(i.quantity),
-      unit_price_gross: parseNumberValue(i.unit_price_gross),
+      unit_price_gross: parsePriceInput(i.unit_price_input ?? String(i.unit_price_gross ?? "")),
     }));
 
     if (!normalizedItems.length) {
@@ -2397,11 +2409,15 @@ function InvoiceFormModal({
                 />
                 <input
                   className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.unit_price_gross}
-                  onChange={(e) => updateItem(idx, "unit_price_gross", normalizeNumberInput(e.target.value))}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={item.unit_price_input ?? (item.unit_price_gross || item.unit_price_gross === 0 ? String(item.unit_price_gross) : "")}
+                  onChange={(e) =>
+                    setItems((prev) =>
+                      prev.map((it, i) => (i === idx ? { ...it, unit_price_input: e.target.value } : it))
+                    )
+                  }
                 />
                 <select
                   className="input"
