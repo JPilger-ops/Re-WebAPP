@@ -160,11 +160,20 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
   render() {
     if (this.state.hasError) {
+      const debugInfo =
+        import.meta.env.DEV && typeof window !== "undefined"
+          ? (window as any).__LAST_API_ERROR__ || null
+          : null;
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
           <div className="bg-white border border-red-200 text-red-700 rounded-lg shadow p-6 max-w-lg text-center">
             <h1 className="text-xl font-semibold mb-2">Es ist ein Fehler aufgetreten.</h1>
             <p className="text-sm">Bitte laden Sie die Seite neu. Sollte der Fehler bleiben, wenden Sie sich an den Admin.</p>
+            {debugInfo && (
+              <p className="text-[11px] text-slate-500 mt-3 break-all">
+                Debug: {typeof debugInfo === "string" ? debugInfo : JSON.stringify(debugInfo)}
+              </p>
+            )}
           </div>
         </div>
       );

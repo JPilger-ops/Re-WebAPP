@@ -28,7 +28,9 @@ async function parseJsonSafe(res: Response) {
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const method = (init.method || "GET").toString().toUpperCase();
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
@@ -36,22 +38,33 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     },
     ...init,
   });
-  if (!res.ok) {
-    const data = await parseJsonSafe(res);
-    const text = data?.message || data?.error || (typeof data === "string" ? data : "") || (await res.text());
-    const err: ApiError = new Error(text || `Request failed with ${res.status}`);
-    err.status = res.status;
-    (err as any).data = data;
-    if (res.status === 401) {
-      try {
-        window.dispatchEvent(new CustomEvent("auth-unauthorized"));
-      } catch {
-        // ignore
-      }
-    }
-    throw err;
+  if (res.ok) {
+    return res.json() as Promise<T>;
   }
-  return res.json() as Promise<T>;
+
+  const data = await parseJsonSafe(res);
+  const fallbackText = !res.bodyUsed ? await res.text().catch(() => "") : "";
+  const text = data?.message || data?.error || (typeof data === "string" ? data : "") || fallbackText;
+  const err: ApiError = new Error(text || `Request failed with ${res.status}`);
+  err.status = res.status;
+  (err as any).data = data;
+
+  const bodyForLog = data ?? text;
+  try {
+    (window as any).__LAST_API_ERROR__ = { method, url, status: res.status, body: bodyForLog };
+    console.error(`[API ERROR] ${method} ${path} -> ${res.status}`, bodyForLog);
+  } catch {
+    // ignore
+  }
+
+  if (res.status === 401) {
+    try {
+      window.dispatchEvent(new CustomEvent("auth-unauthorized"));
+    } catch {
+      // ignore
+    }
+  }
+  throw err;
 }
 
 export async function login(username: string, password: string) {
