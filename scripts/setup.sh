@@ -7,6 +7,10 @@ success() { color "32" "$1"; }
 warn() { color "33" "$1"; }
 error() { color "31" "$1"; }
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+QUIET_SETUP="${SETUP_QUIET:-0}"
+
 if ! command -v docker >/dev/null; then
   error "Docker ist nicht installiert. Bitte zuerst Docker installieren."; exit 1;
 fi
@@ -21,9 +25,17 @@ else
   info ".env existiert bereits."
 fi
 
+if [ ! -f backend/.env ]; then
+  cp backend/.env.example backend/.env
+  warn "backend/.env wurde aus backend/.env.example erzeugt. Bitte Secrets/SMTP prüfen."
+else
+  info "backend/.env existiert bereits."
+fi
+
 info "Wichtige Variablen (aus .env):"
 grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT|APP_BIND_IP|APP_PUBLIC_PORT)=' .env || true
 
+if [ "$QUIET_SETUP" != "1" ]; then
 cat <<'EOF'
 Nächste Schritte:
 1) Trage sichere Werte in .env ein (mind. DB_PASS, DB_USER, DB_NAME).
@@ -34,4 +46,5 @@ Nächste Schritte:
 4) Healthcheck: curl http://${APP_BIND_IP:-127.0.0.1}:${APP_PUBLIC_PORT:-3031}/api/version
 EOF
 
-success "Setup-Skript fertig."
+  success "Setup-Skript fertig."
+fi

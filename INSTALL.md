@@ -10,7 +10,8 @@ Schnellstart
    `git clone <repo-url> && cd rechnungsapp`
 2) Env-Dateien anlegen (falls nicht vorhanden)  
    - `.env` aus `.env.example` kopieren und DB/Port anpassen  
-   - `backend/.env` aus `backend/.env.example` kopieren
+   - `backend/.env` aus `backend/.env.example` kopieren  
+   - oder: `./scripts/setup.sh` (legt beide .env-Dateien an)
 3) Build & Start  
    - `./scripts/build-meta.sh` (setzt BUILD_SHA/BUILD_NUMBER/TIME in `.env` und ruft `docker compose build` mit BuildKit)  
    - `docker compose up -d --build`

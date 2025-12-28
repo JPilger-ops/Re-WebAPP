@@ -13,20 +13,8 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if [ ! -f .env ]; then
-  info ".env fehlt -> kopiere .env.example"
-  cp .env.example .env
-  warn "Bitte .env anpassen (DB_PASS, APP_BIND_IP usw.)."
-else
-  info ".env vorhanden"
-fi
-
-if [ ! -f backend/.env ]; then
-  info "backend/.env fehlt -> kopiere backend/.env.example"
-  cp backend/.env.example backend/.env
-else
-  info "backend/.env vorhanden"
-fi
+info "Führe Basis-Setup aus (legt fehlende .env Dateien an)"
+SETUP_QUIET=1 ./scripts/setup.sh
 
 info "Baue Images (inkl. Build-Metadaten aus Git)"
 ./scripts/build-meta.sh

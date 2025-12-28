@@ -11,8 +11,8 @@ Voraussetzungen: Docker Engine >= 20.x, Docker Compose v2 (BuildKit empfohlen/De
 
 Schritte:
 1. `git clone <repo>`
-2. `./scripts/setup.sh` (legt .env an, wenn fehlt)
-3. `.env` anpassen (mindestens DB_PASS, DB_USER, DB_NAME setzen)
+2. `./scripts/setup.sh` (legt .env + backend/.env an, wenn fehlen)
+3. `.env` anpassen (mindestens DB_PASS, DB_USER, DB_NAME setzen; ggf. backend/.env Secrets)
 4. `./scripts/build-meta.sh` (schreibt BUILD_SHA/BUILD_NUMBER/BUILD_TIME in `.env` und ruft `docker compose build` mit BuildKit)
 5. `docker compose up -d --build` (Standard-Workflow, nutzt BuildKit-Cache)
 6. Smoke-Checks (im Repo):
