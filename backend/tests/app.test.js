@@ -9,11 +9,16 @@ const pkg = require("../package.json");
 
 // Align APP_VERSION used by the version endpoint with package.json for deterministic tests
 process.env.APP_VERSION = pkg.version;
+process.env.BUILD_SHA = "unittest-sha";
+process.env.BUILD_NUMBER = "123";
+process.env.BUILD_TIME = "2024-01-01T00:00:00Z";
 
 test("GET /api/version liefert Version aus package.json", async () => {
   const res = await request(app).get("/api/version").expect(200);
   assert.equal(res.body.version, pkg.version);
-  assert.ok("build" in res.body);
+  assert.equal(res.body.build.sha, "unittest-sha");
+  assert.equal(res.body.build.number, 123);
+  assert.equal(res.body.build.time, "2024-01-01T00:00:00Z");
 });
 
 test("Root-Route liefert HTML-Frontend", async () => {

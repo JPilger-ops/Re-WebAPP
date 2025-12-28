@@ -1,0 +1,4 @@
+-- Add B2B flag and customer VAT ID to invoices
+ALTER TABLE invoices
+  ADD COLUMN IF NOT EXISTS b2b BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS ust_id TEXT;

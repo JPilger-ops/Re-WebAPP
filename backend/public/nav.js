@@ -144,6 +144,11 @@ async function renderVersionBadge() {
     const label = data?.version ? `RechnungsWebAPP  v${data.version}` : null;
     if (!label) return;
 
+    const buildParts = [];
+    if (data?.build?.number) buildParts.push(`build ${data.build.number}`);
+    if (data?.build?.sha) buildParts.push(`sha ${data.build.sha}`);
+    const buildLabel = buildParts.length ? buildParts.join(", ") : "";
+
     const sidebar = document.querySelector(".sidebar");
     if (!sidebar) return;
     let badge = document.getElementById("sidebar-version");
@@ -153,7 +158,7 @@ async function renderVersionBadge() {
       badge.className = "sidebar-version";
       sidebar.appendChild(badge);
     }
-    badge.textContent = data?.build ? `${label} • ${data.build}` : label;
+    badge.textContent = buildLabel ? `${label} • ${buildLabel}` : label;
   } catch (err) {
     console.warn("Version laden fehlgeschlagen:", err);
   }

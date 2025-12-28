@@ -1,495 +1,109 @@
-# Rechnungsapp (Express + PostgreSQL)
-
- Web-Backend für das Rechnungsmodul der Waldwirtschaft Heidekönig. Express liefert sowohl die REST-API als auch das statische Frontend (HTML/JS/CSS). Rechnungen werden als PDF erzeugt, per E-Mail versendet und optional direkt an DATEV weitergeleitet.
-
-## Features
-- JWT-Login per Secure-Cookie, Rollen- und Berechtigungssystem (Admin/User + Permissions für Kategorien/Settings).
-- Kundenverwaltung auf Basis der Tabelle `recipients`.
-- Rechnungen anlegen, Positionen mit 19%/7% MwSt., Status sent/paid, Löschung nur für Admins.
-- HKForms-Integration: optionale ReservationRequest-ID auf der Rechnung, Status-Sync (sent/paid/overdue) und automatische Überfällig-Markierung nach Versand.
-- PDF-Generierung via Puppeteer (inkl. Kategorie-Logo, EPC-QR-Code/SEPA-Daten) und Ablage in `pdfs/`.
-- E-Mail-Versand über globales SMTP oder kategoriespezifische Mailkonten + HTML-Templates; Vorschau verfügbar.
-- DATEV-Export: dedizierte Zieladresse, Statusspalten in `invoices`, Export-Button und BCC-Option im Versand.
-- Kategorien mit Logos, Templates sowie SMTP-/IMAP-Konfiguration; Logo-Uploads landen in `public/logos`.
-- Statistikseite mit KPIs (gesamt + pro Jahr) und Filtern nach Jahr/Kategorie; Zugriff via Permission `stats.view`.
-- Statische Frontend-Seiten in `public/` (Login, Rechnungen, Kunden, Kategorien, Rollen-/Benutzerverwaltung, Statistik).
-
-## Projektaufbau
-- `src/` – Express-Server, Routen und Controller.
-- `public/` – Statische UI, ausgeliefert unter `/`.
-- `pdfs/` – erzeugte Rechnungspdfs.
-- `schema.sql` – Datenbankschema (PostgreSQL).
-- `certificates/rechnung.intern/` – erwartete TLS-Dateien (`privkey.pem`, `fullchain.pem`), per Env übersteuerbar.
-- `certificates/ca/` – interne CA (`ca.crt`) für Client-SSL; Download nur für Admins unter Einstellungen.
-- `tests/` – Node.js Tests (Schwerpunkt DATEV).
-- `ecosystem.config.cjs` – PM2-Definition für den Produktivbetrieb.
-
-## Voraussetzungen
-- Node.js 20+ und npm.
-- PostgreSQL 13+ mit User/DB für die App.
-- TLS-Zertifikat (PEM). Standardpfad siehe `certificates/rechnung.intern/`; alternativ per `APP_SSL_*`-Variablen setzen. Ohne gültiges Zertifikat startet `src/index.js` nicht.
-- SMTP-Zugang für den Versand (global oder je Kategorie) und optional IMAP-Zugang zum Testen der Kategorie-Konten.
-
-## Schritt-für-Schritt Einrichtung (Beispiel Debian/Ubuntu)
-1) Repository holen und ins Backend wechseln  
-```bash
-git clone <repo-url> rechnungsapp
-cd rechnungsapp/backend
-```
-
-2) Systemabhängigkeiten installieren (Root/Sudo)  
-```bash
-sudo apt update
-sudo apt install -y curl git postgresql postgresql-contrib
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-node -v && npm -v  # Versionen prüfen (Node 20+)
-```
-Optional: PM2 für Production  
-```bash
-sudo npm install -g pm2
-```
-
-3) NPM-Abhängigkeiten laden  
-```bash
-npm ci
-```
-
-4) Datenbank-User und -DB anlegen (Postgres Shell)  
-```bash
-sudo -u postgres psql -c "CREATE USER rechnung_app WITH PASSWORD '<db-pass>';"
-sudo -u postgres psql -c "CREATE DATABASE rechnung_prod OWNER rechnung_app;"
-psql -h localhost -U rechnung_app -d rechnung_prod -f schema.sql
-```
-
-5) `.env` erstellen  
-- Inhalt aus dem Beispiel unten übernehmen und anpassen.  
-- Mindestens setzen: `APP_DOMAIN`, `APP_HTTPS_PORT`, `CORS_ORIGINS`, `JWT_SECRET`, `APP_CREATE_PIN`, DB-Zugang, SMTP-Zugang, TLS-Pfade (`APP_SSL_CERT_DIR` oder `APP_SSL_KEY_PATH/APP_SSL_CERT_PATH`).  
-```bash
-cp .env.example .env  # falls vorhanden; sonst mit Editor anlegen
-```
-
-6) TLS-Zertifikat hinterlegen  
-- Standardpfad: `certificates/rechnung.intern/privkey.pem` und `certificates/rechnung.intern/fullchain.pem`.  
-- Alternativ eigene Pfade per Env (siehe `.env`). Ohne Zertifikat startet `npm run dev` nicht.
-
-7) Basisrollen/-rechte eintragen  
-```bash
-psql -h localhost -U rechnung_app -d rechnung_prod <<'SQL'
-INSERT INTO roles (name, description) VALUES 
-  ('admin','Voller Zugriff'),
-  ('user','Standardnutzer')
-ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO role_permissions (role_id, permission_key) VALUES
-  ((SELECT id FROM roles WHERE name='admin'), 'settings.general'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.read'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.write'),
-  ((SELECT id FROM roles WHERE name='admin'), 'categories.delete'),
-  ((SELECT id FROM roles WHERE name='admin'), 'stats.view')
-ON CONFLICT DO NOTHING;
-SQL
-```
-
-8) Admin-User registrieren (`APP_CREATE_PIN` wird abgefragt)  
-```bash
-curl -k -X POST "https://<APP_DOMAIN>/api/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"<pw>","role":"admin","createPin":"<APP_CREATE_PIN>"}'
-```
-
-9) Entwicklung starten und prüfen  
-```bash
-npm run dev
-curl -k https://localhost:<APP_HTTPS_PORT>/api/version
-```
-Frontend unter `https://localhost:<APP_HTTPS_PORT>` aufrufen (CORS-Origin muss passen).
-
-10) Produktion mit PM2 starten (Beispiel)  
-```bash
-pm2 start ecosystem.config.cjs --name rechnungsapp
-pm2 save
-pm2 status
-```
-
-11) Tests und Checks  
-```bash
-npm test
-curl -k https://<APP_DOMAIN>/api/testdb
-```
-
-## Beispiel `.env`
-```
-APP_DOMAIN=https://rechnung.intern
-APP_HTTPS_PORT=443
-CORS_ORIGINS=https://rechnung.intern
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=rechnung_app
-DB_PASS=<<secret>>
-DB_NAME=rechnung_prod
-
-JWT_SECRET=<<secret>>
-APP_CREATE_PIN=<<pin-fuer-registry>>
-
-SMTP_HOST=smtp.example.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=rechnungen@example.com
-SMTP_PASS=<<secret>>
-MAIL_FROM="Waldwirtschaft Heidekönig <rechnungen@example.com>"
-DATEV_EMAIL=datev@example.com
-HKFORMS_BASE_URL=https://app.bistrottelegraph.de/api
-HKFORMS_ORGANIZATION=hk-mandant-01
-HKFORMS_SYNC_TOKEN=<<secret>>
-TAX_NUMBER=12/345/67890
-VAT_ID=DE123456789
-
-# Überfällig-Job (optional)
-OVERDUE_DAYS=14
-OVERDUE_JOB_ENABLED=true
-# Millisekunden; Default 900000 (15 Minuten)
-OVERDUE_JOB_INTERVAL_MS=900000
-
-SEPA_CREDITOR_NAME="Waldwirtschaft Heidekönig"
-SEPA_CREDITOR_IBAN="DE00123456780000000000"
-SEPA_CREDITOR_BIC="ABCDEFGHXXX"
-BANK_NAME="Hausbank"
-
-APP_SSL_CERT_DIR=/path/zum/zertifikat  # oder APP_SSL_KEY_PATH / APP_SSL_CERT_PATH
-APP_VERSION=0.9.0
-```
-
-## API-Überblick (gekürzt)
-- Auth: `POST /api/auth/login`, `POST /api/auth/register` (mit `createPin`), `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/change-password`.
-- Benutzer (Admin): `GET/POST/PUT/DELETE /api/users`, `POST /api/users/:id/reset-password`.
-- Rollen (Admin): `GET /api/roles`, `GET /api/roles/:id/permissions`, `POST/PUT/DELETE /api/roles`.
-- Kunden: `GET/POST/PUT/DELETE /api/customers`.
-- Rechnungen: `GET /api/invoices` (Liste + Filter), `GET /api/invoices/:id`, `POST /api/invoices` (Neuanlage), `GET /api/invoices/:id/pdf`, `POST /api/invoices/:id/send-email` (optional `include_datev: true`), `POST /api/invoices/:id/datev-export`, Statusrouten für sent/paid, `DELETE /api/invoices/:id` nur Admin.
-- HKForms/Reservation: `GET/POST /api/invoices/by-reservation/:reservationId/status` (Header `X-HKFORMS-CRM-TOKEN`), sendet/liest Rechnungsstatus; Reservation-ID ist optional, mehrfach nutzbar.
-- Statistik (Permission `stats.view`): `GET /api/stats/invoices?year=YYYY&category=cat1,cat2` liefert `overall` + `byYear` + verfügbare Kategorien.
-- Kategorien (Permissions `categories.*` oder `settings.general`): CRUD, Logo-Upload (`POST /api/categories/logo`), Template/SMTP je Kategorie (`/api/categories/:id/email|template`), Mail-Test.
-- Einstellungen: `GET/PUT /api/settings/bank`, `GET/PUT /api/settings/datev`, `GET /api/settings/ca-cert` (admin).
-- Sonstiges: `GET /api/testdb` (DB-Ping), `GET /api/version`.
-
-## Tests
-Node.js Tests laufen mit  
-`npm test`
-
-Schwerpunkt sind die DATEV-Helfer (`tests/datev.test.js`). Puppeteer/SMTP werden nicht automatisch angestoßen.
-
-## Hinweise
-- HTTPS ist Pflicht, weil Cookies `secure` gesetzt werden. Hinter einem Reverse Proxy entweder Zertifikatpfade via `APP_SSL_*` setzen oder den HTTPS-Teil dort terminieren und die App intern per Port weiterreichen.
-- Generierte PDFs liegen unter `pdfs/` und werden beim Versand als Anhang genutzt.
-- Kategorie-spezifische SMTP-Zugänge haben Vorrang vor den globalen SMTP-Env-Variablen.
-
-🧰 Technologien
-
-Bereich	Technologie
-Backend	Node.js (ESM), Express
-Frontend	HTML, CSS, Vanilla-JS
-Datenbank	PostgreSQL
-PDF	Puppeteer
-Authentication	JWT-Cookies
-Deployment	PM2
-QR-Code Generator	qrcode NPM-Package
-
-
-⸻
-
-🗂 1. Projektwurzel
-
-Pfad:
-
-/root/rechnungsapp/
-
-Ordner und Dateien für Backend, Frontend, Konfiguration & PDF-Generierung.
-
-⸻
-
-🟦 2. Backend – Hauptprojekt
-
-Pfad:
-
-/root/rechnungsapp/backend/
-
-⚙ Backend-Kerndateien
-
-Datei	Zweck
-backend/package.json	Dependencies & Skripte
-backend/package-lock.json	Lockfile
-backend/ecosystem.config.cjs	PM2 Konfiguration
-backend/.env	Umgebungsvariablen (DB, Secrets, etc.)
-
-⚙ Server & App-Setup
-
-Datei	Beschreibung
-backend/src/server.js	Express App + Routerregistrierung
-backend/src/index.js	App-Startpunkt (Port, Middleware, Initialisierung)
-
-
-⸻
-
-🟦 3. Backend – Utils
-
-Pfad:
-
-backend/src/utils/db.js
-
-✨ db.js – Aufgaben:
-	•	PostgreSQL-Pool
-	•	Query-Funktionen
-	•	Verbindungstest
-	•	Fehler-Logging
-
-⸻
-
-🟦 4. Backend – Controllers
-
-Pfad:
-
-backend/src/controllers/
-
-Controller	Funktion
-auth.controller.js	Login, Logout, Token-Handling, User-Daten
-customer.controller.js	Kundenverwaltung: Erstellen, Bearbeiten, Suche
-invoice.controller.js	Herzstück der Anwendung: Rechnungslogik, PDF-Rendering, SEPA-QR
-user.controller.js	Benutzerverwaltung
-role.controller.js	Rollen & Rechte (selbst implementiert)
-
-🔥 Wichtige Funktionen in invoice.controller.js:
-	•	createInvoice() → Rechnung + Positionen + Empfänger speichern
-	•	getAllInvoices() → Übersichtsliste
-	•	getInvoiceById() → Detaildaten
-	•	getInvoicePdf() → PDF generieren (Puppeteer)
-	•	generateInvoiceHtml() → HTML-Vorlage mit Logo, Knickmarken, Reverse-Charge etc.
-	•	getNextInvoiceNumber() → Automatische Nummernvergabe YYYYMM001
-	•	markSent(), markPaid() → Status ändern
-	•	deleteInvoice() → Rechnung + PDF löschen
-
-⸻
-
-🟦 5. Backend – Routes
-
-Pfad:
-
-backend/src/routes/
-
-Datei	Zweck
-auth.routes.js	Login, Logout, Registrierung
-customer.routes.js	Kunden-Endpunkte
-invoice.routes.js	Rechnungs-Endpunkte, PDF Export
-user.routes.js	User-Management
-role.routes.js	Rollenverwaltung
-test.routes.js	Debug / Healthcheck
-
-
-⸻
-
-🟦 6. Backend – Middleware
-
-Pfad:
-
-backend/src/middleware/
-
-Datei	Beschreibung
-auth.middleware.js	JWT-Prüfung, Zugriffsschutz für geschützte Routen
-
-
-⸻
-
-🟦 7. Backend – Öffentliche Dateien (Frontend)
-
-Pfad:
-
-backend/public/
-
-
-⸻
-
-📄 HTML-Seiten:
-
-Datei	Beschreibung
-login.html	Loginmaske
-index.html	Dashboard
-invoices.html	Rechnungsübersicht
-invoice.html	Rechnungsdetailseite
-create.html	Rechnung erstellen
-customers.html	Kundenverwaltung
-user-management.html	Benutzerverwaltung
-role-management.html	Rollenverwaltung
-account.html	Eigenes Profil
-
-
-⸻
-
-🎨 CSS:
-
-Datei
-style.css
-
-
-⸻
-
-🧠 JavaScript Frontend:
-
-Datei	Zweck
-nav.js	Navigation & UI
-main.js	Dashboard
-login.js	Login-Logik
-invoices.js	Anzeigen, filtern, verwalten
-create.js	Rechnung erstellen: Positionen, B2B, QR, Popup
-customers.js	Kundenverwaltung
-user-management.js	Benutzerverwaltung
-role-management.js	Rollenverwaltung
-account.js	Passwörter ändern etc.
-
-
-⸻
-
-🖼 Assets:
-
-backend/public/HK_LOGO.png
-
-
-⸻
-
-🟦 8. PDFs / Export
-
-Pfad:
-
-backend/pdfs/
-
-Inhalt:
-	•	Generierte Rechnungs-PDFs
-	•	Dateiname: RE-<Nummer>.pdf
-
-⸻
-
-🟦 9. Temporäre / Debug-Dateien
-
-Diese liegen im System /mnt/data (nicht Teil der App):
-	•	/mnt/data/*.js
-	•	/mnt/data/*.html
-	•	/mnt/data/*.png
-	•	/mnt/data/*.zip
-
-Sie werden nicht geladen und gehören nicht ins Repo.
-
-⸻
-
-🟦 10. Datenbank / SQL-Schema
-
-Beispielpfad:
-
-backend/schema.sql
-
-Beinhaltet:
-	•	Tabellen: invoices, invoice_items, recipients, users, roles, role_permissions
-	•	Views und Indexe (optional)
-
-⸻
-
-🗂 11. Gesamtübersicht (Baumdarstellung)
-
-backend
-├── .env
-├── package.json
-├── package-lock.json
-├── ecosystem.config.cjs
-├── pdfs/
-├── public/
-│   ├── index.html
-│   ├── login.html
-│   ├── invoices.html
-│   ├── invoice.html
-│   ├── create.html
-│   ├── customers.html
-│   ├── user-management.html
-│   ├── role-management.html
-│   ├── account.html
-│   ├── style.css
-│   ├── main.js
-│   ├── login.js
-│   ├── invoices.js
-│   ├── create.js
-│   ├── customers.js
-│   ├── user-management.js
-│   ├── role-management.js
-│   ├── account.js
-│   ├── nav.js
-│   ├── HK_LOGO.png
-│
-└── src/
-    ├── index.js
-    ├── server.js
-    ├── utils/
-    │   └── db.js
-    ├── controllers/
-    │   ├── auth.controller.js
-    │   ├── customer.controller.js
-    │   ├── invoice.controller.js
-    │   ├── user.controller.js
-    │   └── role.controller.js
-    ├── middleware/
-    │   └── auth.middleware.js
-    └── routes/
-        ├── auth.routes.js
-        ├── customer.routes.js
-        ├── invoice.routes.js
-        ├── user.routes.js
-        ├── role.routes.js
-        └── test.routes.js
-
-
-⸻
-
-🔢 Rechnungsnummern-System
-
-Schema:
-
-YYYYMM001
-
-	•	Monatsbasierter Reset
-	•	Kollisionssicher
-	•	DB-Feld: VARCHAR(20)
-
-⸻
-
-🧾 B2B-Modus (Reverse Charge)
-
-Bereich	Beschreibung
-Frontend	Checkbox, USt-ID-Feld & Netto-Endbetrag
-Backend	b2b & ust_id Felder, Netto-Endsumme
-PDF	„Rechnung (B2B)“, Reverse-Charge Hinweis
-
-
-⸻
-
-🖨 PDF-Renderer
-	•	Puppeteer Headless
-	•	HTML-Template mit DIN-5008 Knickmarken
-	•	SEPA-QR-Code Integration
-	•	Branding über Base64 Logo
-	•	Netto- oder Brutto-Endbetrag abhängig von B2B
-
-⸻
-
-🛠 Installation
-
-git clone <repo-url>
-cd rechnungsapp/backend
-npm install
-npm run start      # oder pm2 start
-
-
-⸻
-
-🔐 Environment Variablen
-
-DATABASE_URL=postgres://user:pass@localhost:5432/rechnungsdb
-JWT_SECRET=supersecret
-SEPA_CREDITOR=Heidekönig
-SEPA_IBAN=DE...
-SEPA_BIC=GENODE...
+# Re-WebAPP (dev_Prisma)
+
+Interne Rechnungs- und Verwaltungs-App mit Backend (Node/Express/Prisma), Frontend (React/Vite/Tailwind, als statische Assets aus dem Backend), Postgres-DB und optionalem Reverse Proxy (NGINX Proxy Manager). Ports/Domain sind für den internen Betrieb vorbelegt: Host-IP 192.200.255.225, Host-Port 3031, Domain rechnung.intern (Proxy auf 192.168.50.100).
+
+## 1) Überblick
+- Features: Kunden/Recipients, Rechnungen (PDF/Regenerate), Kategorien (Logo/SMTP/Template), E-Mail-Vorschau/-Versand, DATEV-Export, Stats, Admin Users/Rollen/Permissions, Settings (PDF/SMTP/Header/Bank/Tax/DATEV/HKForms/Network/Security), API-Keys (HKForms), Health/Smoke Checks.
+- Architektur: Backend (Express + Prisma) liefert API + statische Assets (Vite build unter backend/public). DB: Postgres. Puppeteer/Chromium im Container für PDFs. Reverse Proxy (NPM) terminiert TLS; App spricht intern HTTP.
+
+## 2) Quickstart (Server/Local)
+Voraussetzungen: Docker Engine >= 20.x, Docker Compose v2 (BuildKit empfohlen/Default).
+
+Schritte (manuell):
+1. `git clone <repo>`
+2. `./scripts/setup.sh` (legt .env + backend/.env an, wenn fehlen)
+3. `.env` anpassen (mindestens DB_PASS, DB_USER, DB_NAME setzen; ggf. backend/.env Secrets)
+4. `./scripts/build-meta.sh` (schreibt BUILD_SHA/BUILD_NUMBER/BUILD_TIME in `.env` und ruft `docker compose build` mit BuildKit)
+5. `docker compose up -d --build` (Standard-Workflow, nutzt BuildKit-Cache)
+6. Smoke-Checks (im Repo):
+   - `npm --prefix backend run check:api`
+   - `npm --prefix backend run check:pdf`
+   - `npm --prefix backend run check:invoice`
+
+### Geführtes Deployment/Update (Wizard, inkl. Symlink `current`)
+Empfohlen für Server-Rollout mit Versionen und geteilten Daten/PDFs.
+
+1. Stelle sicher, dass das Repo sauber ist (`git status`) und der gewünschte Commit ausgecheckt ist.
+2. Starte den Wizard: `./scripts/deploy-wizard.sh`
+   - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update) und Compose-Projektname.
+   - Exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, legt `shared/data` und `shared/pdfs` an und verlinkt sie in das Release.
+   - Schreibt Build-Metadaten (SHA/Number/Time) in `.env`, setzt optional `COMPOSE_PROJECT_NAME`.
+   - Führt `docker compose build`, `prisma migrate deploy`, `prisma db seed` (legt admin/admin an, falls fehlend) und `docker compose up -d` aus.
+   - Aktiviert das Release über den Symlink `<BASE>/current`.
+3. Healthcheck (Wizard macht optional): `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
+4. Standard-Login nach frischem Setup: admin / admin (bitte direkt ändern).
+
+Defaults:
+- Host-IP: 192.200.255.225
+- Host-Port: 3031 (forward durch NPM)
+- Container-Port: 3030 (APP_PORT); Compose mappt 192.200.255.225:3031 -> 3030
+  - Port-Binding per ENV steuerbar: APP_BIND_IP (default 0.0.0.0), APP_PUBLIC_PORT (default 3031)
+  - Auf Server: APP_BIND_IP=192.200.255.225, APP_PUBLIC_PORT=3031. In CI/local reicht Default.
+- Domain: rechnung.intern (Proxy auf 192.168.50.100)
+- App intern: HTTP only; TLS ausschließlich im NPM
+
+## 3) NGINX Proxy Manager (NPM) Setup
+- Proxy Host: rechnung.intern
+- Forward: `http://192.200.255.225:3031`
+- TLS nur im NPM; Force SSL/HTTP2 optional.
+- Advanced Header Snippet:
+  ```
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  ```
+- Trust Proxy aktiv (App erkennt X-Forwarded-Proto). CORS_ORIGINS Default: https://rechnung.intern; weitere Domains per ENV ergänzen.
+
+## 4) Konfiguration (.env & Settings UI)
+Wichtige ENV:
+- DB_* (DB_HOST/PORT/USER/PASS/NAME/SCHEMA, DATABASE_URL)
+- APP_HOST / APP_PORT (Default 0.0.0.0 / 3030; Host-Port 3031 wird über docker-compose gebunden)
+- TRUST_PROXY, CORS_ORIGINS
+- EMAIL_SEND_DISABLED, EMAIL_REDIRECT_TO (Safe-Mail)
+- SMTP Fallback (ENV), Category-/DB-SMTP über UI
+
+Settings-Tabs (UI, Admin-only):
+- PDF: Speicherpfad + Test (Pfad muss ins Volume gebunden sein)
+- SMTP/Testmail: globales SMTP, Test-Mail (dry-run/redirect beachtet)
+- Rechnungskopf: Header/Logo; Hinweis: PDFs neu generieren
+- Bank/Steuer
+- DATEV
+- HKForms + API Keys (create/rotate/revoke/delete im HKForms Tab)
+- Network/Security (Trust Proxy/CORS Hinweise)
+
+## 5) Betrieb / Wartung
+- Update: `git pull` + `docker compose up -d --build`
+- Alternativ: Wizard (s.o.) für versionierten Rollout mit Symlink-Switch (`./scripts/deploy-wizard.sh`)
+- Logs: `docker compose logs -f app`
+- DB Backup/Restore (Beispiel):
+  - Backup: `docker compose exec db pg_dump -U $DB_USER -d $DB_NAME > backup.sql`
+  - Restore: `cat backup.sql | docker compose exec -T db psql -U $DB_USER -d $DB_NAME`
+- Migration/Seed: Container-Start führt `prisma migrate deploy` + `prisma db seed` (Bootstrap) aus.
+- Troubleshooting:
+  - White screen: Hard Reload, prüfen, ob Assets (backend/public/assets) 200 liefern.
+  - PDF-Fehler: PDF-Path in Settings prüfen, Test-Path Endpoint nutzen.
+  - Mail: EMAIL_SEND_DISABLED/REDIRECT beachten; SMTP-Konfig prüfen.
+  - DATEV: Status/Timestamp in Invoice (list/detail); parity scripts nutzen.
+
+## 6) Developer / Scripts
+Backend-Smokes/Special:
+- `npm --prefix backend run check:api`
+- `npm --prefix backend run check:pdf`
+- `npm --prefix backend run check:invoice`
+- `npm --prefix backend run check:parity`
+- `npm --prefix backend run check:pdf-parity`
+- `npm --prefix backend run check:mail-parity`
+- `npm --prefix backend run check:datev-parity`
+- `npm --prefix backend run check:hkforms-parity`
+- Design-QA/Apple-Look: siehe `docs/design-qa.md` (Checkliste) und `docs/design-diff.md` (Style-Änderungen)
+
+Frontend:
+- `npm --prefix frontend run typecheck`
+- `npm --prefix frontend run build`
+
+Build-Metadaten/Version:
+- `./scripts/build-meta.sh` ermittelt SHA + Commit-Count aus Git, aktualisiert `.env` (BUILD_SHA, BUILD_NUMBER, BUILD_TIME) und ruft `docker compose build` mit BuildKit.
+- `/api/version` gibt Version + Build aus; lokal testen mit `curl http://127.0.0.1:3031/api/version`.
+
+Team-Workflow: Nach Meilensteinen commit/push auf dev_Prisma; Compose/Smoke grün halten.

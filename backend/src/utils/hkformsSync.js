@@ -13,7 +13,7 @@ const normalizeBaseUrl = (value) => {
  * Fehler werden nur geloggt und blockieren den lokalen Status nicht.
  */
 export async function sendHkformsStatus({ reservationId, payload, endpoint = "invoice-status" }) {
-  const settings = await getHkformsSettings().catch((err) => {
+  const settings = await getHkformsSettings({ forceRefresh: true }).catch((err) => {
     console.warn("[hkforms] Einstellungen nicht ladbar, nutze Fallback.", err?.message || err);
     return null;
   });

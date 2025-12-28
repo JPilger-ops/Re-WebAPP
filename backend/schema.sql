@@ -23,10 +23,14 @@ CREATE TABLE invoices (
     status_sent_at TIMESTAMP,
     status_paid_at TIMESTAMP,
     overdue_since TIMESTAMP,
+    canceled_at TIMESTAMP,
+    cancel_reason TEXT,
     datev_export_status VARCHAR(20) DEFAULT 'NOT_SENT',
     datev_exported_at TIMESTAMP,
     datev_export_error TEXT,
     receipt_date DATE,
+    b2b BOOLEAN DEFAULT FALSE,
+    ust_id TEXT,
 
     -- 19%
     net_19 NUMERIC(10,2),

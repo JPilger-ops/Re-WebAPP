@@ -1,4 +1,5 @@
-import { db } from "../utils/db.js";
+import { prisma } from "../utils/prisma.js";
+import { getResolvedPdfPath, getPdfSettings } from "../utils/pdfSettings.js";
 import puppeteer from "puppeteer";
 import QRCode from "qrcode";
 import fs from "fs";
@@ -9,6 +10,7 @@ import { getBankSettings } from "../utils/bankSettings.js";
 import { getDatevSettings } from "../utils/datevSettings.js";
 import nodemailer from "nodemailer";
 import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
+import { getInvoiceHeaderSettings } from "../utils/invoiceHeaderSettings.js";
 import {
   buildDatevMailBody,
   buildDatevMailSubject,
@@ -18,20 +20,20 @@ import {
   DATEV_STATUS,
 } from "../utils/datevExport.js";
 import { sendHkformsStatus } from "../utils/hkformsSync.js";
+import {
+  resolveGlobalSmtpFromDb,
+  resolveGlobalSmtpFromEnv,
+} from "../utils/smtpSettings.js";
+import { getGlobalEmailTemplate } from "../utils/emailTemplates.js";
 
 const fetchFirstItemDescription = async (invoiceId) => {
   if (!invoiceId) return null;
-  const itemRes = await db.query(
-    `
-      SELECT description
-      FROM invoice_items
-      WHERE invoice_id = $1
-      ORDER BY id ASC
-      LIMIT 1
-    `,
-    [invoiceId]
-  );
-  return itemRes.rows?.[0]?.description || null;
+  const item = await prisma.invoice_items.findFirst({
+    where: { invoice_id: invoiceId },
+    orderBy: { id: "asc" },
+    select: { description: true },
+  });
+  return item?.description || null;
 };
 
 dotenv.config();
@@ -56,7 +58,38 @@ const __dirname = path.dirname(__filename);
 
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
 const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
-const pdfDir = path.join(__dirname, "../../pdfs");
+
+const getPdfPaths = async () => {
+  const base = await getPdfSettings();
+  const storage = base.storage_path || await getResolvedPdfPath();
+  const archive = base.archive_path || storage;
+  const trash = base.trash_path || path.join(storage, "trash");
+  await fs.promises.mkdir(storage, { recursive: true }).catch(() => {});
+  await fs.promises.mkdir(archive, { recursive: true }).catch(() => {});
+  await fs.promises.mkdir(trash, { recursive: true }).catch(() => {});
+  return { storage, archive, trash };
+};
+
+const moveInvoicePdfToArchive = async (invoiceNumber) => {
+  try {
+    const { archive: archiveDir, storage: pdfDir } = await getPdfPaths();
+    const candidates = [`RE-${invoiceNumber}.pdf`, `Rechnung-${invoiceNumber}.pdf`];
+    for (const name of candidates) {
+      const source = path.join(pdfDir, name);
+      if (fs.existsSync(source)) {
+        const parsed = path.parse(name);
+        let target = path.join(archiveDir, name);
+        if (fs.existsSync(target)) {
+          target = path.join(archiveDir, `${parsed.name}-${Date.now()}${parsed.ext}`);
+        }
+        await fs.promises.rename(source, target);
+        console.log(`[Cancel] PDF archiviert: ${name}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Cancel] PDF-Archivierung fehlgeschlagen (${invoiceNumber}):`, err.message);
+  }
+};
 
 let defaultLogoBase64 = "";
 try {
@@ -67,6 +100,18 @@ try {
 }
 
 const n = (value) => Number(value) || 0;
+const toNumber = (value) =>
+  value === null || value === undefined
+    ? value
+    : typeof value === "number"
+    ? value
+    : Number(value);
+const parseDecimalInput = (value) => {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === "string" ? value.replace(",", ".").trim() : value;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : null;
+};
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -120,7 +165,7 @@ const formatNumberDe = (val) =>
 
 const placeholderRegex = (ph) => new RegExp(ph.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
 
-const buildPlaceholderMap = (row = {}, bankSettings = {}) => {
+const buildPlaceholderMap = (row = {}, bankSettings = {}, headerSettings = {}) => {
   const amountValue = row.b2b ? n(row.net_19) + n(row.net_7) : n(row.gross_total);
   const amountDisplay = amountValue.toLocaleString("de-DE", {
     minimumFractionDigits: 2,
@@ -139,6 +184,8 @@ const buildPlaceholderMap = (row = {}, bankSettings = {}) => {
     "{{bank_name}}": bankSettings.bank_name || "",
     "{{iban}}": formatIban(bankSettings.iban),
     "{{bic}}": (bankSettings.bic || "").toUpperCase(),
+    "{{company_name}}": headerSettings.company_name || "",
+    "{{category_name}}": row.category_label || row.category || "",
   };
 };
 
@@ -164,57 +211,97 @@ const ensureHtmlBody = (rawBody = "", fallbackText = "") => {
     : escapeHtml(body).replace(/\r?\n/g, "<br>");
 };
 
+const normalizeInvoiceDecimals = (row) => {
+  const decimalFields = [
+    "net_19",
+    "vat_19",
+    "gross_19",
+    "net_7",
+    "vat_7",
+    "gross_7",
+    "gross_total",
+  ];
+  for (const field of decimalFields) {
+    if (field in row) {
+      row[field] = toNumber(row[field]);
+    }
+  }
+  return row;
+};
+
+const shapeInvoiceListRow = (invoice, recipient, category) => {
+  const base = normalizeInvoiceDecimals({ ...invoice });
+  return {
+    ...base,
+    recipient_name: recipient?.name || null,
+    recipient_company: recipient?.company || null,
+    recipient_email: recipient?.email || null,
+    category_id: category?.id || null,
+    category_label: category?.label || null,
+    datev_export_status: invoice.datev_export_status || null,
+    datev_exported_at: invoice.datev_exported_at || null,
+    datev_export_error: invoice.datev_export_error || null,
+  };
+};
+
 const loadInvoiceWithCategory = async (id) => {
   await ensureInvoiceCategoriesTable();
   await ensureDatevExportColumns();
-  const result = await db.query(
-    `
-    SELECT
-      i.*,
-      r.name   AS recipient_name,
-      r.street AS recipient_street,
-      r.zip    AS recipient_zip,
-      r.city   AS recipient_city,
-      r.email  AS recipient_email,
-      r.phone  AS recipient_phone,
-      c.id     AS category_id,
-      c.key    AS category_key,
-      c.label  AS category_label,
-      ea.display_name AS email_display_name,
-      ea.email_address AS email_address,
-      ea.smtp_host AS email_smtp_host,
-      ea.smtp_port AS email_smtp_port,
-      ea.smtp_secure AS email_smtp_secure,
-      ea.smtp_user AS email_smtp_user,
-      ea.smtp_pass AS email_smtp_pass,
-      tpl.subject AS tpl_subject,
-      tpl.body_html AS tpl_body_html
-    FROM invoices i
-    LEFT JOIN recipients r ON i.recipient_id = r.id
-    LEFT JOIN invoice_categories c ON c.key = i.category
-    LEFT JOIN category_email_accounts ea ON ea.category_id = c.id
-    LEFT JOIN category_templates tpl ON tpl.category_id = c.id
-    WHERE i.id = $1
-  `,
-    [id]
-  );
+  const invoice = await prisma.invoices.findUnique({
+    where: { id },
+    include: { recipients: true },
+  });
 
-  if (result.rowCount === 0) {
+  if (!invoice) {
     const err = new Error("Rechnung nicht gefunden");
     err.code = "NOT_FOUND";
     throw err;
   }
-  return result.rows[0];
+
+  let category = null;
+  let emailAccount = null;
+  let template = null;
+
+  if (invoice.category) {
+    category = await prisma.invoice_categories.findUnique({
+      where: { key: invoice.category },
+      include: {
+        category_email_accounts: true,
+        category_templates: true,
+      },
+    });
+    emailAccount = category?.category_email_accounts || null;
+    template = category?.category_templates || null;
+  }
+
+  const row = normalizeInvoiceDecimals({
+    ...invoice,
+    recipient_name: invoice.recipients?.name || null,
+    recipient_company: invoice.recipients?.company || null,
+    recipient_street: invoice.recipients?.street || null,
+    recipient_zip: invoice.recipients?.zip || null,
+    recipient_city: invoice.recipients?.city || null,
+    recipient_email: invoice.recipients?.email || null,
+    recipient_phone: invoice.recipients?.phone || null,
+    category_id: category?.id || null,
+    category_key: category?.key || null,
+    category_label: category?.label || null,
+    email_display_name: emailAccount?.display_name || null,
+    email_address: emailAccount?.email_address || null,
+    email_smtp_host: emailAccount?.smtp_host || null,
+    email_smtp_port: emailAccount?.smtp_port || null,
+    email_smtp_secure:
+      emailAccount?.smtp_secure === false ? false : emailAccount?.smtp_secure ?? null,
+    email_smtp_user: emailAccount?.smtp_user || null,
+    email_smtp_pass: emailAccount?.smtp_pass || null,
+    tpl_subject: template?.subject || null,
+    tpl_body_html: template?.body_html || null,
+  });
+
+  return row;
 };
 
-const resolveSmtpConfig = (row = {}) => {
-  const envHost = process.env.SMTP_HOST;
-  const envPort = Number(process.env.SMTP_PORT || 587);
-  const envUser = process.env.SMTP_USER;
-  const envPass = process.env.SMTP_PASS;
-  const envFrom = process.env.MAIL_FROM || envUser;
-  const envSecure = process.env.SMTP_SECURE === "true" || envPort === 465;
-
+const resolveSmtpConfig = async (row = {}) => {
   if (
     row.email_address &&
     row.email_smtp_host &&
@@ -236,23 +323,21 @@ const resolveSmtpConfig = (row = {}) => {
     };
   }
 
-  if (envHost && envUser && envPass && envFrom) {
-    return {
-      host: envHost,
-      port: envPort,
-      secure: envSecure,
-      authUser: envUser,
-      authPass: envPass,
-      from: envFrom,
-      usingCategoryAccount: false,
-    };
+  const dbConfig = await resolveGlobalSmtpFromDb();
+  if (dbConfig) {
+    return { ...dbConfig, usingCategoryAccount: false };
+  }
+
+  const envConfig = resolveGlobalSmtpFromEnv();
+  if (envConfig) {
+    return { ...envConfig, usingCategoryAccount: false };
   }
 
   return null;
 };
 
-const buildEmailContent = (row, bankSettings = {}) => {
-  const placeholders = buildPlaceholderMap(row, bankSettings);
+const buildEmailContent = (row, bankSettings = {}, headerSettings = {}, globalTemplate = null) => {
+  const placeholders = buildPlaceholderMap(row, bankSettings, headerSettings);
   const fallbackSubject = `Rechnung Nr. ${row.invoice_number}`;
 
   const defaultBody = `Hallo ${row.recipient_name || "Kunde"},
@@ -270,25 +355,33 @@ Bei Fragen melde dich gerne jederzeit.
 Vielen Dank für deinen Auftrag!
 
 Beste Grüße
-Waldwirtschaft Heidekönig
-Thomas Pilger
-02241 76649`;
+${placeholders["{{company_name}}"] || "Ihr Team"}`;
 
-  const subject = row.tpl_subject
-    ? replacePlaceholders(row.tpl_subject, placeholders, false) || fallbackSubject
+  const useSubjectTpl = row.tpl_subject || globalTemplate?.subject_template || null;
+  const useHtmlTpl = row.tpl_body_html || globalTemplate?.body_html_template || null;
+  const useTextTpl = globalTemplate?.body_text_template || null;
+
+  const subject = useSubjectTpl
+    ? replacePlaceholders(useSubjectTpl, placeholders, false) || fallbackSubject
     : fallbackSubject;
 
-  const bodyHtml = row.tpl_body_html
-    ? replacePlaceholders(row.tpl_body_html, placeholders, true)
+  let bodyHtml = useHtmlTpl
+    ? replacePlaceholders(useHtmlTpl, placeholders, true)
     : null;
 
-  const bodyText = bodyHtml ? stripHtmlToText(bodyHtml) : defaultBody;
+  let bodyText = bodyHtml ? stripHtmlToText(bodyHtml) : defaultBody;
+
+  if (!bodyHtml && useTextTpl) {
+    const renderedText = replacePlaceholders(useTextTpl, placeholders, false);
+    bodyHtml = ensureHtmlBody(renderedText, renderedText);
+    bodyText = renderedText;
+  }
 
   return {
     subject,
     bodyHtml,
     bodyText,
-    templateUsed: Boolean(row.tpl_subject || row.tpl_body_html),
+    templateUsed: Boolean(row.tpl_subject || row.tpl_body_html || globalTemplate),
     category: {
       id: row.category_id,
       key: row.category_key,
@@ -368,6 +461,32 @@ function calculateTotals(items) {
   };
 }
 
+// -------------------------------------------------------------
+// Hilfsfunktion für nächste Rechnungsnummer (YYYYMM + laufend)
+// -------------------------------------------------------------
+const computeNextInvoiceNumber = async () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const prefix = `${year}${month}`;
+
+  const last = await prisma.invoices.findFirst({
+    where: { invoice_number: { startsWith: prefix } },
+    orderBy: { invoice_number: "desc" },
+    select: { invoice_number: true },
+  });
+
+  let nextRunningNumber = 1;
+  if (last?.invoice_number) {
+    const lastSuffix = last.invoice_number.substring(6);
+    const lastInt = parseInt(lastSuffix, 10) || 0;
+    nextRunningNumber = lastInt + 1;
+  }
+
+  const suffix = String(nextRunningNumber).padStart(3, "0");
+  return `${prefix}${suffix}`;
+};
+
 /**
  * POST /api/invoices
  * Erstellt eine komplette Rechnung + Empfänger + Positionen
@@ -402,13 +521,9 @@ if (!recipient.city || recipient.city.trim() === "") {
 
 
 // --- Rechnungsdaten prüfen ---
-if (!invoice) {
-  return res.status(400).json({ message: "Rechnungsdaten fehlen." });
-}
-
-if (!invoice.invoice_number || invoice.invoice_number.toString().trim() === "") {
-  return res.status(400).json({ message: "Rechnungsnummer fehlt." });
-}
+  if (!invoice) {
+    return res.status(400).json({ message: "Rechnungsdaten fehlen." });
+  }
 
 if (!invoice.date || invoice.date.trim() === "") {
   return res.status(400).json({ message: "Rechnungsdatum fehlt." });
@@ -426,192 +541,448 @@ if (!Array.isArray(items) || items.length === 0) {
   return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
 }
 
-for (let i = 0; i < items.length; i++) {
-  const item = items[i];
+  const normalizedItems = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const desc = (item.description || "").trim();
+    const quantity = parseDecimalInput(item.quantity);
+    const unitPrice = parseDecimalInput(item.unit_price_gross);
+    const vatKey = Number(item.vat_key);
 
-  if (!item.description || item.description.trim() === "") {
-    return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
+    if (!desc) {
+      return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
+    }
+
+    if (quantity === null || !Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+
+    if (unitPrice === null || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+
+    if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
+      return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+
+    normalizedItems.push({
+      description: desc,
+      quantity: quantity,
+      unit_price_gross: unitPrice,
+      vat_key: vatKey,
+      line_total_gross: n(quantity) * n(unitPrice),
+    });
   }
-
-  if (item.quantity == null || item.quantity === "" || Number(item.quantity) <= 0) {
-    return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
-  }
-
-  if (item.unit_price_gross == null || item.unit_price_gross === "" || Number(item.unit_price_gross) <= 0) {
-    return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
-  }
-
-  if (item.vat_key == null || !(item.vat_key === 1 || item.vat_key === 2)) {
-    return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
-  }
-}
-
-  const client = await db.connect();
 
   try {
-    await client.query("BEGIN");
-
     if (!invoice.date) {
-    return res.status(400).json({ message: "Rechnungsdatum ist erforderlich." });
+      return res.status(400).json({ message: "Rechnungsdatum ist erforderlich." });
     }
 
-    // --- EMPFÄNGER ERMITTELN ODER ANLEGEN -----------------------------
+    const rawRecipientId = recipient.recipient_id ?? recipient.id ?? null;
+    const recipientId =
+      rawRecipientId === null || rawRecipientId === undefined || rawRecipientId === ""
+        ? null
+        : Number(rawRecipientId);
+    if (recipientId !== null && !Number.isFinite(recipientId)) {
+      return res.status(400).json({ message: "Ungültige Empfänger-ID." });
+    }
 
     // Whitespace etwas bereinigen, um doppelte Treffer zu vermeiden
-    const rName   = (recipient.name   || "").trim();
-    const rStreet = (recipient.street || "").trim();
-    const rZip    = (recipient.zip    || "").trim();
-    const rCity   = (recipient.city   || "").trim();
+    let rName   = (recipient.name   || "").trim();
+    let rStreet = (recipient.street || "").trim();
+    let rZip    = (recipient.zip    || "").trim();
+    let rCity   = (recipient.city   || "").trim();
+    let rCompany = (recipient.company || "").trim();
+    let rEmail   = (recipient.email || "").trim();
+    let rPhone   = (recipient.phone || "").trim();
 
-    let recipientId;
+    // Gesamtsummen berechnen
+    const totals = calculateTotals(normalizedItems);
 
-    // 1. Prüfen, ob ein Empfänger mit denselben Stammdaten schon existiert
-    const existingRecipient = await client.query(
-      `
-      SELECT id 
-      FROM recipients
-      WHERE 
-        LOWER(name)   = LOWER($1)
-        AND LOWER(street) = LOWER($2)
-        AND zip       = $3
-        AND LOWER(city)   = LOWER($4)
-      LIMIT 1
-      `,
-      [rName, rStreet, rZip, rCity]
-    );
-
-    if (existingRecipient.rowCount > 0) {
-      // ✅ Kunde existiert bereits → vorhandene ID verwenden
-      recipientId = existingRecipient.rows[0].id;
-    } else {
-      // ❌ Kunde existiert noch nicht → neu anlegen
-      const recipientResult = await client.query(
-        `
-        INSERT INTO recipients (name, street, zip, city, email, phone)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
-        `,
-        [
-          rName,
-          rStreet,
-          rZip,
-          rCity,
-          recipient.email || null,
-          recipient.phone || null
-        ]
-      );
-
-      recipientId = recipientResult.rows[0].id;
-    }
-
-    // 2. Gesamtsummen berechnen
-    const totals = calculateTotals(items);
-
-    // Leere Strings auf null mappen, damit Postgres nicht meckert
-    const invoiceDate = invoice.date && invoice.date.trim() !== "" ? invoice.date : null;
-    const receiptDate = invoice.receipt_date && invoice.receipt_date.trim() !== "" ? invoice.receipt_date : null;
-    const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category : null;
+    // Leere Strings auf null mappen
+    const invoiceDate = invoice.date && invoice.date.trim() !== "" ? new Date(invoice.date) : null;
+    const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
     const reservationRequestId = invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
 
-    // B2B + USt-ID aus dem Payload
-    const isB2B  = invoice.b2b === true;              // kommt als boolean aus dem Frontend
+    const isB2B  = invoice.b2b === true;
     const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
-    // 3. Rechnung anlegen
-  const invoiceResult = await client.query(
-    `
-    INSERT INTO invoices (
-      invoice_number,
-      date,
-      recipient_id,
-      category,
-      reservation_request_id,
-      external_reference,
-      receipt_date,
-      b2b,
-      ust_id,
-      net_19, vat_19, gross_19,
-      net_7, vat_7, gross_7,
-      gross_total
-    )
-    VALUES (
-      $1, $2, $3, $4, $5,
-      $6, $7, $8,
-      $9, $10, $11,
-      $12, $13, $14,
-      $15, $16
-    )
-    RETURNING id
-    `,
-    [
-      invoice.invoice_number,
-      invoiceDate,
-      recipientId,
-      category,
-      reservationRequestId,
-      externalReference,
-      receiptDate,
-      isB2B,
-      ustId,
-
-      totals.net_19,
-      totals.vat_19,
-      totals.gross_19,
-
-      totals.net_7,
-      totals.vat_7,
-      totals.gross_7,
-
-      totals.gross_total
-    ]
-  );
-
-    const invoiceId = invoiceResult.rows[0].id;
-
-    // 4. Positionen speichern
-    for (const item of items) {
-      const gross = n(item.quantity) * n(item.unit_price_gross);
-
-      await client.query(
-        `
-        INSERT INTO invoice_items (
-          invoice_id, description, quantity, unit_price_gross, vat_key, line_total_gross
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        `,
-        [
-          invoiceId,
-          item.description,
-          item.quantity,
-          item.unit_price_gross,
-          item.vat_key,
-          gross
-        ]
-      );
+    // Rechnungsnummer bestimmen/prüfen (außerhalb der Transaktion, um doppelte Antworten zu vermeiden)
+    let invoiceNumber = (invoice.invoice_number || "").toString().trim();
+    if (!invoiceNumber) {
+      invoiceNumber = await computeNextInvoiceNumber();
+    } else {
+      const exists = await prisma.invoices.findFirst({
+        where: { invoice_number: invoiceNumber },
+        select: { id: true },
+      });
+      if (exists) {
+        const suggested = await computeNextInvoiceNumber();
+        return res.status(409).json({
+          message: "Rechnungsnummer bereits vergeben. Vorschlag: " + suggested,
+          suggested_next_number: suggested,
+        });
+      }
     }
 
-    await client.query("COMMIT");
+    let existingRecipient = null;
+    if (recipientId) {
+      existingRecipient = await prisma.recipients.findUnique({
+        where: { id: recipientId },
+        select: { id: true, name: true, company: true, street: true, zip: true, city: true, email: true, phone: true },
+      });
+      if (!existingRecipient) {
+        return res.status(400).json({ message: "Empfänger konnte nicht gefunden werden." });
+      }
+      rName = existingRecipient.name?.trim() || rName;
+      rStreet = existingRecipient.street?.trim() || rStreet;
+      rZip = existingRecipient.zip?.trim() || rZip;
+      rCity = existingRecipient.city?.trim() || rCity;
+      rCompany = existingRecipient.company?.trim() || rCompany;
+      rEmail = existingRecipient.email?.trim() || rEmail;
+      rPhone = existingRecipient.phone?.trim() || rPhone;
+    }
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      // Empfänger suchen/erstellen
+      let recipientRow = null;
+      if (existingRecipient) {
+        recipientRow = { id: existingRecipient.id };
+        if (rCompany && !existingRecipient.company) {
+          await tx.recipients.update({
+            where: { id: existingRecipient.id },
+            data: { company: rCompany },
+          });
+        }
+        if (rEmail && !existingRecipient.email) {
+          await tx.recipients.update({
+            where: { id: existingRecipient.id },
+            data: { email: rEmail },
+          });
+        }
+        if (rPhone && !existingRecipient.phone) {
+          await tx.recipients.update({
+            where: { id: existingRecipient.id },
+            data: { phone: rPhone },
+          });
+        }
+      } else {
+        recipientRow = await tx.recipients.findFirst({
+          where: {
+            name: rName,
+            street: rStreet,
+            zip: rZip,
+            city: rCity,
+          },
+          select: { id: true, company: true },
+        });
+
+        if (!recipientRow) {
+          recipientRow = await tx.recipients.create({
+            data: {
+              name: rName,
+              company: rCompany || null,
+              street: rStreet || null,
+              zip: rZip || null,
+              city: rCity || null,
+              email: rEmail || null,
+              phone: rPhone || null,
+            },
+            select: { id: true },
+          });
+        } else if (rCompany && !recipientRow.company) {
+          await tx.recipients.update({
+            where: { id: recipientRow.id },
+            data: { company: rCompany },
+          });
+        }
+      }
+
+      const invoiceRow = await tx.invoices.create({
+        data: {
+          invoice_number: invoiceNumber,
+          date: invoiceDate,
+          recipient_id: recipientRow.id,
+          category,
+          reservation_request_id: reservationRequestId,
+          external_reference: externalReference,
+          b2b: isB2B,
+          ust_id: ustId,
+          net_19: totals.net_19,
+          vat_19: totals.vat_19,
+          gross_19: totals.gross_19,
+          net_7: totals.net_7,
+          vat_7: totals.vat_7,
+          gross_7: totals.gross_7,
+          gross_total: totals.gross_total,
+        },
+        select: { id: true },
+      });
+
+      const itemsData = normalizedItems.map((item) => ({
+        invoice_id: invoiceRow.id,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price_gross: item.unit_price_gross,
+        vat_key: item.vat_key,
+        line_total_gross: item.line_total_gross,
+      }));
+
+      if (itemsData.length) {
+        await tx.invoice_items.createMany({
+          data: itemsData,
+        });
+      }
+
+      return invoiceRow.id;
+    });
 
     return res.status(201).json({
       message: "Rechnung erfolgreich erstellt",
-      invoice_id: invoiceId
+      invoice_id: txResult,
     });
-
   } catch (err) {
-    await client.query("ROLLBACK");
     console.error("Fehler bei der Rechnungserstellung:", err);
 
-    if (err?.code === "23505" && (err?.constraint || "").includes("reservation_request_id")) {
+    if (err?.code === "P2002" && (err?.meta?.target || []).join(",").includes("reservation_request_id")) {
       return res.status(400).json({
         message: "Diese HKForms-Anfrage-ID ist bereits einer anderen Rechnung zugeordnet."
+      });
+    }
+    if (err?.code === "P2002" && (err?.meta?.target || []).join(",").includes("invoice_number")) {
+      const suggested = await computeNextInvoiceNumber().catch(() => null);
+      return res.status(409).json({
+        message: "Rechnungsnummer bereits vergeben." + (suggested ? " Vorschlag: " + suggested : ""),
+        suggested_next_number: suggested || undefined,
       });
     }
 
     return res.status(500).json({
       error: "Es ist ein Fehler beim Erstellen der Rechnung aufgetreten."
     });
-  } finally {
-    client.release();
+  }
+};
+
+export const updateInvoice = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID." });
+
+  const { recipient, invoice, items } = req.body || {};
+
+  if (!recipient) return res.status(400).json({ message: "Empfängerdaten fehlen." });
+  if (!recipient.name || recipient.name.trim() === "") return res.status(400).json({ message: "Empfängername fehlt." });
+  if (!recipient.street || recipient.street.trim() === "") return res.status(400).json({ message: "Straße fehlt." });
+  if (!recipient.zip || recipient.zip.trim() === "") return res.status(400).json({ message: "PLZ fehlt." });
+  if (!recipient.city || recipient.city.trim() === "") return res.status(400).json({ message: "Ort fehlt." });
+
+  if (!invoice) return res.status(400).json({ message: "Rechnungsdaten fehlen." });
+  if (!invoice.date || invoice.date.trim() === "") return res.status(400).json({ message: "Rechnungsdatum fehlt." });
+  if (!invoice.invoice_number || invoice.invoice_number.trim() === "") {
+    return res.status(400).json({ message: "Rechnungsnummer fehlt." });
+  }
+  if (invoice.b2b && (!invoice.ust_id || invoice.ust_id.trim() === "")) {
+    return res.status(400).json({ message: "Für B2B ist eine USt-ID erforderlich." });
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
+  }
+
+  const normalizedItems = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const desc = (item.description || "").trim();
+    const quantity = parseDecimalInput(item.quantity);
+    const unitPrice = parseDecimalInput(item.unit_price_gross);
+    const vatKey = Number(item.vat_key);
+
+    if (!desc) return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
+    if (quantity === null || !Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+    if (unitPrice === null || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+    if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
+      return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+
+    normalizedItems.push({
+      description: desc,
+      quantity,
+      unit_price_gross: unitPrice,
+      vat_key: vatKey,
+      line_total_gross: n(quantity) * n(unitPrice),
+    });
+  }
+
+  try {
+    const existing = await prisma.invoices.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        invoice_number: true,
+        datev_export_status: true,
+        reservation_request_id: true,
+        category: true,
+        external_reference: true,
+        recipient_id: true,
+      },
+    });
+
+    if (!existing) return res.status(404).json({ message: "Rechnung nicht gefunden." });
+    if (existing.datev_export_status === "SUCCESS") {
+      return res.status(423).json({ message: "Rechnung wurde bereits an DATEV exportiert und kann nicht bearbeitet werden." });
+    }
+
+    const totals = calculateTotals(normalizedItems);
+    const invoiceDate = parseDateInput(invoice.date, "date");
+    const category = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
+    const reservationRequestId =
+      invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
+    const externalReference =
+      invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : existing.external_reference || null;
+    const isB2B = invoice.b2b === true;
+    const ustId = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
+
+    let invoiceNumber = (invoice.invoice_number || "").toString().trim();
+    if (invoiceNumber !== existing.invoice_number) {
+      const conflict = await prisma.invoices.findFirst({
+        where: { invoice_number: invoiceNumber, NOT: { id } },
+        select: { id: true },
+      });
+      if (conflict) {
+        return res.status(409).json({ message: "Rechnungsnummer bereits vergeben." });
+      }
+    }
+
+    const rawRecipientId = recipient.recipient_id ?? recipient.id ?? null;
+    const recipientId = rawRecipientId === null || rawRecipientId === undefined || rawRecipientId === "" ? null : Number(rawRecipientId);
+    if (recipientId !== null && !Number.isFinite(recipientId)) {
+      return res.status(400).json({ message: "Ungültige Empfänger-ID." });
+    }
+
+    const rName = (recipient.name || "").trim();
+    const rStreet = (recipient.street || "").trim();
+    const rZip = (recipient.zip || "").trim();
+    const rCity = (recipient.city || "").trim();
+    const rCompany = (recipient.company || "").trim();
+    const rEmail = (recipient.email || "").trim();
+    const rPhone = (recipient.phone || "").trim();
+
+    await prisma.$transaction(async (tx) => {
+      let recipientRow = null;
+      if (recipientId) {
+        recipientRow = await tx.recipients.findUnique({
+          where: { id: recipientId },
+          select: { id: true, company: true, email: true, phone: true },
+        });
+        if (!recipientRow) {
+          throw Object.assign(new Error("Empfänger nicht gefunden."), { code: "RECIPIENT_NOT_FOUND" });
+        }
+        await tx.recipients.update({
+          where: { id: recipientId },
+          data: {
+            name: rName,
+            company: rCompany || null,
+            street: rStreet || null,
+            zip: rZip || null,
+            city: rCity || null,
+            email: rEmail || null,
+            phone: rPhone || null,
+          },
+        });
+      } else {
+        recipientRow = await tx.recipients.findFirst({
+          where: { name: rName, street: rStreet, zip: rZip, city: rCity },
+          select: { id: true, company: true, email: true, phone: true },
+        });
+
+        if (!recipientRow) {
+          recipientRow = await tx.recipients.create({
+            data: {
+              name: rName,
+              company: rCompany || null,
+              street: rStreet || null,
+              zip: rZip || null,
+              city: rCity || null,
+              email: rEmail || null,
+              phone: rPhone || null,
+            },
+            select: { id: true },
+          });
+        } else if (rCompany && !recipientRow.company) {
+          await tx.recipients.update({
+            where: { id: recipientRow.id },
+            data: { company: rCompany },
+          });
+        }
+      }
+
+      await tx.invoice_items.deleteMany({ where: { invoice_id: id } });
+      if (normalizedItems.length) {
+        await tx.invoice_items.createMany({
+          data: normalizedItems.map((i) => ({
+            invoice_id: id,
+            description: i.description,
+            quantity: i.quantity,
+            unit_price_gross: i.unit_price_gross,
+            vat_key: i.vat_key,
+            line_total_gross: i.line_total_gross,
+          })),
+        });
+      }
+
+      await tx.invoices.update({
+        where: { id },
+        data: {
+          invoice_number: invoiceNumber,
+          date: invoiceDate,
+          recipient_id: recipientRow.id,
+          category,
+          reservation_request_id: reservationRequestId,
+          external_reference: externalReference,
+          b2b: isB2B,
+          ust_id: ustId,
+          net_19: totals.net_19,
+          vat_19: totals.vat_19,
+          gross_19: totals.gross_19,
+          net_7: totals.net_7,
+          vat_7: totals.vat_7,
+          gross_7: totals.gross_7,
+          gross_total: totals.gross_total,
+        },
+      });
+    });
+
+    // PDF nach Bearbeitung direkt neu erstellen (bestehende wird ersetzt)
+    try {
+      const { storage: pdfDir } = await getPdfPaths();
+      const filename = `RE-${invoiceNumber}.pdf`;
+      const filepath = path.join(pdfDir, filename);
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+      }
+    } catch (err) {
+      console.warn("[PDF] Konnte bestehendes PDF vor Neu-Generierung nicht löschen:", err.message);
+    }
+    await ensureInvoicePdf(id);
+
+    return res.json({ message: "Rechnung aktualisiert", invoice_id: id });
+  } catch (err) {
+    if (err?.code === "RECIPIENT_NOT_FOUND") {
+      return res.status(400).json({ message: "Empfänger konnte nicht gefunden werden." });
+    }
+    if (err?.code === "BAD_DATE") {
+      return res.status(400).json({ message: err.message || "Ungültiges Datum." });
+    }
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden." });
+    }
+    console.error("Fehler beim Aktualisieren der Rechnung:", err);
+    return res.status(500).json({ error: "Es ist ein Fehler beim Aktualisieren der Rechnung aufgetreten." });
   }
 };
 
@@ -623,20 +994,103 @@ export const getAllInvoices = async (req, res) => {
   try {
     await ensureInvoiceCategoriesTable();
     await ensureDatevExportColumns();
-    const result = await db.query(`
-      SELECT 
-        invoices.*, 
-        recipients.name AS recipient_name, 
-        recipients.email AS recipient_email,
-        c.id AS category_id,
-        c.label AS category_label
-      FROM invoices
-      LEFT JOIN recipients ON invoices.recipient_id = recipients.id
-      LEFT JOIN invoice_categories c ON c.key = invoices.category
-      ORDER BY invoices.invoice_number DESC
-    `);
 
-    res.json(result.rows);
+    const { from, to, customer, status, category, category_id, limit } = req.query;
+
+    let categoryKey = category || null;
+    if (!categoryKey && category_id) {
+      const cat = await prisma.invoice_categories.findUnique({
+        where: { id: Number(category_id) || 0 },
+        select: { key: true },
+      });
+      if (cat?.key) categoryKey = cat.key;
+    }
+
+    const where = {};
+
+    // Zeitraum
+    if (from || to) {
+      where.date = {};
+      if (from) where.date.gte = new Date(from);
+      if (to) where.date.lte = new Date(to);
+    }
+
+    // Kategorie
+    if (categoryKey) {
+      where.category = categoryKey;
+    }
+
+    // Kunde/Empfänger (name search)
+    if (customer && String(customer).trim() !== "") {
+      where.recipients = {
+        name: { contains: String(customer).trim(), mode: "insensitive" },
+      };
+    }
+
+    // Status-Filter (Standard: stornierte ausblenden)
+    const statusesRaw = status
+      ? String(status)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+    const hasAll = statusesRaw.includes("all");
+    const hasCanceled = statusesRaw.includes("canceled");
+    const hasActive = statusesRaw.includes("active");
+    const statuses = statusesRaw.filter((s) =>
+      ["paid", "sent", "open", "canceled"].includes(s)
+    );
+
+    if (statuses.length && !hasAll && !hasActive) {
+      const or = [];
+      if (statuses.includes("paid")) {
+        or.push({ status_paid_at: { not: null } });
+      }
+      if (statuses.includes("sent")) {
+        or.push({ status_sent: true });
+      }
+      if (statuses.includes("open")) {
+        or.push({ status_sent: { not: true }, status_paid_at: null });
+      }
+      if (statuses.includes("canceled")) {
+        or.push({ canceled_at: { not: null } });
+      }
+      if (or.length) {
+        where.AND = where.AND || [];
+        where.AND.push({ OR: or });
+      }
+    }
+
+    if (!hasAll && !hasCanceled) {
+      where.canceled_at = null;
+    }
+
+    const take = limit ? Number(limit) : undefined;
+
+    const invoices = await prisma.invoices.findMany({
+      where,
+      include: { recipients: true },
+      orderBy: { invoice_number: "desc" },
+      take,
+    });
+
+    const categoryKeys = Array.from(
+      new Set(invoices.map((i) => i.category).filter(Boolean))
+    );
+    const categories = categoryKeys.length
+      ? await prisma.invoice_categories.findMany({
+          where: { key: { in: categoryKeys } },
+          select: { id: true, key: true, label: true },
+        })
+      : [];
+    const catByKey = new Map(categories.map((c) => [c.key, c]));
+
+    const shaped = invoices.map((inv) =>
+      shapeInvoiceListRow(inv, inv.recipients, catByKey.get(inv.category || ""))
+    );
+
+    res.json(shaped);
   } catch (err) {
     console.error("Fehler beim Laden der Rechnungen:", err);
     res.status(500).json({ error: "Fehler beim Abrufen der Rechnungen" });
@@ -652,82 +1106,109 @@ export const getInvoiceById = async (req, res) => {
 
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
-  await ensureInvoiceCategoriesTable();
-  await ensureDatevExportColumns();
-  const client = await db.connect();
-
   try {
-    const invoiceResult = await client.query(`
-      SELECT 
-        i.*,
-        r.name  AS recipient_name,
-        r.street AS recipient_street,
-        r.zip   AS recipient_zip,
-        r.city  AS recipient_city,
-        r.email AS recipient_email,
-        r.phone AS recipient_phone,
-        c.logo_file AS category_logo_file
-      FROM invoices i
-      LEFT JOIN recipients r ON i.recipient_id = r.id
-      LEFT JOIN invoice_categories c ON c.key = i.category
-      WHERE i.id = $1
-    `, [id]);
+    await ensureInvoiceCategoriesTable();
+    await ensureDatevExportColumns();
 
-    if (invoiceResult.rowCount === 0)
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      include: { recipients: true },
+    });
+
+    if (!invoiceRow) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
 
-    const row = invoiceResult.rows[0];
-
-    const invoice = {
-      id: row.id,
-      invoice_number: row.invoice_number,
-      date: row.date,
-      category: row.category,
-      reservation_request_id: row.reservation_request_id,
-      external_reference: row.external_reference,
-      receipt_date: row.receipt_date,
-      status_sent: row.status_sent,
-      status_sent_at: row.status_sent_at,
-      status_paid_at: row.status_paid_at,
-      overdue_since: row.overdue_since,
-      datev_export_status: row.datev_export_status,
-      datev_exported_at: row.datev_exported_at,
-      datev_export_error: row.datev_export_error,
-      net_19: row.net_19,
-      vat_19: row.vat_19,
-      gross_19: row.gross_19,
-      net_7: row.net_7,
-      vat_7: row.vat_7,
-      gross_7: row.gross_7,
-      gross_total: row.gross_total,
+    const invoice = normalizeInvoiceDecimals({
+      id: invoiceRow.id,
+      invoice_number: invoiceRow.invoice_number,
+      date: invoiceRow.date,
+      category: invoiceRow.category,
+      reservation_request_id: invoiceRow.reservation_request_id,
+      external_reference: invoiceRow.external_reference,
+      status_sent: invoiceRow.status_sent,
+      status_sent_at: invoiceRow.status_sent_at,
+      status_paid_at: invoiceRow.status_paid_at,
+      overdue_since: invoiceRow.overdue_since,
+      datev_export_status: invoiceRow.datev_export_status,
+      datev_exported_at: invoiceRow.datev_exported_at,
+      datev_export_error: invoiceRow.datev_export_error,
+      net_19: invoiceRow.net_19,
+      vat_19: invoiceRow.vat_19,
+      gross_19: invoiceRow.gross_19,
+      net_7: invoiceRow.net_7,
+      vat_7: invoiceRow.vat_7,
+      gross_7: invoiceRow.gross_7,
+      gross_total: invoiceRow.gross_total,
+      canceled_at: invoiceRow.canceled_at,
+      cancel_reason: invoiceRow.cancel_reason,
       recipient: {
-        id: row.recipient_id,
-        name: row.recipient_name,
-        street: row.recipient_street,
-        zip: row.recipient_zip,
-        city: row.recipient_city,
-        email: row.recipient_email,
-        phone: row.recipient_phone
+        id: invoiceRow.recipient_id,
+        name: invoiceRow.recipients?.name || null,
+        company: invoiceRow.recipients?.company || null,
+        street: invoiceRow.recipients?.street || null,
+        zip: invoiceRow.recipients?.zip || null,
+        city: invoiceRow.recipients?.city || null,
+        email: invoiceRow.recipients?.email || null,
+        phone: invoiceRow.recipients?.phone || null,
+      },
+    });
+
+    const items = await prisma.invoice_items.findMany({
+      where: { invoice_id: id },
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        description: true,
+        quantity: true,
+        unit_price_gross: true,
+        vat_key: true,
+        line_total_gross: true,
+      },
+    });
+
+    const shapedItems = items.map((item) => ({
+      ...item,
+      unit_price_gross: toNumber(item.unit_price_gross),
+      line_total_gross: toNumber(item.line_total_gross),
+    }));
+
+    const pdfDir = await getResolvedPdfPath();
+    const candidateNames = [`RE-${invoiceRow.invoice_number}.pdf`, `Rechnung-${invoiceRow.invoice_number}.pdf`];
+    let pdfFilename = null;
+    let pdfLocation = null;
+    let pdfSize = null;
+
+    for (const name of candidateNames) {
+      const fullPath = path.join(pdfDir, name);
+      if (fs.existsSync(fullPath)) {
+        pdfFilename = name;
+        pdfLocation = fullPath;
+        try {
+          pdfSize = fs.statSync(fullPath)?.size || null;
+        } catch {
+          pdfSize = null;
+        }
+        break;
       }
+    }
+
+    if (!pdfFilename) {
+      pdfFilename = candidateNames[0];
+      pdfLocation = path.join(pdfDir, candidateNames[0]);
+    }
+
+    const pdf = {
+      filename: pdfFilename,
+      location: pdfLocation,
+      size: pdfSize,
+      url: `/api/invoices/${id}/pdf?mode=inline`,
     };
 
-    const itemsResult = await client.query(
-      `
-      SELECT id, description, quantity, unit_price_gross, vat_key, line_total_gross
-      FROM invoice_items
-      WHERE invoice_id = $1
-      ORDER BY id ASC
-      `,
-      [id]
-    );
-
-    return res.json({ invoice, items: itemsResult.rows });
-
+    return res.json({ invoice, items: shapedItems, pdf });
   } catch (err) {
     console.error("Fehler beim Laden der Rechnung:", err);
     res.status(500).json({ error: "Fehler beim Abrufen der Rechnung" });
-  } finally {
-    client.release();
   }
 };
 
@@ -739,8 +1220,68 @@ export const getInvoicePdf = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
 
+  const force = String(req.query.force || "").toLowerCase() === "true" || req.query.force === "1";
+
   try {
-    const { buffer, filename } = await ensureInvoicePdf(id);
+    const invoiceMeta = await prisma.invoices.findUnique({
+      where: { id },
+      select: { invoice_number: true, datev_export_status: true },
+    });
+    if (!invoiceMeta) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const { storage: pdfDir, trash: trashDir } = await getPdfPaths();
+    const filename = `RE-${invoiceMeta.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+    const exists = fs.existsSync(filepath);
+
+    if (exists && invoiceMeta.datev_export_status === "SUCCESS") {
+      // DATEV-Export: niemals überschreiben
+      try {
+        const buf = fs.readFileSync(filepath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", force ? "inline" : `inline; filename=\"${filename}\"`);
+        return res.send(buf);
+      } catch (err) {
+        console.error("[PDF] DATEV-gesperrte Datei konnte nicht gelesen werden:", err.message);
+        return res.status(423).json({
+          message: "PDF ist durch DATEV-Export gesperrt und kann nicht überschrieben werden.",
+          locked: true,
+          filename,
+        });
+      }
+    }
+
+    if (exists && !force) {
+      // Bestehendes PDF einfach ausliefern, nicht neu rendern
+      try {
+        const buf = fs.readFileSync(filepath);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `inline; filename=\"${filename}\"`);
+        return res.send(buf);
+      } catch (err) {
+        console.warn("[PDF] Konnte bestehendes PDF nicht lesen:", err.message);
+        return res.status(410).json({
+          message: "Vorhandenes PDF ist nicht lesbar. Bitte neu erzeugen (force).",
+          corrupted: true,
+          filename,
+        });
+      }
+    }
+
+    if (exists && force) {
+      try {
+        const trashName = `${path.parse(filename).name}-${Date.now()}.pdf`;
+        fs.renameSync(filepath, path.join(trashDir, trashName));
+      } catch (err) {
+        console.warn("[PDF] Konnte vorhandenes PDF nicht verschieben:", err.message);
+      }
+    }
+
+    console.log(`[PDF] starte Generierung für Invoice ${id}`);
+    const { buffer } = await ensureInvoicePdf(id);
+    console.log(`[PDF] fertig für Invoice ${id}: ${filename} (${buffer.length} bytes)`);
     const mode = req.query.mode;
 
     res.setHeader("Content-Type", "application/pdf");
@@ -761,65 +1302,103 @@ export const getInvoicePdf = async (req, res) => {
 };
 
 /**
+ * POST /api/invoices/:id/pdf/regenerate
+ * Entfernt bestehendes PDF (falls vorhanden) und erzeugt ein neues
+ */
+export const regenerateInvoicePdf = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ message: "Ungültige Rechnungs-ID" });
+
+  try {
+    const { storage: pdfDir } = await getPdfPaths();
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      select: { invoice_number: true },
+    });
+    if (!invoiceRow) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const filename = `RE-${invoiceRow.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+    try {
+      if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+      }
+    } catch (err) {
+      console.warn(`[PDF] Konnte bestehendes PDF nicht löschen (${filepath}):`, err.message);
+    }
+
+    const { filepath: finalPath, filename: finalName, buffer } = await ensureInvoicePdf(id);
+
+    return res.json({
+      message: "PDF neu erstellt.",
+      filename: finalName,
+      path: finalPath,
+      size: buffer?.length || null,
+    });
+  } catch (err) {
+    if (err?.code === "NOT_FOUND") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    console.error("PDF Regenerate fehlgeschlagen:", err);
+    return res.status(500).json({ message: "PDF konnte nicht neu erstellt werden." });
+  }
+};
+
+/**
  * Erstellt bei Bedarf das PDF und liefert Buffer + Metadaten zurück
  */
 async function ensureInvoicePdf(id) {
   await ensureInvoiceCategoriesTable();
-  const client = await db.connect();
-
   try {
-    const invoiceResult = await client.query(`
-      SELECT 
-        i.*,
-        r.name   AS recipient_name,
-        r.street AS recipient_street,
-        r.zip    AS recipient_zip,
-        r.city   AS recipient_city,
-        r.email  AS recipient_email,
-        r.phone  AS recipient_phone,
-        c.logo_file AS category_logo_file
-      FROM invoices i
-      LEFT JOIN recipients r ON i.recipient_id = r.id
-      LEFT JOIN invoice_categories c ON c.key = i.category
-      WHERE i.id = $1
-    `, [id]);
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      include: { recipients: true },
+    });
 
-    if (invoiceResult.rowCount === 0) {
+    if (!invoiceRow) {
       const error = new Error("Rechnung nicht gefunden");
       error.code = "NOT_FOUND";
       throw error;
     }
+    console.log(`[PDF] Datenbank-Lookup ok für Invoice ${id}`);
 
-    const row = invoiceResult.rows[0];
-    const filename = `RE-${row.invoice_number}.pdf`;
-    const filepath = path.join(pdfDir, filename);
+    let categoryLogo = null;
+    if (invoiceRow.category) {
+      const category = await prisma.invoice_categories.findUnique({
+        where: { key: invoiceRow.category },
+        select: { logo_file: true },
+      });
+      categoryLogo = category?.logo_file || null;
+    }
 
     const invoice = {
-      invoice_number: row.invoice_number,
-      date: row.date,
-      receipt_date: row.receipt_date,
-      b2b: row.b2b === true,
-      ust_id: row.ust_id || null,
-      net_19: n(row.net_19),
-      net_7: n(row.net_7),
-      vat_19: n(row.vat_19),
-      vat_7: n(row.vat_7),
-      gross_total: n(row.gross_total),
+      invoice_number: invoiceRow.invoice_number,
+      date: invoiceRow.date,
+      b2b: invoiceRow.b2b === true,
+      ust_id: invoiceRow.ust_id || null,
+      net_19: n(invoiceRow.net_19),
+      net_7: n(invoiceRow.net_7),
+      vat_19: n(invoiceRow.vat_19),
+      vat_7: n(invoiceRow.vat_7),
+      gross_total: n(invoiceRow.gross_total),
       recipient: {
-        name: row.recipient_name,
-        street: row.recipient_street,
-        zip: row.recipient_zip,
-        city: row.recipient_city
-      }
+        name: invoiceRow.recipients?.name || "",
+        company: invoiceRow.recipients?.company || "",
+        street: invoiceRow.recipients?.street || "",
+        zip: invoiceRow.recipients?.zip || "",
+        city: invoiceRow.recipients?.city || "",
+      },
     };
 
     let logoBase64ForInvoice = defaultLogoBase64;
-    if (row.category_logo_file) {
+    if (categoryLogo) {
       try {
         const categoryLogoPath = path.join(
           __dirname,
           "../../public/logos",
-          row.category_logo_file
+          categoryLogo
         );
 
         if (fs.existsSync(categoryLogoPath)) {
@@ -833,18 +1412,28 @@ async function ensureInvoicePdf(id) {
       }
     }
 
-    const itemsResult = await client.query(
-      "SELECT description, quantity, unit_price_gross, line_total_gross FROM invoice_items WHERE invoice_id = $1 ORDER BY id ASC",
-      [id]
-    );
+    const itemsRows = await prisma.invoice_items.findMany({
+      where: { invoice_id: id },
+      orderBy: { id: "asc" },
+      select: {
+        description: true,
+        quantity: true,
+        unit_price_gross: true,
+        line_total_gross: true,
+      },
+    });
 
-    const items = itemsResult.rows;
+    const items = itemsRows.map((item) => ({
+      ...item,
+      unit_price_gross: toNumber(item.unit_price_gross),
+      line_total_gross: toNumber(item.line_total_gross),
+    }));
     const bankSettings = await getBankSettings();
+    const headerSettings = await getInvoiceHeaderSettings();
+    console.log(`[PDF] ${items.length} Positionen + Bank-Settings geladen für Invoice ${id}`);
 
     const formattedDate =
       invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
-    const formattedReceiptDate =
-      invoice.receipt_date ? new Date(invoice.receipt_date).toLocaleDateString("de-DE") : "";
 
     const itemsRowsHtml = items
       .map((item) => {
@@ -897,26 +1486,59 @@ async function ensureInvoicePdf(id) {
       margin: 1,
       scale: 5
     });
+    console.log(`[PDF] QR-Code erzeugt für Invoice ${id}`);
+
+    // Briefkopf/Footersettings kombinieren (Header > Bank Fallback)
+    const header = {
+      company_name: headerSettings?.company_name || bankSettings.account_holder || "RechnungsAPP",
+      address_line1: headerSettings?.address_line1 || "",
+      address_line2: headerSettings?.address_line2 || "",
+      zip: headerSettings?.zip || "",
+      city: headerSettings?.city || "",
+      country: headerSettings?.country || "",
+      vat_id: headerSettings?.vat_id || "",
+      footer_text: headerSettings?.footer_text || "",
+      logo_url: headerSettings?.logo_url || null,
+      bank_name: headerSettings?.bank_name || bankSettings.bank_name || "",
+      iban: headerSettings?.iban || bankSettings.iban || "",
+      bic: headerSettings?.bic || bankSettings.bic || "",
+    };
+
+    // Dateinamen/Pfade aus Settings ableiten
+    const { storage: pdfDir } = await getPdfPaths();
+    const filename = `RE-${invoiceRow.invoice_number}.pdf`;
+    const filepath = path.join(pdfDir, filename);
+    const filepathInline = path.join(pdfDir, `inline-${filename}`);
 
     // ❤️ FERTIGES HTML-TEMPLATE KOMMT IN EXTRA BLOCK
     const html = generateInvoiceHtml(
       invoice,
       formattedDate,
-      formattedReceiptDate,
       itemsRowsHtml,
       sepaQrBase64,
       logoBase64ForInvoice,
-      bankSettings
+      bankSettings,
+      header
     );
 
     //
     // ⭐ PUPPETEER FIX – DAMIT LOGO & ASSETS LADEN ⭐
     //
+    const chromiumPath =
+      process.env.PUPPETEER_EXECUTABLE_PATH ||
+      process.env.CHROMIUM_PATH ||
+      ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/lib/chromium/chrome"].find(fs.existsSync);
+
+    console.log(`[PDF] Starte Chromium (${chromiumPath}) für Invoice ${id}`);
     const browser = await puppeteer.launch({
-      headless: "new",
+      headless: true,
+      executablePath: chromiumPath,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-zygote",
         "--allow-file-access-from-files",
         "--disable-web-security",
         "--disable-features=IsolateOrigins,site-per-process"
@@ -924,39 +1546,74 @@ async function ensureInvoicePdf(id) {
     });
 
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(0);
+    console.log(`[PDF] Page erstellt für Invoice ${id}`);
+    await page.setDefaultNavigationTimeout(30000);
 
-    // HTML in Datei schreiben
-    const tempPath = path.join(__dirname, "invoice_temp.html");
+    // HTML (debug optional auf Platte) – schreibe in ein beschreibbares temp-Verzeichnis
+    if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+    const tempPath = path.join(pdfDir, `invoice_${id}.tmp.html`);
     fs.writeFileSync(tempPath, html, "utf-8");
-
-    // Datei statt Data-URL öffnen
-    await page.goto("file://" + tempPath, {
-      waitUntil: "networkidle0"
-    });
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    console.log(`[PDF] HTML gesetzt für Invoice ${id}`);
 
     let pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true
     });
+    console.log(`[PDF] PDF gerendert (${pdfBuffer.length} bytes) für Invoice ${id}`);
 
     // PDF-Metadaten-Titel auf Rechnungsdatei setzen
     pdfBuffer = setPdfTitle(pdfBuffer, filename);
 
     await browser.close();
+    console.log(`[PDF] Browser geschlossen für Invoice ${id}`);
 
-    if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
+    // Temp-Datei aufräumen
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (cleanupErr) {
+      console.warn(`[PDF] Konnte temp HTML nicht löschen (${tempPath}):`, cleanupErr);
+    }
 
-    fs.writeFileSync(filepath, pdfBuffer);
+    const tmpPath = `${filepath}.tmp-${Date.now()}`;
+    try {
+      fs.writeFileSync(tmpPath, pdfBuffer);
+      try {
+        fs.renameSync(tmpPath, filepath);
+      } catch (renameErr) {
+        if (fs.existsSync(filepath)) {
+          fs.unlinkSync(tmpPath);
+          const finalBuf = fs.readFileSync(filepath);
+          return { buffer: finalBuf, filename, filepath, invoiceRow };
+        }
+        throw renameErr;
+      }
+    } finally {
+      if (fs.existsSync(tmpPath)) {
+        try {
+          fs.unlinkSync(tmpPath);
+        } catch (cleanupErr) {
+          console.warn(`[PDF] Tmp-Datei konnte nicht entfernt werden: ${cleanupErr.message}`);
+        }
+      }
+    }
 
-    return { buffer: pdfBuffer, filename, filepath, invoiceRow: row };
+    return { buffer: pdfBuffer, filename, filepath, invoiceRow };
   } finally {
-    client.release();
+    // no-op
   }
 }
 
-function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, itemsRowsHtml, sepaQrBase64, logoBase64ForInvoice, bankSettings) {
+function generateInvoiceHtml(
+  invoice,
+  formattedDate,
+  itemsRowsHtml,
+  sepaQrBase64,
+  logoBase64ForInvoice,
+  bankSettings,
+  headerSettings
+) {
   const formatIban = (iban) => {
     if (!iban) return "-";
     return iban.replace(/(.{4})/g, "$1 ").trim();
@@ -964,10 +1621,30 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 
   const bankDisplay = {
     account_holder: bankSettings?.account_holder || "-",
-    bank_name: bankSettings?.bank_name || "-",
-    iban: formatIban(bankSettings?.iban),
-    bic: (bankSettings?.bic || "-").toUpperCase(),
+    bank_name: headerSettings?.bank_name || bankSettings?.bank_name || "-",
+    iban: formatIban(headerSettings?.iban || bankSettings?.iban),
+    bic: (headerSettings?.bic || bankSettings?.bic || "-").toUpperCase(),
   };
+
+  const header = {
+    company_name: headerSettings?.company_name || bankDisplay.account_holder || "RechnungsAPP",
+    address_line1: headerSettings?.address_line1 || "",
+    address_line2: headerSettings?.address_line2 || "",
+    zip: headerSettings?.zip || "",
+    city: headerSettings?.city || "",
+    country: headerSettings?.country || "",
+    vat_id: headerSettings?.vat_id || "",
+    footer_text: headerSettings?.footer_text || "",
+    logo_url: headerSettings?.logo_url || null,
+  };
+
+  const brandLines = [
+    header.company_name,
+    [header.address_line1, header.address_line2].filter(Boolean).join(", "),
+    [header.zip, header.city].filter(Boolean).join(" "),
+    header.country,
+    header.vat_id ? `USt-IdNr.: ${header.vat_id}` : "",
+  ].filter(Boolean);
 
   return `
 <!DOCTYPE html>
@@ -1158,24 +1835,21 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
   "></div>
 
   <div class="brand-box">
-  <img src="data:image/png;base64,${logoBase64ForInvoice}" />
-  <div class="brand-sub">
-      Thomas Pilger<br>
-      Mauspfad 3 · 53842 Troisdorf<br>
-      Tel: 02241 76649<br>
-      E-Mail: welcome@forsthaus-telegraph.de<br>
-      www.der-heidekoenig.de
+    <img src="${header.logo_url ? header.logo_url : `data:image/png;base64,${logoBase64ForInvoice}`}" alt="Logo" />
+    <div class="brand-sub">
+      ${brandLines.join("<br>")}
+    </div>
   </div>
-</div>
 
   <div class="sender-line">
-    Waldwirtschaft Heidekönig · Mauspfad 3 · 53842 Troisdorf
+    ${[header.company_name, header.address_line1, header.address_line2, [header.zip, header.city].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
   </div>
 
   <div class="recipient">
-    <strong>${invoice.recipient.name}</strong><br/>
-    ${invoice.recipient.street}<br/>
-    ${invoice.recipient.zip} ${invoice.recipient.city}
+    ${invoice.recipient.company ? `${escapeHtml(invoice.recipient.company)}<br/>` : ""}
+    <strong>${escapeHtml(invoice.recipient.name)}</strong><br/>
+    ${escapeHtml(invoice.recipient.street)}<br/>
+    ${escapeHtml(invoice.recipient.zip)} ${escapeHtml(invoice.recipient.city)}
   </div>
 
   <div class="content">
@@ -1183,7 +1857,6 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
     <div class="meta">
       <div><strong>Rechnungsnr:</strong> ${invoice.invoice_number}</div>
       <div><strong>Datum:</strong> ${formattedDate}</div>
-      ${formattedReceiptDate ? `<div><strong>Belegdatum:</strong> ${formattedReceiptDate}</div>` : ""}
       ${invoice.b2b && invoice.ust_id ? `<div><strong>USt-ID Kunde:</strong> ${invoice.ust_id}</div>` : ""}
     </div>
     <div class="invoice-title">
@@ -1248,9 +1921,14 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
     }
 
     <div class="footer">
-      Steuernummer: 220/5060/2434 · USt-IdNr.: DE123224453<br>
+      ${
+        header.vat_id
+          ? `USt-IdNr.: ${header.vat_id}<br>`
+          : ""
+      }
       Bank: ${bankDisplay.bank_name} · IBAN: ${bankDisplay.iban} · BIC: ${bankDisplay.bic}<br>
-      Kontoinhaber: ${bankDisplay.account_holder}
+      Kontoinhaber: ${bankDisplay.account_holder}<br>
+      ${header.footer_text || ""}
     </div>
 
 </div>
@@ -1259,6 +1937,8 @@ function generateInvoiceHtml(invoice, formattedDate, formattedReceiptDate, items
 </html>
   `;
 }
+
+export { generateInvoiceHtml };
 
 /**
  * POST /api/invoices/:id/status/sent
@@ -1270,21 +1950,26 @@ export const markSent = async (req, res) => {
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
   try {
-    const updateResult = await db.query(
-      `
-        UPDATE invoices
-        SET status_sent = true, status_sent_at = NOW()
-        WHERE id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent_at, status_paid_at
-      `,
-      [id]
-    );
+    const updated = await prisma.invoices.update({
+      where: { id },
+      data: {
+        status_sent: true,
+        status_sent_at: new Date(),
+      },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent_at: true,
+        status_paid_at: true,
+      },
+    });
 
-    if (updateResult.rowCount === 0) {
+    if (!updated) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const row = updateResult.rows[0];
+    const row = updated;
     const firstItem = await fetchFirstItemDescription(id);
 
     // HKForms Sync (best effort, nicht blocking)
@@ -1301,6 +1986,9 @@ export const markSent = async (req, res) => {
 
     return res.json({ message: "Rechnung als versendet markiert" });
   } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
     console.error("Fehler beim Markieren als versendet:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
   }
@@ -1317,8 +2005,10 @@ export const getInvoiceEmailPreview = async (req, res) => {
   try {
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
-    const content = buildEmailContent(row, bankSettings);
-    const smtp = resolveSmtpConfig(row);
+    const headerSettings = await getInvoiceHeaderSettings();
+    const globalTemplate = await getGlobalEmailTemplate();
+    const content = buildEmailContent(row, bankSettings, headerSettings, globalTemplate);
+    const smtp = await resolveSmtpConfig(row);
     const datevSettings = await getDatevSettings();
     const datevEmail = (datevSettings?.email || "").trim();
 
@@ -1354,6 +2044,10 @@ export const sendInvoiceEmail = async (req, res) => {
   const { to, subject, message, html, include_datev } = req.body || {};
   const email = (to || "").trim();
   const includeDatev = include_datev === true;
+  const emailSendDisabled = ["1", "true", "yes"].includes(
+    (process.env.EMAIL_SEND_DISABLED || "").toLowerCase()
+  );
+  const redirectTo = (process.env.EMAIL_REDIRECT_TO || "").trim();
 
   if (!email) {
     return res.status(400).json({ message: "E-Mail-Adresse fehlt." });
@@ -1369,15 +2063,17 @@ export const sendInvoiceEmail = async (req, res) => {
     const { filename, filepath } = await ensureInvoicePdf(id);
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
-    const content = buildEmailContent(row, bankSettings);
-    const smtpConfig = resolveSmtpConfig(row);
+    const headerSettings = await getInvoiceHeaderSettings();
+    const globalTemplate = await getGlobalEmailTemplate();
+    const content = buildEmailContent(row, bankSettings, headerSettings, globalTemplate);
+    const smtpConfig = await resolveSmtpConfig(row);
     const datevSettings = includeDatev ? await getDatevSettings() : null;
     const datevEmail = includeDatev ? (datevSettings?.email || "").trim() : "";
 
     if (!smtpConfig) {
       return res.status(400).json({
         message:
-          "Kein SMTP-Konto hinterlegt. Bitte entweder in der Kategorie ein Konto speichern oder die globalen SMTP-ENV-Variablen setzen.",
+          "Kein SMTP-Konto hinterlegt. Bitte ein Konto in der Kategorie oder unter Einstellungen → SMTP (oder via ENV) hinterlegen.",
       });
     }
 
@@ -1405,67 +2101,90 @@ export const sendInvoiceEmail = async (req, res) => {
     const emailText = stripHtmlToText(rawHtml) || content.bodyText || (message || "").trim();
 
     const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
+    const finalRecipients = redirectTo
+      ? { to: redirectTo, includeDatev: false }
+      : recipients;
 
-    const transporter = nodemailer.createTransport({
-      host: smtpConfig.host,
-      port: smtpConfig.port,
-      secure: smtpConfig.secure,
-      auth: {
-        user: smtpConfig.authUser,
-        pass: smtpConfig.authPass,
-      },
-    });
-
-    await transporter.sendMail({
-      from: smtpConfig.from,
-      to: recipients.to,
-      // DATEV-Adresse als BCC, damit der Kunde die interne Export-Adresse nicht sieht.
-      ...(recipients.includeDatev ? { bcc: recipients.bcc } : {}),
-      subject: emailSubject,
-      text: emailText,
-      html: emailHtml,
-      attachments: [
-        {
-          filename,
-          path: filepath,
-          contentType: "application/pdf",
-          contentDisposition: "attachment",
+    let mailSent = false;
+    if (!emailSendDisabled) {
+      const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure === true || smtpConfig.secure === "true",
+        auth: {
+          user: smtpConfig.authUser,
+          pass: smtpConfig.authPass,
         },
-      ],
-    });
+      });
 
-    const updateResult = await db.query(
-      `
-        UPDATE invoices
-        SET status_sent = true, status_sent_at = NOW()
-        WHERE id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent_at
-      `,
-      [id]
-    );
+      await transporter.sendMail({
+        from: smtpConfig.from,
+        to: finalRecipients.to,
+        // DATEV-Adresse als BCC, damit der Kunde die interne Export-Adresse nicht sieht.
+        ...(finalRecipients.includeDatev ? { bcc: finalRecipients.bcc } : {}),
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        replyTo: smtpConfig.reply_to || undefined,
+        attachments: [
+          {
+            filename,
+            path: filepath,
+            contentType: "application/pdf",
+            contentDisposition: "attachment",
+          },
+        ],
+      });
+      mailSent = true;
+    } else {
+      console.log(
+        `[MAIL] Versand unterdrückt (EMAIL_SEND_DISABLED). To=${finalRecipients.to}`
+      );
+    }
 
-    const updatedRow = updateResult.rows[0];
-    const firstItem = await fetchFirstItemDescription(id);
+    let updatedRow = null;
+    let firstItem = null;
 
-    if (includeDatev) {
+    if (mailSent) {
+      updatedRow = await prisma.invoices.update({
+        where: { id },
+        data: {
+          status_sent: true,
+          status_sent_at: new Date(),
+        },
+        select: {
+          id: true,
+          invoice_number: true,
+          reservation_request_id: true,
+          status_sent_at: true,
+        },
+      });
+      firstItem = await fetchFirstItemDescription(id);
+    }
+
+    if (includeDatev && mailSent) {
       await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
     }
 
-    const successMessage = includeDatev
-      ? "E-Mail wurde verschickt (Kunde + DATEV)."
-      : "E-Mail wurde verschickt.";
+    const successMessage = mailSent
+      ? includeDatev
+        ? "E-Mail wurde verschickt (Kunde + DATEV)."
+        : "E-Mail wurde verschickt."
+      : "E-Mail-Versand deaktiviert (EMAIL_SEND_DISABLED). Keine Mail gesendet.";
 
     // HKForms Sync (best effort)
-    sendHkformsStatus({
-      reservationId: updatedRow?.reservation_request_id,
-      payload: {
-        status: "SENT",
-        reference: updatedRow?.invoice_number || row.invoice_number,
-        sentAt: updatedRow?.status_sent_at || new Date(),
-        firstItem,
-      },
-      endpoint: "invoices",
-    });
+    if (mailSent) {
+      sendHkformsStatus({
+        reservationId: updatedRow?.reservation_request_id,
+        payload: {
+          status: "SENT",
+          reference: updatedRow?.invoice_number || row.invoice_number,
+          sentAt: updatedRow?.status_sent_at || new Date(),
+          firstItem,
+        },
+        endpoint: "invoices",
+      });
+    }
 
     return res.json({ message: successMessage });
   } catch (err) {
@@ -1502,6 +2221,7 @@ export const exportInvoiceToDatev = async (req, res) => {
     const datevEmail = (datevSettings?.email || "").trim();
 
     if (!datevEmail) {
+      await updateDatevExportStatus(id, DATEV_STATUS.SKIPPED, "Kein DATEV-Empfänger hinterlegt");
       return res.status(400).json({
         message: "Keine DATEV-E-Mail hinterlegt. Bitte unter Einstellungen → DATEV speichern.",
       });
@@ -1510,9 +2230,10 @@ export const exportInvoiceToDatev = async (req, res) => {
     const { filename, filepath } = await ensureInvoicePdf(id);
     const row = await loadInvoiceWithCategory(id);
     const bankSettings = await getBankSettings();
-    const smtpConfig = resolveSmtpConfig(row);
+    const smtpConfig = await resolveSmtpConfig(row);
 
     if (!smtpConfig) {
+      await updateDatevExportStatus(id, DATEV_STATUS.SKIPPED, "Kein SMTP-Konto verfügbar");
       return res.status(400).json({
         message: "Kein SMTP-Konto hinterlegt. Bitte Kategorie- oder Standard-SMTP konfigurieren.",
       });
@@ -1524,7 +2245,7 @@ export const exportInvoiceToDatev = async (req, res) => {
     const transporter = nodemailer.createTransport({
       host: smtpConfig.host,
       port: smtpConfig.port,
-      secure: smtpConfig.secure,
+      secure: smtpConfig.secure === true || smtpConfig.secure === "true",
       auth: {
         user: smtpConfig.authUser,
         pass: smtpConfig.authPass,
@@ -1537,6 +2258,7 @@ export const exportInvoiceToDatev = async (req, res) => {
       subject,
       text: bodyText,
       html: bodyText.replace(/\n/g, "<br>"),
+      replyTo: smtpConfig.reply_to || undefined,
       attachments: [
         {
           filename,
@@ -1547,7 +2269,7 @@ export const exportInvoiceToDatev = async (req, res) => {
       ],
     });
 
-    await updateDatevExportStatus(id, DATEV_STATUS.SENT, null);
+    await updateDatevExportStatus(id, DATEV_STATUS.SUCCESS, null);
 
     return res.json({ message: "Rechnung wurde an DATEV gesendet." });
   } catch (err) {
@@ -1555,16 +2277,16 @@ export const exportInvoiceToDatev = async (req, res) => {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
     console.error("DATEV Export fehlgeschlagen:", err);
-    try {
-      await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV Export fehlgeschlagen.");
-    } catch (statusErr) {
-      console.error("DATEV-Status konnte nicht aktualisiert werden:", statusErr);
-    }
-    const message =
+    const short =
       err?.code === "EAUTH"
         ? "SMTP-Login fehlgeschlagen. Zugangsdaten prüfen."
+        : err?.responseCode
+        ? `SMTP-Fehler (${err.responseCode}): ${(err.response || err.message || "").split("\n")[0]}`
         : err?.message || "DATEV Export fehlgeschlagen.";
-    return res.status(500).json({ message });
+    await updateDatevExportStatus(id, DATEV_STATUS.FAILED, short);
+    // 4xx/5xx differenziert, aber kein harter 500 bei bekannten SMTP-Fehlern
+    const status = err?.responseCode ? 502 : 400;
+    return res.status(status).json({ message: short });
   }
 };
 
@@ -1578,21 +2300,25 @@ export const markPaid = async (req, res) => {
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
   try {
-    const updateResult = await db.query(
-      `
-        UPDATE invoices
-        SET status_paid_at = NOW()
-        WHERE id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent_at, status_paid_at
-      `,
-      [id]
-    );
+    const updated = await prisma.invoices.update({
+      where: { id },
+      data: {
+        status_paid_at: new Date(),
+      },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent_at: true,
+        status_paid_at: true,
+      },
+    });
 
-    if (updateResult.rowCount === 0) {
+    if (!updated) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const row = updateResult.rows[0];
+    const row = updated;
     const firstItem = await fetchFirstItemDescription(id);
 
     // HKForms Sync (best effort)
@@ -1610,6 +2336,9 @@ export const markPaid = async (req, res) => {
 
     return res.json({ message: "Rechnung als bezahlt markiert" });
   } catch (err) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
     console.error("Fehler beim Markieren als bezahlt:", err);
     return res.status(500).json({ error: "Fehler beim Aktualisieren des Status" });
   }
@@ -1633,21 +2362,23 @@ export const getInvoiceStatusByReservation = async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      `
-        SELECT id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
-        FROM invoices
-        WHERE reservation_request_id = $1
-        LIMIT 1
-      `,
-      [reservationId]
-    );
+    const row = await prisma.invoices.findFirst({
+      where: { reservation_request_id: reservationId },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent: true,
+        status_sent_at: true,
+        status_paid_at: true,
+        overdue_since: true,
+        external_reference: true,
+      },
+    });
 
-    if (result.rowCount === 0) {
+    if (!row) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
-
-    const row = result.rows[0];
 
     return res.json({
       invoiceId: row.id,
@@ -1696,21 +2427,25 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
   }
 
   try {
-    const existing = await db.query(
-      `
-        SELECT id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
-        FROM invoices
-        WHERE reservation_request_id = $1
-        LIMIT 1
-      `,
-      [reservationId]
-    );
+    const existing = await prisma.invoices.findFirst({
+      where: { reservation_request_id: reservationId },
+      select: {
+        id: true,
+        invoice_number: true,
+        reservation_request_id: true,
+        status_sent: true,
+        status_sent_at: true,
+        status_paid_at: true,
+        overdue_since: true,
+        external_reference: true,
+      },
+    });
 
-    if (existing.rowCount === 0) {
+    if (!existing) {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const current = existing.rows[0];
+    const current = existing;
 
     let nextStatusSent = false;
     let nextStatusSentAt = null;
@@ -1747,29 +2482,31 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
 
     const nextReference = (reference || "").trim() || current.external_reference || null;
 
-    const updated = await db.query(
-      `
-        UPDATE invoices
-        SET
-          status_sent = $2,
-          status_sent_at = $3,
-          status_paid_at = $4,
-          overdue_since = $5,
-          external_reference = $6
-        WHERE reservation_request_id = $1
-        RETURNING id, invoice_number, reservation_request_id, status_sent, status_sent_at, status_paid_at, overdue_since, external_reference
-      `,
-      [
-        reservationId,
-        nextStatusSent,
-        nextStatusSentAt,
-        nextStatusPaidAt,
-        nextOverdueSince,
-        nextReference
-      ]
-    );
+    const updated = await prisma.invoices.updateMany({
+      where: { reservation_request_id: reservationId },
+      data: {
+        status_sent: nextStatusSent,
+        status_sent_at: nextStatusSentAt,
+        status_paid_at: nextStatusPaidAt,
+        overdue_since: nextOverdueSince,
+        external_reference: nextReference,
+      },
+    });
 
-    const row = updated.rows[0];
+    if (updated.count === 0) {
+      return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+
+    const row = {
+      id: current.id,
+      invoice_number: current.invoice_number,
+      reservation_request_id: current.reservation_request_id,
+      status_sent: nextStatusSent,
+      status_sent_at: nextStatusSentAt,
+      status_paid_at: nextStatusPaidAt,
+      overdue_since: nextOverdueSince,
+      external_reference: nextReference,
+    };
 
     // HKForms Sync (best effort, nur wenn Reservation-ID vorhanden)
     let syncPayload = null;
@@ -1820,6 +2557,60 @@ export const updateInvoiceStatusByReservation = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/invoices/bulk-cancel
+ * Mehrere Rechnungen stornieren (ohne Löschung)
+ */
+export const bulkCancelInvoices = async (req, res) => {
+  const idsRaw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const reasonRaw = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  const ids = Array.from(
+    new Set(
+      idsRaw
+        .map((v) => Number(v))
+        .filter((n) => Number.isInteger(n) && n > 0)
+    )
+  );
+
+  if (!ids.length) {
+    return res
+      .status(400)
+      .json({ message: "ids muss ein Array mit mindestens einem Element sein." });
+  }
+
+  const cancelReason = reasonRaw ? reasonRaw.slice(0, 500) : null;
+  const now = new Date();
+
+  try {
+    const rows = await prisma.invoices.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, invoice_number: true, canceled_at: true },
+    });
+
+    const toCancel = rows.filter((r) => !r.canceled_at);
+    if (!toCancel.length) {
+      return res.json({ updated: 0 });
+    }
+
+    const updated = await prisma.invoices.updateMany({
+      where: { id: { in: toCancel.map((r) => r.id) }, canceled_at: null },
+      data: {
+        canceled_at: now,
+        cancel_reason: cancelReason,
+      },
+    });
+
+    await Promise.allSettled(
+      toCancel.map((row) => moveInvoicePdfToArchive(row.invoice_number))
+    );
+
+    return res.json({ updated: updated.count || 0 });
+  } catch (err) {
+    console.error("Fehler beim Stornieren mehrerer Rechnungen:", err);
+    return res.status(500).json({ message: "Rechnungen konnten nicht storniert werden." });
+  }
+};
+
 // ...
 /**
  * DELETE /api/invoices/:id
@@ -1830,39 +2621,29 @@ export const deleteInvoice = async (req, res) => {
 
   if (!id) return res.status(400).json({ error: "Ungültige Rechnungs-ID" });
 
-  const client = await db.connect();
-
   try {
-    await client.query("BEGIN");
+    const invoiceRow = await prisma.invoices.findUnique({
+      where: { id },
+      select: { invoice_number: true },
+    });
 
-    // Positionen löschen (falls kein ON DELETE CASCADE gesetzt ist)
-    await client.query(
-      "DELETE FROM invoice_items WHERE invoice_id = $1",
-      [id]
-    );
-
-    // Rechnung holen (für evtl. PDF-Datei)
-    const invoiceResult = await client.query(
-      "SELECT invoice_number FROM invoices WHERE id = $1",
-      [id]
-    );
-
-    if (invoiceResult.rowCount === 0) {
-      await client.query("ROLLBACK");
+    if (!invoiceRow) {
       return res.status(404).json({ error: "Rechnung nicht gefunden" });
     }
 
-    const invoiceNumber = invoiceResult.rows[0].invoice_number;
-
-    // Rechnung löschen
-    await client.query("DELETE FROM invoices WHERE id = $1", [id]);
-
-    await client.query("COMMIT");
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice_items.deleteMany({
+        where: { invoice_id: id },
+      });
+      await tx.invoices.delete({
+        where: { id },
+      });
+    });
 
     // PDF-Datei (falls vorhanden) löschen
     try {
-      const pdfDir = path.join(__dirname, "../../pdfs");
-      const filename = `Rechnung-${invoiceNumber}.pdf`;
+      const { storage: pdfDir } = await getPdfPaths();
+      const filename = `Rechnung-${invoiceRow.invoice_number}.pdf`;
       const filepath = path.join(pdfDir, filename);
       if (fs.existsSync(filepath)) {
         fs.unlinkSync(filepath);
@@ -1873,11 +2654,62 @@ export const deleteInvoice = async (req, res) => {
 
     return res.json({ message: "Rechnung gelöscht" });
   } catch (err) {
-    await client.query("ROLLBACK");
     console.error("Fehler beim Löschen der Rechnung:", err);
+    if (err?.code === "P2025") {
+      return res.status(404).json({ error: "Rechnung nicht gefunden" });
+    }
     return res.status(500).json({ error: "Fehler beim Löschen der Rechnung" });
-  } finally {
-    client.release();
+  }
+};
+
+/**
+ * GET /api/invoices/recent?limit=10
+ * Liefert die letzten Rechnungen (minimaler Satz Felder)
+ */
+export const getRecentInvoices = async (req, res) => {
+  const limitRaw = Number(req.query.limit) || 10;
+  const limit = Math.min(Math.max(limitRaw, 1), 50);
+  try {
+    const rows = await prisma.invoices.findMany({
+      where: { canceled_at: null },
+      orderBy: [
+        { date: "desc" },
+        { invoice_number: "desc" },
+      ],
+      take: limit,
+      include: {
+        recipients: { select: { name: true } },
+      },
+    });
+
+    const categoryKeys = Array.from(
+      new Set(rows.map((r) => r.category).filter(Boolean))
+    );
+    let categoryLabels = {};
+    if (categoryKeys.length) {
+      const cats = await prisma.invoice_categories.findMany({
+        where: { key: { in: categoryKeys } },
+        select: { key: true, label: true },
+      });
+      categoryLabels = Object.fromEntries(cats.map((c) => [c.key, c.label]));
+    }
+
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      invoice_number: r.invoice_number,
+      date: r.date,
+      recipient_name: r.recipients?.name || null,
+      category_label: r.category ? categoryLabels[r.category] || r.category : null,
+      status_sent: r.status_sent,
+      status_sent_at: r.status_sent_at,
+      status_paid_at: r.status_paid_at,
+      gross_total: r.gross_total,
+    }));
+
+    return res.json(mapped);
+  } catch (err) {
+    console.error("Fehler beim Laden der letzten Rechnungen:", err);
+    return res.status(500).json({ message: "Letzte Rechnungen konnten nicht geladen werden." });
   }
 };
 
@@ -1887,34 +2719,7 @@ export const deleteInvoice = async (req, res) => {
 // -------------------------------------------------------------
 export const getNextInvoiceNumber = async (req, res) => {
   try {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const prefix = `${year}${month}`; // z.B. "202502"
-
-    const result = await db.query(
-      `
-      SELECT invoice_number
-      FROM invoices
-      WHERE invoice_number LIKE $1
-      ORDER BY invoice_number DESC
-      LIMIT 1
-      `,
-      [prefix + "%"]
-    );
-
-    let nextRunningNumber = 1;
-
-    if (result.rowCount > 0) {
-      const lastNumber = result.rows[0].invoice_number;
-      const lastSuffix = lastNumber.substring(6); // alles nach YYYYMM
-      const lastInt = parseInt(lastSuffix, 10) || 0;
-      nextRunningNumber = lastInt + 1;
-    }
-
-    const suffix = String(nextRunningNumber).padStart(3, "0");
-    const next = `${prefix}${suffix}`;
-
+    const next = await computeNextInvoiceNumber();
     return res.json({ next });
   } catch (err) {
     console.error("Fehler bei next-number:", err);

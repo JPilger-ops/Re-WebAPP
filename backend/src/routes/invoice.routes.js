@@ -4,13 +4,17 @@ import {
   getAllInvoices, 
   getInvoiceById, 
   getInvoicePdf,
+  getRecentInvoices,
   markSent,
   getInvoiceEmailPreview,
   sendInvoiceEmail,
   getNextInvoiceNumber,
+  updateInvoice,
   markPaid,
   exportInvoiceToDatev,
+  regenerateInvoicePdf,
   deleteInvoice,         // ⬅️ NEU
+  bulkCancelInvoices,
   getInvoiceStatusByReservation,
   updateInvoiceStatusByReservation
 } from "../controllers/invoice.controller.js";
@@ -28,15 +32,19 @@ router.use(authRequired);
 // Status-Routen
 router.post("/:id/status/sent", markSent);
 router.post("/:id/status/paid", markPaid);
+router.post("/bulk-cancel", bulkCancelInvoices);
 router.get("/:id/email-preview", getInvoiceEmailPreview);
 router.post("/:id/send-email", sendInvoiceEmail);
 router.post("/:id/datev-export", exportInvoiceToDatev);
 
 // Standard-Routen
 router.get("/next-number", getNextInvoiceNumber);
+router.get("/recent", getRecentInvoices);
 router.get("/", getAllInvoices);     
 router.get("/:id", getInvoiceById);
 router.get("/:id/pdf", getInvoicePdf);
+router.post("/:id/pdf/regenerate", requireRole("admin"), regenerateInvoicePdf);
+router.put("/:id", updateInvoice);
 router.post("/", createInvoice);
 
 // Löschen

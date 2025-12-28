@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev_Prisma]
+  pull_request:
+    branches: [main, dev_Prisma]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Set build metadata env
+        run: |
+          BUILD_SHA=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          APP_VERSION=$(node -p "require('./backend/package.json').version")
+          echo "BUILD_SHA=$BUILD_SHA" >> $GITHUB_ENV
+          echo "BUILD_TIME=$BUILD_TIME" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "Build metadata -> sha=$BUILD_SHA time=$BUILD_TIME number=$BUILD_NUMBER version=$APP_VERSION"
+
+      - name: Install frontend deps
+        run: npm ci --prefix frontend
+
+      - name: Install backend deps
+        run: npm ci --prefix backend
+
+      - name: Frontend typecheck
+        run: npm --prefix frontend run typecheck
+
+      - name: Frontend build
+        run: npm --prefix frontend run build
+
+      - name: Prepare env files
+        run: |
+          rm -f .env
+          {
+            echo "APP_BIND_IP=0.0.0.0"
+            echo "APP_PUBLIC_PORT=3031"
+            echo "APP_HOST=0.0.0.0"
+            echo "APP_PORT=3030"
+            echo "DB_HOST=db"
+            echo "DB_PORT=5432"
+            echo "DB_USER=rechnung_app"
+            echo "DB_PASS=change_me"
+            echo "DB_NAME=rechnung_prod"
+            echo "DB_SCHEMA=public"
+            echo "DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public"
+          } > .env
+          rm -f backend/.env
+          cp backend/.env.example backend/.env
+          echo "APP_PORT=3030" >> backend/.env
+          echo "---- .env (CI) ----"
+          grep -E "APP_BIND_IP|APP_PUBLIC_PORT|APP_PORT|APP_HOST" .env
+
+      - name: Show resolved compose config (ports check)
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml config > /tmp/compose.resolved.yml
+          echo "---- app service (resolved) ----"
+          awk '/^  app:/,/^  [a-zA-Z0-9_-]+:/' /tmp/compose.resolved.yml || true
+          echo "---- ports lines (if any) ----"
+          grep -n "ports" /tmp/compose.resolved.yml || true
+
+      - name: Build and start services
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
+
+      - name: Debug app container status
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=250 app || true
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker inspect $(APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q app) --format '{{.State.Status}} {{.State.ExitCode}}' || true
+          echo "---- package.json locations ----"
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T app sh -lc 'pwd; ls -la; ls -la /app; find /app -maxdepth 3 -name package.json'
+
+      - name: Wait for app health
+        run: |
+          APP_ID=$(APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -q app)
+          if [ -z "$APP_ID" ]; then
+            echo "app container not found"
+            APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps -a
+            exit 1
+          fi
+          for i in {1..60}; do
+            STATUS=$(docker inspect "$APP_ID" --format '{{.State.Status}}')
+            if [ "$STATUS" != "running" ]; then
+              echo "app container status: $STATUS (not running)"
+              APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200 app || true
+              exit 1
+            fi
+            if APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps --format '{{.Name}} {{.Health}}' | grep -q 'app.*healthy'; then
+              exit 0
+            fi
+            sleep 5
+          done
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --tail=200
+          exit 1
+
+      - name: Verify API reachable inside app container
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T app sh -lc '
+            for i in $(seq 1 10); do
+              if curl -fsS http://127.0.0.1:3030/api/version; then exit 0; fi
+              sleep 3
+            done
+            curl -v http://127.0.0.1:3030/api/version
+            exit 1
+          '
+
+      - name: Prepare pdf directory (debug perms)
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -u 0 app sh -lc '
+            id
+            ls -ld /app /app/pdfs || true
+            mkdir -p /app/pdfs
+            chown -R node:node /app/pdfs || true
+            chmod 1777 /app/pdfs || chmod 777 /app/pdfs
+            ls -ld /app /app/pdfs
+          '
+
+      - name: Smoke - check:api
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:api
+
+      - name: Smoke - check:pdf
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:pdf
+
+      - name: Smoke - check:invoice
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T -w /app -e CHECK_HOST=127.0.0.1 -e CHECK_PORT=3030 app npm run check:invoice
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml ps
+          APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color --tail=200
+
+      - name: Shutdown
+        if: always()
+        run: APP_BIND_IP=0.0.0.0 APP_PUBLIC_PORT=3031 docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v

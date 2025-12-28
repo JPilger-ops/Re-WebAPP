@@ -5,18 +5,34 @@
   "main": "src/index.js",
   "scripts": {
     "test": "node --test",
-    "dev": "node src/index.js",
-    "start": "node src/index.js"
+    "dev": "tsx watch src/index.js",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:docker": "node ./scripts/bootstrap-db.mjs && node dist/index.js",
+    "db:migrate": "npx prisma migrate deploy",
+    "db:seed": "npx prisma db seed",
+    "test:pdf": "node scripts/pdf-smoke.js",
+    "check:api": "node scripts/check-api.js",
+    "check:pdf": "node scripts/check-pdf.mjs",
+    "check:invoice": "node scripts/check-invoice.mjs",
+    "check:parity": "node scripts/check-parity.mjs",
+    "check:pdf-parity": "node scripts/check-pdf-parity.mjs",
+    "check:mail-parity": "node scripts/check-mail-parity.mjs",
+    "check:datev-parity": "node scripts/check-datev-parity.mjs",
+    "check:hkforms-parity": "node scripts/check-hkforms-parity.mjs",
+    "check:roadmap": "node scripts/check-roadmap.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "5.22.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "express-rate-limit": "^6.11.2",
     "helmet": "^8.1.0",
     "imapflow": "^1.2.0",
     "jsonwebtoken": "^9.0.2",
@@ -27,6 +43,13 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "supertest": "^7.1.4"
+    "@types/node": "^22.9.1",
+    "prisma": "5.22.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }

@@ -1,10 +1,15 @@
 # Node
 backend/node_modules/
+frontend/node_modules/
 backend/npm-debug.log*
 backend/yarn-error.log*
 
 # Env / Secrets
 backend/.env
+.env.local
+.env.*
+!.env.example
+.env
 
 # Build / Cache / Temp
 backend/pdfs/
@@ -13,6 +18,8 @@ backend/.cache/
 backend/.tmp/
 .tmp/
 backend/core/
+.env.local
+data/
 .DS_Store
 
 # SSL Certificates
@@ -29,3 +36,4 @@ logs/
 .idea/
 *.swp
 backend/core/
+.npmrc
