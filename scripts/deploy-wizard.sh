@@ -89,41 +89,51 @@ SETUP_QUIET=1 ./scripts/setup.sh
 
 ENV_FILE="${RELEASE_DIR}/.env"
 section "Schritt 2: .env konfigurieren"
-info "Nur nicht-UI Settings. Enter = Default, [] = Pflicht."
-DB_HOST_VAL="$(current_env_value "${ENV_FILE}" "DB_HOST")"
-DB_PORT_VAL="$(current_env_value "${ENV_FILE}" "DB_PORT")"
-DB_NAME_VAL="$(current_env_value "${ENV_FILE}" "DB_NAME")"
-DB_SCHEMA_VAL="$(current_env_value "${ENV_FILE}" "DB_SCHEMA")"
-DB_USER_VAL="$(current_env_value "${ENV_FILE}" "DB_USER")"
-DB_PASS_VAL="$(current_env_value "${ENV_FILE}" "DB_PASS")"
-DATABASE_URL_VAL="$(current_env_value "${ENV_FILE}" "DATABASE_URL")"
-APP_BIND_IP_VAL="$(current_env_value "${ENV_FILE}" "APP_BIND_IP")"
-APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
-APP_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PORT")"
-APP_HTTPS_DISABLE_VAL="$(current_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE")"
+if [[ "${MODE,,}" == "install" ]]; then
+  info "Nur nicht-UI Settings. Enter = Default, [] = Pflicht."
+  DB_HOST_VAL="$(current_env_value "${ENV_FILE}" "DB_HOST")"
+  DB_PORT_VAL="$(current_env_value "${ENV_FILE}" "DB_PORT")"
+  DB_NAME_VAL="$(current_env_value "${ENV_FILE}" "DB_NAME")"
+  DB_SCHEMA_VAL="$(current_env_value "${ENV_FILE}" "DB_SCHEMA")"
+  DB_USER_VAL="$(current_env_value "${ENV_FILE}" "DB_USER")"
+  DB_PASS_VAL="$(current_env_value "${ENV_FILE}" "DB_PASS")"
+  DATABASE_URL_VAL="$(current_env_value "${ENV_FILE}" "DATABASE_URL")"
+  APP_BIND_IP_VAL="$(current_env_value "${ENV_FILE}" "APP_BIND_IP")"
+  APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
+  APP_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PORT")"
+  APP_HTTPS_DISABLE_VAL="$(current_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE")"
 
-set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
-set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt "DB_PORT" "${DB_PORT_VAL:-5432}")"
-set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt "DB_NAME" "${DB_NAME_VAL:-rechnung_prod}")"
-set_env_value "${ENV_FILE}" "DB_SCHEMA" "$(prompt "DB_SCHEMA" "${DB_SCHEMA_VAL:-public}")"
-set_env_value "${ENV_FILE}" "DB_USER" "$(prompt "DB_USER" "${DB_USER_VAL:-rechnung_app}")"
-set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt_required "DB_PASS" "${DB_PASS_VAL:-}")"
-set_env_value "${ENV_FILE}" "DATABASE_URL" "$(prompt "DATABASE_URL" "${DATABASE_URL_VAL:-postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public}")"
-set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL:-0.0.0.0}")"
-set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
-set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
-set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "${APP_HTTPS_DISABLE_VAL:-true}")"
+  set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
+  set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt "DB_PORT" "${DB_PORT_VAL:-5432}")"
+  set_env_value "${ENV_FILE}" "DB_NAME" "$(prompt "DB_NAME" "${DB_NAME_VAL:-rechnung_prod}")"
+  set_env_value "${ENV_FILE}" "DB_SCHEMA" "$(prompt "DB_SCHEMA" "${DB_SCHEMA_VAL:-public}")"
+  set_env_value "${ENV_FILE}" "DB_USER" "$(prompt "DB_USER" "${DB_USER_VAL:-rechnung_app}")"
+  set_env_value "${ENV_FILE}" "DB_PASS" "$(prompt_required "DB_PASS" "${DB_PASS_VAL:-}")"
+  set_env_value "${ENV_FILE}" "DATABASE_URL" "$(prompt "DATABASE_URL" "${DATABASE_URL_VAL:-postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public}")"
+  set_env_value "${ENV_FILE}" "APP_BIND_IP" "$(prompt "APP_BIND_IP (Host)" "${APP_BIND_IP_VAL:-0.0.0.0}")"
+  set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
+  set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
+  set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "${APP_HTTPS_DISABLE_VAL:-true}")"
+else
+  info "Update-Modus: .env bleibt unverändert (keine Prompts)."
+fi
 
 # PDF-Pfade automatisch setzen (UI-pflegbar, aber für Schreibbarkeit initialisieren)
 PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
 PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
 PDF_TRASH_VAL="$(current_env_value "${ENV_FILE}" "PDF_TRASH_PATH")"
-PDF_STORAGE_PATH="${PDF_STORAGE_VAL:-/app/pdfs}"
-PDF_ARCHIVE_PATH="${PDF_ARCHIVE_VAL:-/app/pdfs/archive}"
-PDF_TRASH_PATH="${PDF_TRASH_VAL:-/app/pdfs/trash}"
-set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "${PDF_STORAGE_PATH}"
-set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "${PDF_ARCHIVE_PATH}"
-set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "${PDF_TRASH_PATH}"
+if [[ "${MODE,,}" == "install" ]]; then
+  PDF_STORAGE_PATH="${PDF_STORAGE_VAL:-/app/pdfs}"
+  PDF_ARCHIVE_PATH="${PDF_ARCHIVE_VAL:-/app/pdfs/archive}"
+  PDF_TRASH_PATH="${PDF_TRASH_VAL:-/app/pdfs/trash}"
+  set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "${PDF_STORAGE_PATH}"
+  set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "${PDF_ARCHIVE_PATH}"
+  set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "${PDF_TRASH_PATH}"
+else
+  PDF_STORAGE_PATH="${PDF_STORAGE_VAL:-/app/pdfs}"
+  PDF_ARCHIVE_PATH="${PDF_ARCHIVE_VAL:-/app/pdfs/archive}"
+  PDF_TRASH_PATH="${PDF_TRASH_VAL:-/app/pdfs/trash}"
+fi
 
 # Verzeichnisse anlegen und Rechte setzen, damit PDF/Branding schreibbar sind
 [ -n "${PDF_STORAGE_PATH}" ] && mkdir -p "${PDF_STORAGE_PATH}"
@@ -138,8 +148,12 @@ fi
 
 BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
 JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
-info "Backend-Env (JWT_SECRET wird benötigt; andere Keys später in der UI konfigurierbar)"
-set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
+if [[ "${MODE,,}" == "install" ]]; then
+  info "Backend-Env (JWT_SECRET wird benötigt; andere Keys später in der UI konfigurierbar)"
+  set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
+else
+  info "Update-Modus: backend/.env bleibt unverändert (kein JWT_SECRET Prompt)."
+fi
 
 section "Schritt 3: Build & Deploy"
 info "Schreibe Build-Metadaten in .env (ohne Build)"
