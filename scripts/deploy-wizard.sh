@@ -125,10 +125,12 @@ set_env_value "${ENV_FILE}" "PDF_STORAGE_PATH" "${PDF_STORAGE_PATH}"
 set_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH" "${PDF_ARCHIVE_PATH}"
 set_env_value "${ENV_FILE}" "PDF_TRASH_PATH" "${PDF_TRASH_PATH}"
 
-# Verzeichnisse anlegen, damit PDF-Pfade existieren
+# Verzeichnisse anlegen und Rechte setzen, damit PDF/Branding schreibbar sind
 [ -n "${PDF_STORAGE_PATH}" ] && mkdir -p "${PDF_STORAGE_PATH}"
 [ -n "${PDF_ARCHIVE_PATH}" ] && mkdir -p "${PDF_ARCHIVE_PATH}"
 [ -n "${PDF_TRASH_PATH}" ] && mkdir -p "${PDF_TRASH_PATH}"
+mkdir -p "/app/public" "/app/backend/public"
+chmod -R 775 "${PDF_STORAGE_PATH}" "${PDF_ARCHIVE_PATH}" "${PDF_TRASH_PATH}" "/app/public" "/app/backend/public" 2>/dev/null || true
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env

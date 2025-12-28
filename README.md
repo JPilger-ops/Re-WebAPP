@@ -55,3 +55,4 @@ cat backup.sql | docker compose exec -T db psql -U $DB_USER -d $DB_NAME
 - PDF-Fehler: Pfade/Schreibrechte prüfen (UI-Settings), Verzeichnisse bestehen.
 - Mail: `EMAIL_SEND_DISABLED` / `EMAIL_REDIRECT_TO` prüfen, SMTP in UI hinterlegen.
 - Version prüfen: `curl http://127.0.0.1:3031/api/version`
+- CORS: In den UI-Netzwerk-Settings `CORS_ORIGINS` als kommaseparierte Liste (z.B. `https://rechnung.intern,http://localhost:3031`). Wenn TLS extern terminiert, Origin mit https eintragen, Backend bleibt intern HTTP.
