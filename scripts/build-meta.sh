@@ -4,10 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-if ! command -v git >/dev/null 2>&1; then
-  echo "Fehlender Befehl: git" >&2
-  exit 1
+HAS_GIT=1
+if ! command -v git >/dev/null 2>&1 || ! git rev-parse --git-dir >/dev/null 2>&1; then
+  HAS_GIT=0
 fi
+
 PYTHON_BIN="python3"
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   if command -v python >/dev/null 2>&1; then
@@ -18,9 +19,26 @@ if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   fi
 fi
 
-BUILD_SHA="$(git rev-parse --short HEAD)"
-BUILD_NUMBER="$(git rev-list --count HEAD)"
-BUILD_TIME="$(git show -s --format=%cI HEAD 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")"
+resolve_build_value() {
+  local current="$1"
+  local git_cmd="$2"
+  local fallback="$3"
+  if [ -n "${current:-}" ]; then
+    echo "${current}"
+    return
+  fi
+  if [ "${HAS_GIT}" -eq 1 ]; then
+    if value="$(${git_cmd})"; then
+      echo "${value}"
+      return
+    fi
+  fi
+  echo "${fallback}"
+}
+
+BUILD_SHA="$(resolve_build_value "${BUILD_SHA:-}" "git rev-parse --short HEAD" "unknown")"
+BUILD_NUMBER="$(resolve_build_value "${BUILD_NUMBER:-}" "git rev-list --count HEAD" "0")"
+BUILD_TIME="$(resolve_build_value "${BUILD_TIME:-}" "git show -s --format=%cI HEAD" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")")"
 ENV_FILE="${ROOT_DIR}/.env"
 
 touch "${ENV_FILE}"
@@ -65,5 +83,10 @@ upsert_env_var "BUILD_TIME" "${BUILD_TIME}"
 
 export BUILD_SHA BUILD_NUMBER BUILD_TIME
 echo "Build-Metadaten gesetzt: sha=${BUILD_SHA}, number=${BUILD_NUMBER}, time=${BUILD_TIME}"
+
+if [ "${SKIP_DOCKER_COMPOSE:-0}" = "1" ]; then
+  echo "Docker Compose Build übersprungen (SKIP_DOCKER_COMPOSE=1)."
+  exit 0
+fi
 
 DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose build "$@"

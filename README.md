@@ -9,7 +9,7 @@ Interne Rechnungs- und Verwaltungs-App mit Backend (Node/Express/Prisma), Fronte
 ## 2) Quickstart (Server/Local)
 Voraussetzungen: Docker Engine >= 20.x, Docker Compose v2 (BuildKit empfohlen/Default).
 
-Schritte:
+Schritte (manuell):
 1. `git clone <repo>`
 2. `./scripts/setup.sh` (legt .env + backend/.env an, wenn fehlen)
 3. `.env` anpassen (mindestens DB_PASS, DB_USER, DB_NAME setzen; ggf. backend/.env Secrets)
@@ -19,6 +19,19 @@ Schritte:
    - `npm --prefix backend run check:api`
    - `npm --prefix backend run check:pdf`
    - `npm --prefix backend run check:invoice`
+
+### Geführtes Deployment/Update (Wizard, inkl. Symlink `current`)
+Empfohlen für Server-Rollout mit Versionen und geteilten Daten/PDFs.
+
+1. Stelle sicher, dass das Repo sauber ist (`git status`) und der gewünschte Commit ausgecheckt ist.
+2. Starte den Wizard: `./scripts/deploy-wizard.sh`
+   - Fragt Installationspfad (Default: `/opt/rechnungsapp`), Modus (install/update) und Compose-Projektname.
+   - Exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, legt `shared/data` und `shared/pdfs` an und verlinkt sie in das Release.
+   - Schreibt Build-Metadaten (SHA/Number/Time) in `.env`, setzt optional `COMPOSE_PROJECT_NAME`.
+   - Führt `docker compose build`, `prisma migrate deploy`, `prisma db seed` (legt admin/admin an, falls fehlend) und `docker compose up -d` aus.
+   - Aktiviert das Release über den Symlink `<BASE>/current`.
+3. Healthcheck (Wizard macht optional): `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
+4. Standard-Login nach frischem Setup: admin / admin (bitte direkt ändern).
 
 Defaults:
 - Host-IP: 192.200.255.225
@@ -61,6 +74,7 @@ Settings-Tabs (UI, Admin-only):
 
 ## 5) Betrieb / Wartung
 - Update: `git pull` + `docker compose up -d --build`
+- Alternativ: Wizard (s.o.) für versionierten Rollout mit Symlink-Switch (`./scripts/deploy-wizard.sh`)
 - Logs: `docker compose logs -f app`
 - DB Backup/Restore (Beispiel):
   - Backup: `docker compose exec db pg_dump -U $DB_USER -d $DB_NAME > backup.sql`

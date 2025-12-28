@@ -183,12 +183,25 @@ async function seedHkforms() {
 
 async function seedPdfSettings() {
   const fallback = process.env.PDF_STORAGE_PATH || "/app/pdfs";
-  await prisma.pdf_settings.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
+  const archive = process.env.PDF_ARCHIVE_PATH || null;
+  const trash = process.env.PDF_TRASH_PATH || null;
+  const existing = await prisma.pdf_settings.findFirst({ where: { id: 1 } });
+  if (existing) {
+    await prisma.pdf_settings.update({
+      where: { id: 1 },
+      data: {
+        archive_path: existing.archive_path ?? archive,
+        trash_path: existing.trash_path ?? trash,
+      },
+    });
+    return;
+  }
+  await prisma.pdf_settings.create({
+    data: {
       id: 1,
       storage_path: fallback,
+      archive_path: archive,
+      trash_path: trash,
     },
   });
 }
