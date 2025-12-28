@@ -1444,37 +1444,23 @@ function Invoices() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center text-sm">
+        <div className="grid gap-2 text-sm lg:grid-cols-6 md:grid-cols-4 grid-cols-2">
           <Input
-            placeholder="Nummer oder Empfänger"
+            placeholder="Nummer/Empfänger"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-56 h-9 text-sm"
-          />
-          <Input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="w-40 h-9 text-sm"
-            placeholder="Von"
-          />
-          <Input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="w-40 h-9 text-sm"
-            placeholder="Bis"
+            className="h-9 text-sm"
           />
           <Input
             placeholder="Kunde"
             value={customerFilter}
             onChange={(e) => setCustomerFilter(e.target.value)}
-            className="w-48 h-9 text-sm"
+            className="h-9 text-sm"
           />
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="w-44 h-9 text-sm"
+            className="h-9 text-sm"
           >
             <option value="active">Aktiv</option>
             <option value="all">Alle</option>
@@ -1486,7 +1472,7 @@ function Invoices() {
           <Select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-40 h-9 text-sm"
+            className="h-9 text-sm"
           >
             <option value="all">Alle Kategorien</option>
             {categories.map((c) => (
@@ -1495,7 +1481,26 @@ function Invoices() {
               </option>
             ))}
           </Select>
-          <Button variant="ghost" onClick={resetFilters} disabled={loading} className="h-9 text-sm">
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="h-9 text-sm"
+            placeholder="Von"
+          />
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="h-9 text-sm"
+            placeholder="Bis"
+          />
+          <Button
+            variant="ghost"
+            onClick={resetFilters}
+            disabled={loading}
+            className="h-9 text-sm col-span-2 md:col-span-1"
+          >
             Filter zurücksetzen
           </Button>
         </div>
