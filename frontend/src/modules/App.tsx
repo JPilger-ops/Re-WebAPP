@@ -1305,6 +1305,9 @@ function Invoices() {
       const apiErr = err as ApiError;
       let msg = apiErr.message || "E-Mail konnte nicht gesendet werden.";
       if (apiErr.status === 401 || apiErr.status === 403) msg = "Keine Berechtigung.";
+      if (apiErr.status === 400 && msg.toLowerCase().includes("smtp")) {
+        msg = "E-Mail Versand ist nicht konfiguriert (SMTP). Bitte Einstellungen prüfen.";
+      }
       setToast({ type: "error", message: msg });
     } finally {
       setBusyId(null);
@@ -2263,7 +2266,13 @@ function InvoiceFormModal({
   const findCustomerByName = (value: string) => {
     const needle = value.trim().toLowerCase();
     if (!needle) return null;
-    return customers.find((c) => (c.name || "").trim().toLowerCase() === needle) || null;
+    const exact = customers.find((c) => (c.name || "").trim().toLowerCase() === needle);
+    if (exact) return exact;
+    if (needle.length >= 3) {
+      const partialMatches = customers.filter((c) => (c.name || "").trim().toLowerCase().includes(needle));
+      if (partialMatches.length === 1) return partialMatches[0];
+    }
+    return null;
   };
 
   const handleRecipientNameChange = (value: string) => {
@@ -2397,6 +2406,9 @@ function InvoiceFormModal({
       setError(msg);
       if (onError) onError(msg);
       if (onSubmitError) onSubmitError(msg);
+      if (apiErr.status === 400 && msg.toLowerCase().includes("empfänger")) {
+        setForm((f) => ({ ...f, recipient_id: "" }));
+      }
       // Bei 409 einen neuen Vorschlag übernehmen, falls vorhanden
       const suggested = (err as any)?.data?.suggested_next_number;
       if (apiErr.status === 409 && suggested) {
@@ -2850,7 +2862,11 @@ function InvoiceDetailPage() {
       setPreview({ loading: false, data, error: null });
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setPreview({ loading: false, data: null, error: apiErr.message || "Vorschau konnte nicht geladen werden." });
+      let msg = apiErr.message || "Vorschau konnte nicht geladen werden.";
+      if (apiErr.status === 400 && msg.toLowerCase().includes("smtp")) {
+        msg = "E-Mail Versand ist nicht konfiguriert (SMTP). Bitte Einstellungen prüfen.";
+      }
+      setPreview({ loading: false, data: null, error: msg });
     }
   };
 
@@ -2868,7 +2884,11 @@ function InvoiceDetailPage() {
       setSendModal({ open: false });
     } catch (err: any) {
       const apiErr = err as ApiError;
-      setToast({ type: "error", message: apiErr.message || "E-Mail konnte nicht gesendet werden." });
+      let msg = apiErr.message || "E-Mail konnte nicht gesendet werden.";
+      if (apiErr.status === 400 && msg.toLowerCase().includes("smtp")) {
+        msg = "E-Mail Versand ist nicht konfiguriert (SMTP). Bitte Einstellungen prüfen.";
+      }
+      setToast({ type: "error", message: msg });
     } finally {
       setBusy(false);
     }

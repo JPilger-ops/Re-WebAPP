@@ -1037,7 +1037,12 @@ export const getInvoicePdf = async (req, res) => {
         res.setHeader("Content-Disposition", `inline; filename=\"${filename}\"`);
         return res.send(buf);
       } catch (err) {
-        console.warn("[PDF] Konnte bestehendes PDF nicht lesen, rendere neu:", err.message);
+        console.warn("[PDF] Konnte bestehendes PDF nicht lesen:", err.message);
+        return res.status(410).json({
+          message: "Vorhandenes PDF ist nicht lesbar. Bitte neu erzeugen (force).",
+          corrupted: true,
+          filename,
+        });
       }
     }
 
