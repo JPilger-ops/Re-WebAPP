@@ -240,13 +240,11 @@ const fetchBuffer = async (url, opts = {}) => {
     const sepaQrBase64 = await QRCode.toDataURL("TEST");
 
     const formattedDate = invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
-    const formattedReceiptDate = invoice.receipt_date ? new Date(invoice.receipt_date).toLocaleDateString("de-DE") : "";
 
     // Build HTML for marker check
     const html = generateInvoiceHtml(
       invoice,
       formattedDate,
-      formattedReceiptDate,
       itemsRowsHtml,
       sepaQrBase64,
       "", // logoBase64

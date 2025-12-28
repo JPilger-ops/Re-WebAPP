@@ -499,7 +499,6 @@ export interface InvoiceDetail {
     category: string | null;
     reservation_request_id?: string | null;
     external_reference?: string | null;
-    receipt_date?: string | null;
     status_sent?: boolean | null;
     status_sent_at?: string | null;
     status_paid_at?: string | null;

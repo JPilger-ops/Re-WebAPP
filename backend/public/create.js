@@ -17,7 +17,6 @@ const r_city   = document.getElementById("r_city");
 const i_number   = document.getElementById("i_number");
 const i_date     = document.getElementById("i_date");
 const i_category = document.getElementById("i_category");
-const i_receipt  = document.getElementById("i_receipt");
 const b2b_check = document.getElementById("b2b_check");
 const ust_id = document.getElementById("ust_id");
 const ust_wrapper = document.getElementById("ustid_wrapper");
@@ -421,7 +420,6 @@ async function createInvoice() {
       invoice_number: i_number.value,
       date: i_date.value,
       category: i_category.value,
-      receipt_date: i_receipt.value,
       reservation_request_id: reservationValue || null,
       b2b: b2b_check.checked,
       ust_id: ust_id.value.trim(),

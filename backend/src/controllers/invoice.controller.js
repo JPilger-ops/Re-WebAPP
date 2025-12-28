@@ -588,7 +588,6 @@ if (!Array.isArray(items) || items.length === 0) {
 
     // Leere Strings auf null mappen
     const invoiceDate = invoice.date && invoice.date.trim() !== "" ? new Date(invoice.date) : null;
-    const receiptDate = invoice.receipt_date && invoice.receipt_date.trim() !== "" ? new Date(invoice.receipt_date) : null;
     const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
     const reservationRequestId = invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
@@ -654,7 +653,6 @@ if (!Array.isArray(items) || items.length === 0) {
           category,
           reservation_request_id: reservationRequestId,
           external_reference: externalReference,
-          receipt_date: receiptDate,
           b2b: isB2B,
           ust_id: ustId,
           net_19: totals.net_19,
@@ -852,7 +850,6 @@ export const getInvoiceById = async (req, res) => {
       category: invoiceRow.category,
       reservation_request_id: invoiceRow.reservation_request_id,
       external_reference: invoiceRow.external_reference,
-      receipt_date: invoiceRow.receipt_date,
       status_sent: invoiceRow.status_sent,
       status_sent_at: invoiceRow.status_sent_at,
       status_paid_at: invoiceRow.status_paid_at,
@@ -1045,7 +1042,6 @@ async function ensureInvoicePdf(id) {
     const invoice = {
       invoice_number: invoiceRow.invoice_number,
       date: invoiceRow.date,
-      receipt_date: invoiceRow.receipt_date,
       b2b: invoiceRow.b2b === true,
       ust_id: invoiceRow.ust_id || null,
       net_19: n(invoiceRow.net_19),
@@ -1104,8 +1100,6 @@ async function ensureInvoicePdf(id) {
 
     const formattedDate =
       invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
-    const formattedReceiptDate =
-      invoice.receipt_date ? new Date(invoice.receipt_date).toLocaleDateString("de-DE") : "";
 
     const itemsRowsHtml = items
       .map((item) => {
@@ -1186,7 +1180,6 @@ async function ensureInvoicePdf(id) {
     const html = generateInvoiceHtml(
       invoice,
       formattedDate,
-      formattedReceiptDate,
       itemsRowsHtml,
       sepaQrBase64,
       logoBase64ForInvoice,
@@ -1294,7 +1287,6 @@ async function ensureInvoicePdf(id) {
 function generateInvoiceHtml(
   invoice,
   formattedDate,
-  formattedReceiptDate,
   itemsRowsHtml,
   sepaQrBase64,
   logoBase64ForInvoice,
@@ -1544,7 +1536,6 @@ function generateInvoiceHtml(
     <div class="meta">
       <div><strong>Rechnungsnr:</strong> ${invoice.invoice_number}</div>
       <div><strong>Datum:</strong> ${formattedDate}</div>
-      ${formattedReceiptDate ? `<div><strong>Belegdatum:</strong> ${formattedReceiptDate}</div>` : ""}
       ${invoice.b2b && invoice.ust_id ? `<div><strong>USt-ID Kunde:</strong> ${invoice.ust_id}</div>` : ""}
     </div>
     <div class="invoice-title">
