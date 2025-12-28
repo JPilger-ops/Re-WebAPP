@@ -1339,6 +1339,20 @@ function Invoices() {
         alert(data?.message || "PDF ist gesperrt (DATEV).");
         return;
       }
+      if (res.status === 410) {
+        const data = await res.json().catch(() => ({}));
+        const wants = window.confirm(data?.message || "PDF ist beschädigt. Neu erstellen?");
+        if (wants) {
+          try {
+            await regenerateInvoicePdf(id);
+            return handlePdfOpen(id, false);
+          } catch (err: any) {
+            const apiErr = err as ApiError;
+            alert(apiErr.message || "PDF konnte nicht neu erstellt werden.");
+          }
+        }
+        return;
+      }
       if (!res.ok) {
         alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
         return;
@@ -1430,40 +1444,40 @@ function Invoices() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-2 items-center text-sm">
           <Input
-            placeholder="Suche nach Nummer oder Empfänger"
+            placeholder="Nummer oder Empfänger"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-64"
+            className="w-56 h-9 text-sm"
           />
           <Input
             type="date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="w-44"
+            className="w-40 h-9 text-sm"
             placeholder="Von"
           />
           <Input
             type="date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="w-44"
+            className="w-40 h-9 text-sm"
             placeholder="Bis"
           />
           <Input
-            placeholder="Empfänger/Kunde"
+            placeholder="Kunde"
             value={customerFilter}
             onChange={(e) => setCustomerFilter(e.target.value)}
-            className="w-56"
+            className="w-48 h-9 text-sm"
           />
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="w-52"
+            className="w-44 h-9 text-sm"
           >
-            <option value="active">Aktiv (ohne Storno)</option>
-            <option value="all">Alle inkl. Storno</option>
+            <option value="active">Aktiv</option>
+            <option value="all">Alle</option>
             <option value="open">Offen</option>
             <option value="sent">Gesendet</option>
             <option value="paid">Bezahlt</option>
@@ -1472,7 +1486,7 @@ function Invoices() {
           <Select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-48"
+            className="w-40 h-9 text-sm"
           >
             <option value="all">Alle Kategorien</option>
             {categories.map((c) => (
@@ -1481,7 +1495,7 @@ function Invoices() {
               </option>
             ))}
           </Select>
-          <Button variant="ghost" onClick={resetFilters} disabled={loading}>
+          <Button variant="ghost" onClick={resetFilters} disabled={loading} className="h-9 text-sm">
             Filter zurücksetzen
           </Button>
         </div>
@@ -2694,6 +2708,7 @@ function InvoiceDetailPage() {
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
   const [sendModal, setSendModal] = useState<{ open: boolean; to?: string }>({ open: false });
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [confirmPdfRegenerate, setConfirmPdfRegenerate] = useState(false);
   const inv = detail?.invoice;
   const isCanceled = Boolean(inv?.canceled_at);
   const cancelReason = (inv?.cancel_reason || "").trim();
@@ -2917,7 +2932,35 @@ function InvoiceDetailPage() {
     if (!detail) return;
     setPdfBusy(true);
     try {
-      window.open(pdfUrl, "_blank");
+      const hasQuery = pdfUrl.includes("?");
+      const url = `${pdfUrl}${hasQuery ? "&" : "?"}mode=inline`;
+      const res = await fetch(url, { credentials: "include" });
+      if (res.status === 423) {
+        const data = await res.json().catch(() => ({}));
+        alert(data?.message || "PDF ist gesperrt (DATEV).");
+        return;
+      }
+      if (res.status === 410) {
+        const data = await res.json().catch(() => ({}));
+        const wants = window.confirm(data?.message || "PDF ist beschädigt. Neu erstellen?");
+        if (wants) {
+          try {
+            await regenerateInvoicePdf(detail.invoice.id);
+            return openDetailPdf();
+          } catch (err: any) {
+            const apiErr = err as ApiError;
+            alert(apiErr.message || "PDF konnte nicht neu erstellt werden.");
+          }
+        }
+        return;
+      }
+      if (!res.ok) {
+        alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
+        return;
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
     } finally {
       setPdfBusy(false);
     }
@@ -3159,7 +3202,7 @@ function InvoiceDetailPage() {
                 <Button variant="secondary" onClick={openDetailPdf} disabled={pdfBusy}>
                   {pdfBusy ? "Öffne..." : "PDF öffnen"}
                 </Button>
-                <Button variant="ghost" onClick={onRegenerate} disabled={pdfBusy || isCanceled}>
+                <Button variant="ghost" onClick={() => setConfirmPdfRegenerate(true)} disabled={pdfBusy || isCanceled}>
                   {pdfBusy ? "Bitte warten..." : "PDF neu erstellen"}
                 </Button>
               </div>
@@ -3167,6 +3210,28 @@ function InvoiceDetailPage() {
           </div>
         </div>
       </div>
+
+      {confirmPdfRegenerate && (
+        <Modal title="PDF neu erstellen" onClose={() => setConfirmPdfRegenerate(false)}>
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>Möchtest du das PDF wirklich neu erstellen? Die bestehende Datei wird überschrieben bzw. in den Trash verschoben.</p>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setConfirmPdfRegenerate(false)}>
+                Abbrechen
+              </Button>
+              <Button
+                onClick={() => {
+                  setConfirmPdfRegenerate(false);
+                  onRegenerate();
+                }}
+                disabled={pdfBusy || isCanceled}
+              >
+                Ja, neu erstellen
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {(preview.loading || preview.data || preview.error) && (
         <Modal title="E-Mail Vorschau" onClose={() => setPreview({ loading: false, data: null, error: null })}>

@@ -49,6 +49,7 @@
 1) PDF-Härtung  
    - Fehlerpfad für fehlgeschlagenes Lesen (korrupt/fehlende Datei) in 404/410 übersetzen statt 500.  
    - Sicherstellen, dass `pdfs/trash` immer existiert (mkdirp beim Force).
+   - Detailansicht: PDF-Öffnen soll 410 erkennen und einen Neu-Render (force) anstoßen; Button “PDF neu erstellen” mit Bestätigungs-Popup versehen.
 2) Rechnungserstellung Robustheit  
    - recipient_id Fallback: Wenn 400 durch fehlenden Empfänger, UI-Hinweis + Auswahl vorhandener Kunden anbieten.  
    - Nummernkonflikt: Automatisch neuen Vorschlag übernehmen und erneut senden (optional Confirm).
@@ -58,3 +59,6 @@
 4) E-Mail-Transparenz  
    - Spezifischere Fehlermeldungen bei fehlender SMTP-Konfiguration.  
    - Optional: Logs/Status im UI anzeigen (letzter Sendeversuch).
+5) UI-Verbesserungen Rechnungen  
+   - Filter kompakt und intuitiver darstellen (kleinere Controls, klarere Platzhalter).  
+   - PDF-Aktionen im Detail an neue Logik anbinden (410-Handling, Confirm vor Neu-Render).
