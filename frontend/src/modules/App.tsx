@@ -1074,6 +1074,10 @@ function Invoices() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [cancelDialog, setCancelDialog] = useState<{ open: boolean; reason: string }>({ open: false, reason: "" });
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [pdfConflict, setPdfConflict] = useState<{ open: boolean; invoiceId: number | null; message?: string; filename?: string }>({
+    open: false,
+    invoiceId: null,
+  });
   const [createProgress, setCreateProgress] = useState<{
     open: boolean;
     status: "idle" | "submitting" | "success" | "error";
@@ -1333,10 +1337,12 @@ function Invoices() {
       const res = await fetch(url, { credentials: "include" });
       if (res.status === 409) {
         const data = await res.json().catch(() => ({}));
-        const wants = window.confirm(data?.message || "PDF existiert bereits. Überschreiben?");
-        if (wants) {
-          return handlePdfOpen(id, true);
-        }
+        setPdfConflict({
+          open: true,
+          invoiceId: id,
+          message: data?.message || "PDF existiert bereits. Überschreiben?",
+          filename: data?.filename,
+        });
         return;
       }
       if (res.status === 423) {
@@ -1353,6 +1359,15 @@ function Invoices() {
       window.open(blobUrl, "_blank", "noopener,noreferrer");
     } finally {
       setPdfBusyId(null);
+    }
+  };
+
+  const confirmPdfConflict = async (overwrite: boolean) => {
+    if (!pdfConflict.invoiceId) return setPdfConflict({ open: false, invoiceId: null });
+    const targetId = pdfConflict.invoiceId;
+    setPdfConflict({ open: false, invoiceId: null });
+    if (overwrite) {
+      await handlePdfOpen(targetId, true);
     }
   };
 
@@ -1754,6 +1769,21 @@ function Invoices() {
               <Button onClick={onSendEmail} disabled={busyId === sendModal.id}>
                 {busyId === sendModal.id ? "Sendet..." : "Senden"}
               </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {pdfConflict.open && (
+        <Modal title="PDF bereits vorhanden" onClose={() => confirmPdfConflict(false)}>
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>{pdfConflict.message || "Es existiert bereits ein PDF für diese Rechnung."}</p>
+            {pdfConflict.filename && <p className="text-xs text-slate-500 break-all">Datei: {pdfConflict.filename}</p>}
+            <div className="flex flex-wrap justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => confirmPdfConflict(false)}>
+                Abbrechen
+              </Button>
+              <Button onClick={() => confirmPdfConflict(true)}>Überschreiben</Button>
             </div>
           </div>
         </Modal>
