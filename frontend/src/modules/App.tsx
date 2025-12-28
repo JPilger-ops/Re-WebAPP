@@ -1886,6 +1886,22 @@ function InvoiceFormModal({
     if (onCancel) onCancel();
     else close();
   };
+  const normalizeNumberInput = (val: any) => {
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (trimmed === "") return "";
+      val = trimmed.replace(",", ".");
+    }
+    const num = Number(val);
+    return Number.isFinite(num) ? num : "";
+  };
+  const parseNumberValue = (val: any) => {
+    if (val === null || val === undefined || val === "") return NaN;
+    if (typeof val === "string") {
+      val = val.replace(",", ".");
+    }
+    return Number(val);
+  };
 
   const loadBase = async () => {
     setLoading(true);
@@ -1988,11 +2004,26 @@ function InvoiceFormModal({
       setError("Rechnungsdatum fehlt.");
       return;
     }
-    if (!items.length) {
+    const normalizedItems = items.map((i) => ({
+      ...i,
+      quantity: parseNumberValue(i.quantity),
+      unit_price_gross: parseNumberValue(i.unit_price_gross),
+    }));
+
+    if (!normalizedItems.length) {
       setError("Mindestens eine Position ist erforderlich.");
       return;
     }
-    if (items.some((i) => !i.description.trim() || Number(i.quantity) <= 0 || Number(i.unit_price_gross) <= 0)) {
+    if (
+      normalizedItems.some(
+        (i) =>
+          !i.description.trim() ||
+          !Number.isFinite(i.quantity) ||
+          i.quantity <= 0 ||
+          !Number.isFinite(i.unit_price_gross) ||
+          i.unit_price_gross <= 0
+      )
+    ) {
       setError("Bitte alle Positionen ausfüllen (Beschreibung, Menge > 0, Preis > 0).");
       return;
     }
@@ -2019,7 +2050,7 @@ function InvoiceFormModal({
           category: form.category_key || null,
           reservation_request_id: form.reservation_request_id.trim() || null,
         },
-        items: items.map((i) => ({
+        items: normalizedItems.map((i) => ({
           description: i.description.trim(),
           quantity: Number(i.quantity),
           unit_price_gross: Number(i.unit_price_gross),
@@ -2201,7 +2232,7 @@ function InvoiceFormModal({
                 min="0"
                 step="0.01"
                 value={item.quantity}
-                onChange={(e) => updateItem(idx, "quantity", Number(e.target.value))}
+                onChange={(e) => updateItem(idx, "quantity", normalizeNumberInput(e.target.value))}
               />
               <input
                 className="input"
@@ -2209,7 +2240,7 @@ function InvoiceFormModal({
                 min="0"
                 step="0.01"
                 value={item.unit_price_gross}
-                onChange={(e) => updateItem(idx, "unit_price_gross", Number(e.target.value))}
+                onChange={(e) => updateItem(idx, "unit_price_gross", normalizeNumberInput(e.target.value))}
               />
               <select
                 className="input"

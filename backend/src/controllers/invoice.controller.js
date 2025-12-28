@@ -103,6 +103,12 @@ const toNumber = (value) =>
     : typeof value === "number"
     ? value
     : Number(value);
+const parseDecimalInput = (value) => {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === "string" ? value.replace(",", ".").trim() : value;
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : null;
+};
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -530,25 +536,38 @@ if (!Array.isArray(items) || items.length === 0) {
   return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
 }
 
-for (let i = 0; i < items.length; i++) {
-  const item = items[i];
+  const normalizedItems = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const desc = (item.description || "").trim();
+    const quantity = parseDecimalInput(item.quantity);
+    const unitPrice = parseDecimalInput(item.unit_price_gross);
+    const vatKey = Number(item.vat_key);
 
-  if (!item.description || item.description.trim() === "") {
-    return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
-  }
+    if (!desc) {
+      return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
+    }
 
-  if (item.quantity == null || item.quantity === "" || Number(item.quantity) <= 0) {
-    return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
-  }
+    if (quantity === null || !Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
 
-  if (item.unit_price_gross == null || item.unit_price_gross === "" || Number(item.unit_price_gross) <= 0) {
-    return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
-  }
+    if (unitPrice === null || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
 
-  if (item.vat_key == null || !(item.vat_key === 1 || item.vat_key === 2)) {
-    return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
+    if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
+      return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
+    }
+
+    normalizedItems.push({
+      description: desc,
+      quantity: quantity,
+      unit_price_gross: unitPrice,
+      vat_key: vatKey,
+      line_total_gross: n(quantity) * n(unitPrice),
+    });
   }
-}
 
   try {
     if (!invoice.date) {
@@ -562,7 +581,7 @@ for (let i = 0; i < items.length; i++) {
     const rCity   = (recipient.city   || "").trim();
 
     // Gesamtsummen berechnen
-    const totals = calculateTotals(items);
+    const totals = calculateTotals(normalizedItems);
 
     // Leere Strings auf null mappen
     const invoiceDate = invoice.date && invoice.date.trim() !== "" ? new Date(invoice.date) : null;
@@ -640,13 +659,13 @@ for (let i = 0; i < items.length; i++) {
         select: { id: true },
       });
 
-      const itemsData = items.map((item) => ({
+      const itemsData = normalizedItems.map((item) => ({
         invoice_id: invoiceRow.id,
         description: item.description,
         quantity: item.quantity,
         unit_price_gross: item.unit_price_gross,
         vat_key: item.vat_key,
-        line_total_gross: n(item.quantity) * n(item.unit_price_gross),
+        line_total_gross: item.line_total_gross,
       }));
 
       if (itemsData.length) {
