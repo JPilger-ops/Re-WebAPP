@@ -871,7 +871,39 @@ export const getInvoiceById = async (req, res) => {
       line_total_gross: toNumber(item.line_total_gross),
     }));
 
-    return res.json({ invoice, items: shapedItems });
+    const pdfDir = await getResolvedPdfPath();
+    const candidateNames = [`RE-${invoiceRow.invoice_number}.pdf`, `Rechnung-${invoiceRow.invoice_number}.pdf`];
+    let pdfFilename = null;
+    let pdfLocation = null;
+    let pdfSize = null;
+
+    for (const name of candidateNames) {
+      const fullPath = path.join(pdfDir, name);
+      if (fs.existsSync(fullPath)) {
+        pdfFilename = name;
+        pdfLocation = fullPath;
+        try {
+          pdfSize = fs.statSync(fullPath)?.size || null;
+        } catch {
+          pdfSize = null;
+        }
+        break;
+      }
+    }
+
+    if (!pdfFilename) {
+      pdfFilename = candidateNames[0];
+      pdfLocation = path.join(pdfDir, candidateNames[0]);
+    }
+
+    const pdf = {
+      filename: pdfFilename,
+      location: pdfLocation,
+      size: pdfSize,
+      url: `/api/invoices/${id}/pdf?mode=inline`,
+    };
+
+    return res.json({ invoice, items: shapedItems, pdf });
   } catch (err) {
     console.error("Fehler beim Laden der Rechnung:", err);
     res.status(500).json({ error: "Fehler beim Abrufen der Rechnung" });

@@ -506,6 +506,12 @@ export interface InvoiceDetail {
     recipient: Customer & { id: number | null };
   };
   items: InvoiceItem[];
+  pdf?: {
+    url?: string | null;
+    filename?: string | null;
+    location?: string | null;
+    size?: number | null;
+  };
 }
 
 export interface InvoiceItem {

@@ -2304,6 +2304,8 @@ function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<FormStatus>(null);
   const [busy, setBusy] = useState(false);
+  const [sentBusy, setSentBusy] = useState(false);
+  const [paidBusy, setPaidBusy] = useState(false);
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
   const [sendModal, setSendModal] = useState<{ open: boolean; to?: string }>({ open: false });
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -2358,6 +2360,7 @@ function InvoiceDetailPage() {
       return;
     }
     setBusy(true);
+    setSentBusy(true);
     setToast(null);
     try {
       await markInvoiceSent(detail.invoice.id);
@@ -2370,6 +2373,7 @@ function InvoiceDetailPage() {
       setToast({ type: "error", message: apiErr.message || "Konnte nicht markieren." });
     } finally {
       setBusy(false);
+      setSentBusy(false);
     }
   };
 
@@ -2380,6 +2384,7 @@ function InvoiceDetailPage() {
       return;
     }
     setBusy(true);
+    setPaidBusy(true);
     setToast(null);
     try {
       await markInvoicePaid(detail.invoice.id);
@@ -2392,6 +2397,7 @@ function InvoiceDetailPage() {
       setToast({ type: "error", message: apiErr.message || "Konnte nicht markieren." });
     } finally {
       setBusy(false);
+      setPaidBusy(false);
     }
   };
 
@@ -2450,7 +2456,7 @@ function InvoiceDetailPage() {
     if (!detail) return;
     setPdfBusy(true);
     try {
-      window.open(`/api/invoices/${detail.invoice.id}/pdf?mode=inline`, "_blank");
+      window.open(pdfUrl, "_blank");
     } finally {
       setPdfBusy(false);
     }
@@ -2478,24 +2484,132 @@ function InvoiceDetailPage() {
   const inv = detail.invoice;
   const isCanceled = Boolean(inv.canceled_at);
   const cancelReason = (inv.cancel_reason || "").trim();
+  const pdfUrl = detail.pdf?.url || `/api/invoices/${inv.id}/pdf?mode=inline`;
+  const pdfFilename =
+    detail.pdf?.filename ||
+    (() => {
+      if (detail.pdf?.location) {
+        const parts = detail.pdf.location.split(/[\\/]/);
+        const last = parts[parts.length - 1];
+        if (last) return decodeURIComponent(last);
+      }
+      try {
+        const parsed = new URL(pdfUrl, window.location.origin);
+        const seg = parsed.pathname.split("/").filter(Boolean).pop();
+        if (seg) return decodeURIComponent(seg);
+      } catch {
+        // ignore
+      }
+      return `RE-${inv.invoice_number}.pdf`;
+    })();
+  const pdfLocation = detail.pdf?.location || "";
+  const shortLocation =
+    pdfLocation && pdfLocation.length > 64
+      ? `${pdfLocation.slice(0, 28)}…${pdfLocation.slice(-18)}`
+      : pdfLocation || "–";
+
+  const vatSummary = useMemo(() => {
+    if (!detail?.invoice) {
+      return { rows: [], totalNet: 0, totalVat: 0, totalGross: 0 };
+    }
+    const rows: { rateLabel: string; net: number; vat: number; gross: number }[] = [];
+    const addRow = (rateLabel: string, net?: number | null, vat?: number | null, gross?: number | null) => {
+      const netVal = Number(net ?? 0);
+      const vatVal = Number(vat ?? 0);
+      const grossVal = Number.isFinite(Number(gross)) ? Number(gross) : netVal + vatVal;
+      if (Math.abs(netVal) < 0.0001 && Math.abs(vatVal) < 0.0001 && Math.abs(grossVal) < 0.0001) return;
+      rows.push({ rateLabel, net: netVal, vat: vatVal, gross: grossVal });
+    };
+
+    const hasAggregates =
+      detail.invoice.net_19 != null ||
+      detail.invoice.vat_19 != null ||
+      detail.invoice.gross_19 != null ||
+      detail.invoice.net_7 != null ||
+      detail.invoice.vat_7 != null ||
+      detail.invoice.gross_7 != null;
+
+    if (hasAggregates) {
+      addRow(
+        "19%",
+        detail.invoice.net_19,
+        detail.invoice.vat_19,
+        detail.invoice.gross_19 ?? (detail.invoice.net_19 ?? 0) + (detail.invoice.vat_19 ?? 0)
+      );
+      addRow(
+        "7%",
+        detail.invoice.net_7,
+        detail.invoice.vat_7,
+        detail.invoice.gross_7 ?? (detail.invoice.net_7 ?? 0) + (detail.invoice.vat_7 ?? 0)
+      );
+    }
+
+    const itemMap = new Map<number, { net: number; vat: number; gross: number }>();
+    detail.items.forEach((it) => {
+      const rate = Number(it.vat_key);
+      if (!Number.isFinite(rate)) return;
+      const quantity = Number(it.quantity) || 0;
+      const gross = Number(it.line_total_gross ?? it.unit_price_gross * quantity) || 0;
+      const net = rate >= 0 ? gross / (1 + rate / 100) : gross;
+      const vat = gross - net;
+      const prev = itemMap.get(rate) || { net: 0, vat: 0, gross: 0 };
+      itemMap.set(rate, { net: prev.net + net, vat: prev.vat + vat, gross: prev.gross + gross });
+    });
+
+    itemMap.forEach((vals, rate) => {
+      const label = `${Number(rate).toLocaleString("de-DE", { maximumFractionDigits: 2 })}%`;
+      if (!rows.some((r) => r.rateLabel === label)) {
+        addRow(label, vals.net, vals.vat, vals.gross);
+      }
+    });
+
+    if (!rows.length && detail.invoice.gross_total != null) {
+      addRow(
+        "Gesamt",
+        (detail.invoice.net_19 || 0) + (detail.invoice.net_7 || 0),
+        (detail.invoice.vat_19 || 0) + (detail.invoice.vat_7 || 0),
+        detail.invoice.gross_total
+      );
+    }
+
+    const totalNet = rows.reduce((sum, r) => sum + (r.net || 0), 0);
+    const totalVat = rows.reduce((sum, r) => sum + (r.vat || 0), 0);
+    const totalGross = rows.reduce((sum, r) => sum + (r.gross || 0), 0);
+
+    return { rows, totalNet, totalVat, totalGross };
+  }, [detail]);
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
-            <p className="text-slate-600 text-sm">Details und Aktionen</p>
-            {isCanceled && (
-              <p className="text-sm text-red-700 mt-1">
-                Storniert{inv.canceled_at ? ` am ${new Date(inv.canceled_at).toLocaleDateString()}` : ""}
-                {cancelReason ? ` – ${cancelReason}` : ""}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {statusBadge()}
-            <MoreMenu
-              items={[
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Rechnung {inv.invoice_number}</h1>
+          <p className="text-slate-600 text-sm">Details und Aktionen</p>
+          {isCanceled && (
+            <p className="text-sm text-red-700 mt-1">
+              Storniert{inv.canceled_at ? ` am ${new Date(inv.canceled_at).toLocaleDateString()}` : ""}
+              {cancelReason ? ` – ${cancelReason}` : ""}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          {statusBadge()}
+          <Button
+            variant={inv.status_sent ? "secondary" : "primary"}
+            onClick={onMarkSent}
+            disabled={isCanceled || Boolean(inv.status_sent) || sentBusy}
+          >
+            {inv.status_sent ? "Versendet" : sentBusy ? "Markiere..." : "Als versendet markieren"}
+          </Button>
+          <Button
+            variant={inv.status_paid_at ? "secondary" : "primary"}
+            onClick={onMarkPaid}
+            disabled={isCanceled || Boolean(inv.status_paid_at) || paidBusy}
+          >
+            {inv.status_paid_at ? "Bezahlt" : paidBusy ? "Markiere..." : "Als bezahlt markieren"}
+          </Button>
+          <MoreMenu
+            items={[
               {
                 label: pdfBusy ? "PDF …" : "PDF öffnen",
                 onClick: openDetailPdf,
@@ -2504,8 +2618,6 @@ function InvoiceDetailPage() {
               { label: "E-Mail Vorschau", onClick: loadPreview },
               { label: "E-Mail senden", onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
               { label: "DATEV Export", onClick: onDatevExport, disabled: isCanceled },
-              { label: "Als gesendet markieren", onClick: onMarkSent, disabled: isCanceled },
-              { label: "Als bezahlt markieren", onClick: onMarkPaid, disabled: isCanceled },
             ]}
           />
         </div>
@@ -2603,6 +2715,56 @@ function InvoiceDetailPage() {
             </div>
           </div>
 
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
+            <div className="text-xs uppercase text-slate-500">Beträge</div>
+            {vatSummary.rows.length ? (
+              <div className="overflow-hidden border border-slate-100 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Satz</th>
+                      <th className="px-3 py-2 text-right font-semibold">Netto</th>
+                      <th className="px-3 py-2 text-right font-semibold">MwSt</th>
+                      <th className="px-3 py-2 text-right font-semibold">Brutto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {vatSummary.rows.map((row) => (
+                      <tr key={row.rateLabel} className="text-slate-800">
+                        <td className="px-3 py-2 font-medium">{row.rateLabel}</td>
+                        <td className="px-3 py-2 text-right">
+                          {row.net.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {row.vat.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {row.gross.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 font-semibold text-slate-900 border-t border-slate-200">
+                      <td className="px-3 py-2 text-left">Gesamt</td>
+                      <td className="px-3 py-2 text-right">
+                        {vatSummary.totalNet.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {vatSummary.totalVat.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {vatSummary.totalGross.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div className="text-sm text-slate-700">Keine Beträge verfügbar.</div>
+            )}
+          </div>
+
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
             <div className="text-xs uppercase text-slate-500">DATEV</div>
             <div>
@@ -2620,7 +2782,24 @@ function InvoiceDetailPage() {
 
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
             <div className="text-xs uppercase text-slate-500">PDF</div>
-            <div>Aktuelle Datei vorhanden. Aktionen im Mehr-Menü.</div>
+            <div className="space-y-2">
+              <div>
+                <div className="text-[11px] uppercase text-slate-500">Datei</div>
+                <div className="font-semibold text-slate-900 break-all">{pdfFilename}</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase text-slate-500">Ablageort</div>
+                <div className="break-all text-slate-800" title={pdfLocation || undefined}>{shortLocation}</div>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button variant="secondary" onClick={openDetailPdf} disabled={pdfBusy}>
+                  {pdfBusy ? "Öffne..." : "PDF öffnen"}
+                </Button>
+                <Button variant="ghost" onClick={onRegenerate} disabled={pdfBusy || isCanceled}>
+                  {pdfBusy ? "Bitte warten..." : "PDF neu erstellen"}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
