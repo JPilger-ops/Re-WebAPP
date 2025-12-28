@@ -2491,7 +2491,13 @@ function InvoiceDetailPage() {
       if (detail.pdf?.location) {
         const parts = detail.pdf.location.split(/[\\/]/);
         const last = parts[parts.length - 1];
-        if (last) return decodeURIComponent(last);
+        if (last) {
+          try {
+            return decodeURIComponent(last);
+          } catch {
+            return last;
+          }
+        }
       }
       try {
         const parsed = new URL(pdfUrl, window.location.origin);
@@ -2507,6 +2513,7 @@ function InvoiceDetailPage() {
     pdfLocation && pdfLocation.length > 64
       ? `${pdfLocation.slice(0, 28)}…${pdfLocation.slice(-18)}`
       : pdfLocation || "–";
+  const items = detail.items ?? [];
 
   const vatSummary = useMemo(() => {
     if (!detail?.invoice) {
@@ -2545,7 +2552,7 @@ function InvoiceDetailPage() {
     }
 
     const itemMap = new Map<number, { net: number; vat: number; gross: number }>();
-    detail.items.forEach((it) => {
+    items.forEach((it) => {
       const rate = Number(it.vat_key);
       if (!Number.isFinite(rate)) return;
       const quantity = Number(it.quantity) || 0;
@@ -2669,7 +2676,7 @@ function InvoiceDetailPage() {
               <div className="text-xs uppercase text-slate-500">Positionen</div>
             </div>
             <div className="space-y-2">
-              {detail.items.map((it) => (
+              {items.map((it) => (
                 <div key={it.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                   <div className="flex justify-between text-sm text-slate-900 font-medium">
                     <span className="truncate">{it.description || "–"}</span>
