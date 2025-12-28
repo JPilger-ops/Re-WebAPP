@@ -20,7 +20,7 @@ fi
 
 BUILD_SHA="$(git rev-parse --short HEAD)"
 BUILD_NUMBER="$(git rev-list --count HEAD)"
-BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+BUILD_TIME="$(git show -s --format=%cI HEAD 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")"
 ENV_FILE="${ROOT_DIR}/.env"
 
 touch "${ENV_FILE}"
@@ -28,6 +28,11 @@ touch "${ENV_FILE}"
 upsert_env_var() {
   local key="$1"
   local value="$2"
+  local current
+  current="$(grep -m1 "^${key}=" "${ENV_FILE}" || true)"
+  if [ "${current}" = "${key}=${value}" ]; then
+    return
+  fi
   if grep -q "^${key}=" "${ENV_FILE}"; then
     KEY_TO_SET="${key}" VALUE_TO_SET="${value}" ENV_TARGET="${ENV_FILE}" "${PYTHON_BIN}" - <<'PY'
 import os

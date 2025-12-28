@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 ########################################
 # Frontend build stage (Vite → backend/public)
 ########################################
@@ -5,7 +6,7 @@ FROM node:18-bookworm-slim AS frontend
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY frontend ./
 # Vite schreibt nach ../backend/public (siehe vite.config.ts)
 RUN mkdir -p /app/backend/public && npm run build
@@ -14,10 +15,6 @@ RUN mkdir -p /app/backend/public && npm run build
 # Backend build stage
 ########################################
 FROM node:18-bookworm-slim AS build
-ARG BUILD_SHA=unknown
-ARG BUILD_TIME=unknown
-ARG BUILD_NUMBER=0
-ARG APP_VERSION=0.0.0
 
 WORKDIR /app/backend
 
@@ -27,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 COPY backend/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY backend ./
 
@@ -41,18 +38,10 @@ RUN npm prune --omit=dev
 # Runtime stage
 ########################################
 FROM node:18-bookworm-slim AS runtime
-ARG BUILD_SHA=unknown
-ARG BUILD_TIME=unknown
-ARG BUILD_NUMBER=0
-ARG APP_VERSION=0.0.0
 
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV BUILD_SHA=${BUILD_SHA}
-ENV BUILD_TIME=${BUILD_TIME}
-ENV BUILD_NUMBER=${BUILD_NUMBER}
-ENV APP_VERSION=${APP_VERSION}
 
 WORKDIR /app
 
@@ -90,6 +79,16 @@ RUN mkdir -p /app/pdfs
 
 # Optional: non-root runtime
 USER node
+
+ARG BUILD_SHA=unknown
+ARG BUILD_TIME=unknown
+ARG BUILD_NUMBER=0
+ARG APP_VERSION=0.0.0
+
+ENV BUILD_SHA=${BUILD_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV BUILD_NUMBER=${BUILD_NUMBER}
+ENV APP_VERSION=${APP_VERSION}
 
 EXPOSE 3030
 
