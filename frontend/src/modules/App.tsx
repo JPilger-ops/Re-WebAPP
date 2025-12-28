@@ -2436,7 +2436,7 @@ function InvoiceFormModal({
                       className="min-w-[140px] h-10 w-full md:w-auto text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
                       title="Position entfernen"
                     >
-                      🗑 Entfernen
+                    Entfernen
                     </Button>
                   )}
                 </div>
