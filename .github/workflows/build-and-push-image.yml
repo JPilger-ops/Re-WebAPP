@@ -31,7 +31,7 @@ jobs:
 
       - name: Set build metadata
         run: |
-          ./scripts/build-meta.sh
+          SKIP_DOCKER_COMPOSE=1 ./scripts/build-meta.sh
           echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "TAG_LATEST=latest" >> $GITHUB_ENV
           # Release-Tag aus Package/Version falls vorhanden, sonst fallback auf latest
