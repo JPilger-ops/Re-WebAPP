@@ -34,6 +34,13 @@ jobs:
           ./scripts/build-meta.sh
           echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "TAG_LATEST=latest" >> $GITHUB_ENV
+          # Release-Tag aus Package/Version falls vorhanden, sonst fallback auf latest
+          if [ -f backend/package.json ]; then
+            VERSION="$(jq -r '.version' backend/package.json)"
+            echo "TAG_VERSION=v${VERSION}" >> $GITHUB_ENV
+          else
+            echo "TAG_VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          fi
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -44,6 +51,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/re-webapp:${{ env.TAG_SHA }}
             ghcr.io/${{ github.repository_owner }}/re-webapp:${{ env.TAG_LATEST }}
+            ghcr.io/${{ github.repository_owner }}/re-webapp:${{ env.TAG_VERSION }}
           build-args: |
             BUILD_SHA=${{ env.TAG_SHA }}
             BUILD_NUMBER=0
