@@ -32,6 +32,8 @@ jobs:
       - name: Set build metadata
         run: |
           SKIP_DOCKER_COMPOSE=1 ./scripts/build-meta.sh
+          OWNER_LOWER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "OWNER_LOWER=${OWNER_LOWER}" >> $GITHUB_ENV
           echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "TAG_LATEST=latest" >> $GITHUB_ENV
           # Release-Tag aus Package/Version falls vorhanden, sonst fallback auf latest
@@ -49,9 +51,9 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/re-webapp:${{ env.TAG_SHA }}
-            ghcr.io/${{ github.repository_owner }}/re-webapp:${{ env.TAG_LATEST }}
-            ghcr.io/${{ github.repository_owner }}/re-webapp:${{ env.TAG_VERSION }}
+            ghcr.io/${{ env.OWNER_LOWER }}/re-webapp:${{ env.TAG_SHA }}
+            ghcr.io/${{ env.OWNER_LOWER }}/re-webapp:${{ env.TAG_LATEST }}
+            ghcr.io/${{ env.OWNER_LOWER }}/re-webapp:${{ env.TAG_VERSION }}
           build-args: |
             BUILD_SHA=${{ env.TAG_SHA }}
             BUILD_NUMBER=0
