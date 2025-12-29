@@ -139,10 +139,10 @@ fi
 APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
 APP_IMAGE_TAG_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE_TAG")"
 if [[ "${MODE,,}" == "install" ]]; then
-  set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL:-rechnungsapp}"
+  set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}"
   set_env_value "${ENV_FILE}" "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL:-latest}"
 else
-  APP_IMAGE_VAL="${APP_IMAGE_VAL:-rechnungsapp}"
+  APP_IMAGE_VAL="${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}"
   APP_IMAGE_TAG_VAL="${APP_IMAGE_TAG_VAL:-latest}"
 fi
 
