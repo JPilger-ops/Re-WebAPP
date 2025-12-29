@@ -89,6 +89,9 @@ if [[ "${MODE,,}" == "install" ]]; then
   SETUP_QUIET=1 ./scripts/setup.sh
 else
   info "Update-Modus: bestehende .env Dateien übernehmen"
+  if [ ! -e "${CURRENT_LINK}" ]; then
+    fail "Update nicht möglich: ${CURRENT_LINK} existiert nicht. Bitte erst Install ausführen oder gültiges current-Symlink anlegen."
+  fi
   if [ -f "${CURRENT_LINK}/.env" ]; then
     cp "${CURRENT_LINK}/.env" "${RELEASE_DIR}/.env"
   else
