@@ -84,8 +84,22 @@ rm -rf "${RELEASE_DIR}/backend/pdfs"
 ln -sfn "${SHARED_DIR}/pdfs" "${RELEASE_DIR}/backend/pdfs"
 
 cd "${RELEASE_DIR}"
-info "Führe Basis-Setup aus (env-Dateien)"
-SETUP_QUIET=1 ./scripts/setup.sh
+if [[ "${MODE,,}" == "install" ]]; then
+  info "Führe Basis-Setup aus (env-Dateien)"
+  SETUP_QUIET=1 ./scripts/setup.sh
+else
+  info "Update-Modus: bestehende .env Dateien übernehmen"
+  if [ -f "${CURRENT_LINK}/.env" ]; then
+    cp "${CURRENT_LINK}/.env" "${RELEASE_DIR}/.env"
+  else
+    fail "Keine bestehende .env gefunden unter ${CURRENT_LINK}/.env. Bitte manuell kopieren und erneut starten."
+  fi
+  if [ -f "${CURRENT_LINK}/backend/.env" ]; then
+    cp "${CURRENT_LINK}/backend/.env" "${RELEASE_DIR}/backend/.env"
+  else
+    fail "Keine bestehende backend/.env gefunden unter ${CURRENT_LINK}/backend/.env. Bitte manuell kopieren und erneut starten."
+  fi
+fi
 
 ENV_FILE="${RELEASE_DIR}/.env"
 section "Schritt 2: .env konfigurieren"
