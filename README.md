@@ -20,7 +20,8 @@ docker compose version
 git clone <repo-url> rechnungsapp
 cd rechnungsapp
 ./scripts/setup.sh                 # legt .env + backend/.env an, falls fehlen
-./scripts/build-meta.sh            # setzt BUILD_* und baut Images (BuildKit)
+./scripts/build-meta.sh            # setzt BUILD_* (für lokale Builds optional)
+docker compose pull                # zieht fertiges Image (APP_IMAGE/APP_IMAGE_TAG)
 docker compose up -d               # startet DB + App
 curl http://127.0.0.1:3031/api/version
 ```
@@ -31,9 +32,9 @@ Login: `admin` / `admin` (bitte direkt ändern).
 cd rechnungsapp
 ./scripts/deploy-wizard.sh
 ```
-- Fragt nur nicht-UI-konfigurierbare ENV: DB_HOST/PORT/NAME/SCHEMA/USER/PASS, DATABASE_URL, APP_BIND_IP, APP_PUBLIC_PORT, APP_PORT, APP_HTTPS_DISABLE, JWT_SECRET. Defaults: DB_HOST=db, DB_PORT=5432, DB_NAME=rechnung_prod, DB_SCHEMA=public, DB_USER=rechnung_app, DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public, APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031, APP_PORT=3030, APP_HTTPS_DISABLE=true. DB_PASS und JWT_SECRET müssen angegeben werden.
+- Fragt nur nicht-UI-konfigurierbare ENV: DB_HOST/PORT/NAME/SCHEMA/USER/PASS, DATABASE_URL, APP_BIND_IP, APP_PUBLIC_PORT, APP_PORT, APP_HTTPS_DISABLE, JWT_SECRET (nur Install). Defaults: DB_HOST=db, DB_PORT=5432, DB_NAME=rechnung_prod, DB_SCHEMA=public, DB_USER=rechnung_app, DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public, APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031, APP_PORT=3030, APP_HTTPS_DISABLE=true. DB_PASS und JWT_SECRET müssen angegeben werden. APP_IMAGE/APP_IMAGE_TAG können gesetzt werden (default rechnungsapp:latest).
 - PDF-Pfade werden initial auf `/app/pdfs` (+ `/archive`, `/trash`) gesetzt und Verzeichnisse angelegt; später in der UI änderbar.
-- Wizard exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, setzt Build-Metadaten, führt `docker compose build`, `prisma migrate deploy`, optional `prisma db seed` (admin/admin, falls fehlend) und `docker compose up -d` aus, aktiviert Symlink `<BASE>/current`.
+- Wizard exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, setzt Build-Metadaten, zieht das Image (`docker compose pull`), führt `prisma migrate deploy`, optional `prisma db seed` (admin/admin, falls fehlend) und `docker compose up -d` aus, aktiviert Symlink `<BASE>/current`.
 - Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
 
 ## Update (ohne Wizard)

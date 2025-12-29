@@ -135,6 +135,17 @@ else
   info "Update-Modus: .env bleibt unverändert (keine Prompts)."
 fi
 
+# Image-Einstellungen (Install: setzen; Update: aus bestehender .env lesen)
+APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
+APP_IMAGE_TAG_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE_TAG")"
+if [[ "${MODE,,}" == "install" ]]; then
+  set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL:-rechnungsapp}"
+  set_env_value "${ENV_FILE}" "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL:-latest}"
+else
+  APP_IMAGE_VAL="${APP_IMAGE_VAL:-rechnungsapp}"
+  APP_IMAGE_TAG_VAL="${APP_IMAGE_TAG_VAL:-latest}"
+fi
+
 # PDF-Pfade automatisch setzen (UI-pflegbar, aber für Schreibbarkeit initialisieren)
 PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
 PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
@@ -180,8 +191,10 @@ BUILD_SHA="${RELEASE_SHA}" BUILD_NUMBER="${RELEASE_NUMBER}" BUILD_TIME="${RELEAS
 
 export COMPOSE_PROJECT_NAME="${PROJECT_NAME}"
 
-info "Baue Images mit BuildKit"
-DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose --project-name "${PROJECT_NAME}" build
+APP_IMAGE_EFF="${APP_IMAGE_VAL:-rechnungsapp}"
+APP_IMAGE_TAG_EFF="${APP_IMAGE_TAG_VAL:-latest}"
+info "Pull Image: ${APP_IMAGE_EFF}:${APP_IMAGE_TAG_EFF}"
+APP_IMAGE="${APP_IMAGE_EFF}" APP_IMAGE_TAG="${APP_IMAGE_TAG_EFF}" docker compose --project-name "${PROJECT_NAME}" pull
 
 info "Prisma Migrationen anwenden"
 docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma migrate deploy
