@@ -140,7 +140,9 @@ fi
 [ -n "${PDF_ARCHIVE_PATH}" ] && mkdir -p "${PDF_ARCHIVE_PATH}"
 [ -n "${PDF_TRASH_PATH}" ] && mkdir -p "${PDF_TRASH_PATH}"
 mkdir -p "/app/public" "/app/backend/public"
-chmod -R 775 "${PDF_STORAGE_PATH}" "${PDF_ARCHIVE_PATH}" "${PDF_TRASH_PATH}" "/app/public" "/app/backend/public" 2>/dev/null || true
+# Rechte hostseitig auf node:node (1000) setzen; Fallback chmod 777
+chown -R 1000:1000 "${PDF_STORAGE_PATH}" "${PDF_ARCHIVE_PATH}" "${PDF_TRASH_PATH}" "/app/public" "/app/backend/public" 2>/dev/null || true
+chmod -R 777 "${PDF_STORAGE_PATH}" "${PDF_ARCHIVE_PATH}" "${PDF_TRASH_PATH}" "/app/public" "/app/backend/public" 2>/dev/null || true
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
