@@ -18,6 +18,16 @@ FROM node:18-bookworm-slim AS build
 
 WORKDIR /app/backend
 
+ARG BUILD_SHA=unknown
+ARG BUILD_TIME=unknown
+ARG BUILD_NUMBER=0
+ARG APP_VERSION=0.0.0
+
+ENV BUILD_SHA=${BUILD_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV BUILD_NUMBER=${BUILD_NUMBER}
+ENV APP_VERSION=${APP_VERSION}
+
 # Install build tools (für bcrypt etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
   python3 build-essential ca-certificates curl \
@@ -71,6 +81,7 @@ COPY --from=frontend /app/backend/public ./public
 COPY --from=build /app/backend/prisma ./prisma
 COPY --from=build /app/backend/migrations ./migrations
 COPY --from=build /app/backend/scripts ./scripts
+COPY --from=build /app/backend/build-info.json ./build-info.json
 COPY backend/package*.json ./
 COPY backend/tsconfig.json ./
 

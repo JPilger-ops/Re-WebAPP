@@ -226,7 +226,7 @@ async function seedFaviconSettings() {
     update: {},
     create: {
       id: 1,
-      filename: "logos/RE-WebAPP.png",
+      filename: "favicon.ico",
     },
   });
 }

@@ -82,6 +82,8 @@ upsert_env_var "BUILD_NUMBER" "${BUILD_NUMBER}"
 upsert_env_var "BUILD_TIME" "${BUILD_TIME}"
 
 export BUILD_SHA BUILD_NUMBER BUILD_TIME
+# Schreibe auch Build-Info-JSON für den Runtime-Fallback
+node "${ROOT_DIR}/backend/scripts/write-build-info.mjs"
 echo "Build-Metadaten gesetzt: sha=${BUILD_SHA}, number=${BUILD_NUMBER}, time=${BUILD_TIME}"
 
 if [ "${SKIP_DOCKER_COMPOSE:-0}" = "1" ]; then

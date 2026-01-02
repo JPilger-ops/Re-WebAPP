@@ -90,7 +90,10 @@ const fetchJson = async (url, opts = {}) => {
     await fetchJson(`${baseUrl}/api/categories/${categoryId}/template`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ subject: `Rechnung {{invoice_number}} ${suffix}`, body_html: `<div>${templateMarker} {{recipient_name}}</div>` }),
+      body: JSON.stringify({
+        subject: `Rechnung {{invoice_number}} ${suffix}`,
+        body_text: `${templateMarker} {{recipient_name}}`,
+      }),
     });
 
     // SMTP (write-only pass optional) – nur setzen, falls ENDPOINT existiert
@@ -161,10 +164,10 @@ const fetchJson = async (url, opts = {}) => {
     const bodyText = prevData?.body_text || "";
 
     if (!subject.includes(invoiceNumber)) throw new Error("Subject missing invoice number");
-    if (!(bodyHtml.includes(`Mail Empf ${suffix}`) || bodyText.includes(`Mail Empf ${suffix}`))) {
+    if (!(bodyText.includes(`Mail Empf ${suffix}`) || bodyHtml.includes(`Mail Empf ${suffix}`))) {
       throw new Error("Body missing recipient name");
     }
-    if (!(bodyHtml.includes(templateMarker) || bodyText.includes(templateMarker))) {
+    if (!(bodyText.includes(templateMarker) || bodyHtml.includes(templateMarker))) {
       throw new Error("Template marker not found in preview");
     }
     log("Preview markers OK");

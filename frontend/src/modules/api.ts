@@ -161,7 +161,6 @@ export interface PdfSettings {
 
 export interface EmailTemplateSettings {
   subject_template: string;
-  body_html_template: string;
   body_text_template: string;
   updated_at?: string | null;
 }
@@ -304,7 +303,6 @@ export async function uploadCaCertificate(payload: { pem: string }) {
 
 export async function saveEmailTemplates(payload: {
   subject_template: string;
-  body_html_template?: string | null;
   body_text_template?: string | null;
 }) {
   return apiFetch<EmailTemplateSettings>("/settings/email-templates", {
@@ -750,7 +748,7 @@ export interface CategoryTemplate {
   id: number;
   category_id?: number;
   subject: string;
-  body_html: string;
+  body_text: string;
 }
 
 export async function listCategories() {
@@ -790,7 +788,7 @@ export async function getCategoryTemplateApi(id: number) {
   return apiFetch<CategoryTemplate | null>(`/categories/${id}/template`);
 }
 
-export async function saveCategoryTemplateApi(id: number, payload: { subject: string; body_html: string }) {
+export async function saveCategoryTemplateApi(id: number, payload: { subject: string; body_text: string }) {
   return apiFetch<CategoryTemplate>(`/categories/${id}/template`, {
     method: "POST",
     body: JSON.stringify(payload),

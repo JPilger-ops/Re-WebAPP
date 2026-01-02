@@ -130,6 +130,7 @@ app.use(generalLimiter);
 app.get("/favicon.ico", async (_req, res, next) => {
   try {
     const resolved = await resolveFaviconPath();
+    res.set("Cache-Control", "public, max-age=0, must-revalidate");
     return res.sendFile(resolved.path);
   } catch (err) {
     return next(err);
