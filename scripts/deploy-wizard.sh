@@ -89,6 +89,9 @@ if [[ "${MODE,,}" == "install" ]]; then
   SETUP_QUIET=1 ./scripts/setup.sh
 else
   info "Update-Modus: bestehende .env Dateien übernehmen"
+  if [ ! -e "${CURRENT_LINK}" ]; then
+    fail "Update nicht möglich: ${CURRENT_LINK} existiert nicht. Bitte erst Install ausführen oder gültiges current-Symlink anlegen."
+  fi
   if [ -f "${CURRENT_LINK}/.env" ]; then
     cp "${CURRENT_LINK}/.env" "${RELEASE_DIR}/.env"
   else
@@ -132,6 +135,21 @@ else
   info "Update-Modus: .env bleibt unverändert (keine Prompts)."
 fi
 
+# Image-Einstellungen (Install: fragen und setzen; Update: Tag/Repo wählbar)
+APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
+APP_IMAGE_TAG_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE_TAG")"
+if [[ "${MODE,,}" == "install" ]]; then
+  APP_IMAGE_VAL="$(prompt "APP_IMAGE (Registry/Repo)" "${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}")"
+  APP_IMAGE_TAG_VAL="$(prompt "APP_IMAGE_TAG (z.B. latest, v0.9.9, Commit-SHA)" "${APP_IMAGE_TAG_VAL:-latest}")"
+  set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL}"
+  set_env_value "${ENV_FILE}" "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL}"
+else
+  APP_IMAGE_VAL="$(prompt "APP_IMAGE (Registry/Repo)" "${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}")"
+  APP_IMAGE_TAG_VAL="$(prompt "APP_IMAGE_TAG (z.B. latest, v0.9.9, Commit-SHA)" "${APP_IMAGE_TAG_VAL:-latest}")"
+  set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL}"
+  set_env_value "${ENV_FILE}" "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL}"
+fi
+
 # PDF-Pfade automatisch setzen (UI-pflegbar, aber für Schreibbarkeit initialisieren)
 PDF_STORAGE_VAL="$(current_env_value "${ENV_FILE}" "PDF_STORAGE_PATH")"
 PDF_ARCHIVE_VAL="$(current_env_value "${ENV_FILE}" "PDF_ARCHIVE_PATH")"
@@ -149,14 +167,17 @@ else
   PDF_TRASH_PATH="${PDF_TRASH_VAL:-/app/pdfs/trash}"
 fi
 
-# Verzeichnisse anlegen und Rechte setzen, damit PDF/Branding schreibbar sind
-[ -n "${PDF_STORAGE_PATH}" ] && mkdir -p "${PDF_STORAGE_PATH}"
-[ -n "${PDF_ARCHIVE_PATH}" ] && mkdir -p "${PDF_ARCHIVE_PATH}"
-[ -n "${PDF_TRASH_PATH}" ] && mkdir -p "${PDF_TRASH_PATH}"
-mkdir -p "/app/public" "/app/backend/public"
+# Host-Pfade (Bind-Mount) ermitteln und Rechte setzen, damit PDF/Branding schreibbar sind
+HOST_PDF_BASE="${RELEASE_DIR}/backend/pdfs"
+HOST_PDF_ARCHIVE="${HOST_PDF_BASE}/archive"
+HOST_PDF_TRASH="${HOST_PDF_BASE}/trash"
+mkdir -p "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}"
+HOST_PUBLIC="${RELEASE_DIR}/backend/public"
+HOST_PUBLIC_LOGOS="${HOST_PUBLIC}/logos"
+mkdir -p "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}"
 # Rechte hostseitig auf node:node (1000) setzen; Fallback chmod 777
-chown -R 1000:1000 "${PDF_STORAGE_PATH}" "${PDF_ARCHIVE_PATH}" "${PDF_TRASH_PATH}" "/app/public" "/app/backend/public" 2>/dev/null || true
-chmod -R 777 "${PDF_STORAGE_PATH}" "${PDF_ARCHIVE_PATH}" "${PDF_TRASH_PATH}" "/app/public" "/app/backend/public" 2>/dev/null || true
+chown -R 1000:1000 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" 2>/dev/null || true
+chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" 2>/dev/null || true
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
@@ -177,8 +198,10 @@ BUILD_SHA="${RELEASE_SHA}" BUILD_NUMBER="${RELEASE_NUMBER}" BUILD_TIME="${RELEAS
 
 export COMPOSE_PROJECT_NAME="${PROJECT_NAME}"
 
-info "Baue Images mit BuildKit"
-DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose --project-name "${PROJECT_NAME}" build
+APP_IMAGE_EFF="${APP_IMAGE_VAL:-rechnungsapp}"
+APP_IMAGE_TAG_EFF="${APP_IMAGE_TAG_VAL:-latest}"
+info "Pull Image: ${APP_IMAGE_EFF}:${APP_IMAGE_TAG_EFF}"
+APP_IMAGE="${APP_IMAGE_EFF}" APP_IMAGE_TAG="${APP_IMAGE_TAG_EFF}" docker compose --project-name "${PROJECT_NAME}" pull
 
 info "Prisma Migrationen anwenden"
 docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma migrate deploy

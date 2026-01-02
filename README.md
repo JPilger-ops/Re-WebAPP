@@ -20,20 +20,47 @@ docker compose version
 git clone https://github.com/JPilger-ops/Re-WebAPP
 cd Re-WebAPP
 ./scripts/setup.sh                 # legt .env + backend/.env an, falls fehlen
-./scripts/build-meta.sh            # setzt BUILD_* und baut Images (BuildKit)
+./scripts/build-meta.sh            # setzt BUILD_* (für lokale Builds optional)
+docker compose pull                # zieht fertiges Image (APP_IMAGE/APP_IMAGE_TAG, default ghcr.io/jpilger-ops/re-webapp:latest)
 docker compose up -d               # startet DB + App
 curl http://127.0.0.1:3031/api/version
 ```
 Login: `admin` / `admin` (bitte direkt ändern).
 
-## Deployment mit Wizard
+## Deployment mit Wizard (empfohlen, image-basiert)
+Neu-Install (alle ENV abfragen, Image ziehen, starten):
 ```bash
-cd Re-WebAPP
+# Prereqs (Ubuntu 22.04, einmalig)
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Repo holen
+git clone https://github.com/JPilger-ops/Re-WebAPP /opt/rechnungsapp
+cd /opt/rechnungsapp
+
+# Wizard starten (Modus: install)
 ./scripts/deploy-wizard.sh
+# Prompts: Pfad, Modus=install, Projektname, DB_*/Ports/JWT_SECRET, APP_IMAGE/APP_IMAGE_TAG (default ghcr.io/jpilger-ops/re-webapp:latest)
 ```
-- Fragt nur nicht-UI-konfigurierbare ENV: DB_HOST/PORT/NAME/SCHEMA/USER/PASS, DATABASE_URL, APP_BIND_IP, APP_PUBLIC_PORT, APP_PORT, APP_HTTPS_DISABLE, JWT_SECRET. Defaults: DB_HOST=db, DB_PORT=5432, DB_NAME=rechnung_prod, DB_SCHEMA=public, DB_USER=rechnung_app, DATABASE_URL=postgresql://rechnung_app:change_me@db:5432/rechnung_prod?schema=public, APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031, APP_PORT=3030, APP_HTTPS_DISABLE=true. DB_PASS und JWT_SECRET müssen angegeben werden.
-- PDF-Pfade werden initial auf `/app/pdfs` (+ `/archive`, `/trash`) gesetzt und Verzeichnisse angelegt; später in der UI änderbar.
-- Wizard exportiert den aktuellen Commit nach `<BASE>/versions/<sha>`, setzt Build-Metadaten, führt `docker compose build`, `prisma migrate deploy`, optional `prisma db seed` (admin/admin, falls fehlend) und `docker compose up -d` aus, aktiviert Symlink `<BASE>/current`.
+Healthcheck:
+```bash
+curl http://127.0.0.1:3031/api/version
+```
+
+Update (ENV bleibt, aber Image/Tag kann gewählt werden):
+```bash
+cd /opt/rechnungsapp/current   # oder dein BASE/current
+./scripts/deploy-wizard.sh     # Modus: update, fragt APP_IMAGE / APP_IMAGE_TAG ab (default: bisherige Werte)
+```
+
+Manuell (ohne Wizard):
+```bash
+cd /opt/rechnungsapp/current
+docker compose pull
+docker compose up -d
+docker compose run --rm app npx prisma migrate deploy
+curl http://127.0.0.1:3031/api/version
+```
 - Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
 
 ## Update (ohne Wizard)
