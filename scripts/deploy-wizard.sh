@@ -203,6 +203,13 @@ APP_IMAGE_TAG_EFF="${APP_IMAGE_TAG_VAL:-latest}"
 info "Pull Image: ${APP_IMAGE_EFF}:${APP_IMAGE_TAG_EFF}"
 APP_IMAGE="${APP_IMAGE_EFF}" APP_IMAGE_TAG="${APP_IMAGE_TAG_EFF}" docker compose --project-name "${PROJECT_NAME}" pull
 
+# Statische Assets des Images in Host-Pfad spiegeln, damit UI zur Image-Version passt (Branding/Uploads bleiben bestehen)
+info "Synchronisiere UI-Assets aus dem Image nach backend/public (ohne bestehende Uploads zu löschen)"
+docker run --rm \
+  -v "${HOST_PUBLIC}:/host" \
+  "${APP_IMAGE_EFF}:${APP_IMAGE_TAG_EFF}" \
+  sh -c "mkdir -p /host && cp -r /app/public/* /host/ && chown -R 1000:1000 /host || true"
+
 info "Prisma Migrationen anwenden"
 docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma migrate deploy
 

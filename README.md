@@ -41,6 +41,7 @@ cd /opt/rechnungsapp
 # Wizard starten (Modus: install)
 ./scripts/deploy-wizard.sh
 # Prompts: Pfad, Modus=install, Projektname, DB_*/Ports/JWT_SECRET, APP_IMAGE/APP_IMAGE_TAG (default ghcr.io/jpilger-ops/re-webapp:latest)
+# Der Wizard spiegelt die UI-Assets aus dem gewählten Image in backend/public, damit die Oberfläche immer zum Image passt (Branding/Uploads bleiben erhalten).
 ```
 Healthcheck:
 ```bash
