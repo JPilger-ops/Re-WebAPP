@@ -135,17 +135,19 @@ else
   info "Update-Modus: .env bleibt unverändert (keine Prompts)."
 fi
 
-# Image-Einstellungen (Install: setzen; Update: aus bestehender .env lesen)
+# Image-Einstellungen (Install: fragen und setzen; Update: Tag/Repo wählbar)
 APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
 APP_IMAGE_TAG_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE_TAG")"
 if [[ "${MODE,,}" == "install" ]]; then
   APP_IMAGE_VAL="$(prompt "APP_IMAGE (Registry/Repo)" "${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}")"
-  APP_IMAGE_TAG_VAL="$(prompt "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL:-latest}")"
+  APP_IMAGE_TAG_VAL="$(prompt "APP_IMAGE_TAG (z.B. latest, v0.9.9, Commit-SHA)" "${APP_IMAGE_TAG_VAL:-latest}")"
   set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL}"
   set_env_value "${ENV_FILE}" "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL}"
 else
-  APP_IMAGE_VAL="${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}"
-  APP_IMAGE_TAG_VAL="${APP_IMAGE_TAG_VAL:-latest}"
+  APP_IMAGE_VAL="$(prompt "APP_IMAGE (Registry/Repo)" "${APP_IMAGE_VAL:-ghcr.io/jpilger-ops/re-webapp}")"
+  APP_IMAGE_TAG_VAL="$(prompt "APP_IMAGE_TAG (z.B. latest, v0.9.9, Commit-SHA)" "${APP_IMAGE_TAG_VAL:-latest}")"
+  set_env_value "${ENV_FILE}" "APP_IMAGE" "${APP_IMAGE_VAL}"
+  set_env_value "${ENV_FILE}" "APP_IMAGE_TAG" "${APP_IMAGE_TAG_VAL}"
 fi
 
 # PDF-Pfade automatisch setzen (UI-pflegbar, aber für Schreibbarkeit initialisieren)

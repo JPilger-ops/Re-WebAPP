@@ -47,10 +47,10 @@ Healthcheck:
 curl http://127.0.0.1:3031/api/version
 ```
 
-Update (keine ENV-Prompts, nutzt bestehende .env aus current):
+Update (ENV bleibt, aber Image/Tag kann gewählt werden):
 ```bash
 cd /opt/rechnungsapp/current   # oder dein BASE/current
-./scripts/deploy-wizard.sh     # Modus: update, Image-Tag nach Bedarf wählen
+./scripts/deploy-wizard.sh     # Modus: update, fragt APP_IMAGE / APP_IMAGE_TAG ab (default: bisherige Werte)
 ```
 
 Manuell (ohne Wizard):
