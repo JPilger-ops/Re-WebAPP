@@ -29,7 +29,7 @@ export const getAllCategories = async (req, res) => {
         ea.updated_at       AS email_updated_at,
         t.id                AS tpl_id,
         t.subject           AS tpl_subject,
-        t.body_html         AS tpl_body_html,
+        t.body_text         AS tpl_body_text,
         t.updated_at        AS tpl_updated_at
       FROM invoice_categories c
       LEFT JOIN category_email_accounts ea ON ea.category_id = c.id
@@ -60,7 +60,7 @@ export const getAllCategories = async (req, res) => {
         ? {
             id: row.tpl_id,
             subject: row.tpl_subject,
-            body_html: row.tpl_body_html,
+            body_text: row.tpl_body_text,
             updated_at: row.tpl_updated_at,
           }
         : null,
@@ -327,7 +327,7 @@ export const getCategoryTemplate = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT id, category_id, subject, body_html, updated_at FROM category_templates WHERE category_id = $1`,
+      `SELECT id, category_id, subject, body_text, updated_at FROM category_templates WHERE category_id = $1`,
       [id]
     );
     if (result.rowCount === 0) return res.json(null);
@@ -342,23 +342,26 @@ export const saveCategoryTemplate = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ message: "Ungültige Kategorien-ID." });
 
-  const { subject, body_html } = req.body || {};
-  if (!subject || !body_html) {
+  const { subject, body_text } = req.body || {};
+  const cleanSubject = (subject || "").trim();
+  const cleanBody = (body_text || "").trim();
+  if (!cleanSubject || !cleanBody) {
     return res.status(400).json({ message: "Subject und Body sind erforderlich." });
   }
 
   try {
     const result = await db.query(
       `
-      INSERT INTO category_templates (category_id, subject, body_html, updated_at)
+      INSERT INTO category_templates (category_id, subject, body_text, updated_at)
       VALUES ($1, $2, $3, NOW())
       ON CONFLICT (category_id) DO UPDATE SET
         subject = EXCLUDED.subject,
-        body_html = EXCLUDED.body_html,
+        body_text = EXCLUDED.body_text,
+        body_html = NULL,
         updated_at = NOW()
-      RETURNING id, category_id, subject, body_html, updated_at
+      RETURNING id, category_id, subject, body_text, updated_at
       `,
-      [id, subject, body_html]
+      [id, cleanSubject, cleanBody]
     );
     return res.json(result.rows[0]);
   } catch (err) {

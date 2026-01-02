@@ -16,6 +16,7 @@ backend/pdfs/
 backend/dist/
 backend/.cache/
 backend/.tmp/
+backend/build-info.json
 .tmp/
 backend/core/
 .env.local

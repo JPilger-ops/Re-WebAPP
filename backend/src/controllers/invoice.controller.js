@@ -211,6 +211,8 @@ const ensureHtmlBody = (rawBody = "", fallbackText = "") => {
     : escapeHtml(body).replace(/\r?\n/g, "<br>");
 };
 
+const renderTextAsHtml = (text = "") => escapeHtml(String(text ?? "")).replace(/\r?\n/g, "<br>");
+
 const normalizeInvoiceDecimals = (row) => {
   const decimalFields = [
     "net_19",
@@ -295,7 +297,7 @@ const loadInvoiceWithCategory = async (id) => {
     email_smtp_user: emailAccount?.smtp_user || null,
     email_smtp_pass: emailAccount?.smtp_pass || null,
     tpl_subject: template?.subject || null,
-    tpl_body_html: template?.body_html || null,
+    tpl_body_text: template?.body_text || null,
   });
 
   return row;
@@ -340,48 +342,42 @@ const buildEmailContent = (row, bankSettings = {}, headerSettings = {}, globalTe
   const placeholders = buildPlaceholderMap(row, bankSettings, headerSettings);
   const fallbackSubject = `Rechnung Nr. ${row.invoice_number}`;
 
-  const defaultBody = `Hallo ${row.recipient_name || "Kunde"},
-
-anbei erhältst du deine Rechnung Nr. ${row.invoice_number} vom ${formatDateDe(row.date)}.
-Der Betrag von ${placeholders["{{amount}}"] || ""} ist fällig bis ${placeholders["{{due_date}}"]}.
-
-Bankverbindung:
-${placeholders["{{bank_name}}"] || "-"}
-IBAN: ${placeholders["{{iban}}"] || "-"}
-BIC: ${placeholders["{{bic}}"] || "-"}
-
-Bei Fragen melde dich gerne jederzeit.
-
-Vielen Dank für deinen Auftrag!
-
-Beste Grüße
-${placeholders["{{company_name}}"] || "Ihr Team"}`;
+  const defaultBody = [
+    `Hallo ${row.recipient_name || "Kunde"},`,
+    "",
+    `anbei erhältst du deine Rechnung Nr. ${row.invoice_number} vom ${formatDateDe(row.date)}.`,
+    `Der Betrag von ${placeholders["{{amount}}"] || ""} ist fällig bis ${placeholders["{{due_date}}"]}.`,
+    "",
+    "Bankverbindung:",
+    placeholders["{{bank_name}}"] || "-",
+    `IBAN: ${placeholders["{{iban}}"] || "-"}`,
+    `BIC: ${placeholders["{{bic}}"] || "-"}`,
+    "",
+    "Bei Fragen melde dich gerne jederzeit.",
+    "",
+    "Vielen Dank für deinen Auftrag!",
+    "",
+    "Beste Grüße",
+    placeholders["{{company_name}}"] || "Ihr Team",
+  ].join("\n");
 
   const useSubjectTpl = row.tpl_subject || globalTemplate?.subject_template || null;
-  const useHtmlTpl = row.tpl_body_html || globalTemplate?.body_html_template || null;
-  const useTextTpl = globalTemplate?.body_text_template || null;
+  const useTextTpl = row.tpl_body_text || globalTemplate?.body_text_template || null;
 
   const subject = useSubjectTpl
     ? replacePlaceholders(useSubjectTpl, placeholders, false) || fallbackSubject
     : fallbackSubject;
 
-  let bodyHtml = useHtmlTpl
-    ? replacePlaceholders(useHtmlTpl, placeholders, true)
-    : null;
-
-  let bodyText = bodyHtml ? stripHtmlToText(bodyHtml) : defaultBody;
-
-  if (!bodyHtml && useTextTpl) {
-    const renderedText = replacePlaceholders(useTextTpl, placeholders, false);
-    bodyHtml = ensureHtmlBody(renderedText, renderedText);
-    bodyText = renderedText;
-  }
+  const textTemplate = useTextTpl || defaultBody;
+  const renderedText = replacePlaceholders(textTemplate, placeholders, false) || defaultBody;
+  const bodyText = renderedText;
+  const bodyHtml = renderTextAsHtml(bodyText);
 
   return {
     subject,
     bodyHtml,
     bodyText,
-    templateUsed: Boolean(row.tpl_subject || row.tpl_body_html || globalTemplate),
+    templateUsed: Boolean(row.tpl_subject || row.tpl_body_text || globalTemplate),
     category: {
       id: row.category_id,
       key: row.category_key,
@@ -2085,20 +2081,20 @@ export const sendInvoiceEmail = async (req, res) => {
 
     const emailSubject = (subject || "").trim() || content.subject;
     const htmlFromRequest = (html || "").trim();
-    const htmlFromTemplate = content.bodyHtml || "";
-    const rawHtml = ensureHtmlBody(
-      htmlFromRequest || htmlFromTemplate,
-      (message || "").trim() || content.bodyText
-    );
+    const textFromRequest = (message || "").trim();
+    const textFromHtmlOverride = htmlFromRequest ? stripHtmlToText(htmlFromRequest) : "";
+    const emailText =
+      textFromRequest || textFromHtmlOverride || content.bodyText || (message || "").trim();
+    const htmlInner = htmlFromRequest
+      ? ensureHtmlBody(htmlFromRequest, emailText)
+      : renderTextAsHtml(emailText);
 
     // Einheitliche Basis-Styles + White-Space, damit Zeilenumbrüche erhalten bleiben
     const emailHtml = `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; line-height:1.5; white-space:pre-line; color:#111;">
-        ${rawHtml}
+        ${htmlInner}
       </div>
     `;
-
-    const emailText = stripHtmlToText(rawHtml) || content.bodyText || (message || "").trim();
 
     const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
     const finalRecipients = redirectTo

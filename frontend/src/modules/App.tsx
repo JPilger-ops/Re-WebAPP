@@ -3372,9 +3372,9 @@ function CategoryFormModal({
     logo_file: category?.logo_file || "",
   });
   const [availableLogos, setAvailableLogos] = useState<string[]>(logos || []);
-  const [template, setTemplate] = useState<{ subject: string; body_html: string }>({
+  const [template, setTemplate] = useState<{ subject: string; body_text: string }>({
     subject: category?.template?.subject || "",
-    body_html: category?.template?.body_html || "",
+    body_text: category?.template?.body_text || "",
   });
   const [email, setEmail] = useState({
     email_address: category?.email_account?.email_address || "",
@@ -3396,7 +3396,7 @@ function CategoryFormModal({
         getCategoryEmailApi(category.id).catch(() => null),
         listCategoryLogos().catch(() => []),
       ]).then(([tpl, mail, logos]) => {
-        if (tpl) setTemplate({ subject: tpl.subject || "", body_html: tpl.body_html || "" });
+        if (tpl) setTemplate({ subject: tpl.subject || "", body_text: tpl.body_text || "" });
         if (mail) {
           setEmail({
             email_address: mail.email_address || "",
@@ -3471,7 +3471,7 @@ function CategoryFormModal({
       }
 
       // Template speichern (optional)
-      if (template.subject && template.body_html) {
+      if (template.subject && template.body_text) {
         await saveCategoryTemplateApi(saved.id, template);
       }
       // Email speichern, wenn Daten vorhanden
@@ -3594,9 +3594,9 @@ function CategoryFormModal({
             onChange={(e) => setTemplate((t) => ({ ...t, subject: e.target.value }))}
           />
           <Textarea
-            placeholder="HTML Body"
-            value={template.body_html}
-            onChange={(e) => setTemplate((t) => ({ ...t, body_html: e.target.value }))}
+            placeholder="Text Body"
+            value={template.body_text}
+            onChange={(e) => setTemplate((t) => ({ ...t, body_text: e.target.value }))}
             className="min-h-[120px]"
           />
         </div>
@@ -4589,12 +4589,10 @@ function EmailTemplatesSettings() {
   const [status, setStatus] = useState<FormStatus>(null);
   const [form, setForm] = useState<{
     subject_template: string;
-    body_html_template: string;
     body_text_template: string;
     updated_at?: string | null;
   }>({
     subject_template: "",
-    body_html_template: "",
     body_text_template: "",
   });
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
@@ -4606,7 +4604,6 @@ function EmailTemplatesSettings() {
       .then((data) =>
         setForm({
           subject_template: data.subject_template || "",
-          body_html_template: data.body_html_template || "",
           body_text_template: data.body_text_template || "",
           updated_at: data.updated_at || null,
         })
@@ -4622,10 +4619,14 @@ function EmailTemplatesSettings() {
     try {
       const saved = await saveEmailTemplates({
         subject_template: form.subject_template,
-        body_html_template: form.body_html_template || null,
         body_text_template: form.body_text_template || null,
       });
-      setForm((f) => ({ ...f, ...saved }));
+      setForm((f) => ({
+        ...f,
+        subject_template: saved.subject_template,
+        body_text_template: saved.body_text_template,
+        updated_at: saved.updated_at,
+      }));
       setStatus({ type: "success", message: "Vorlage gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -4685,16 +4686,7 @@ function EmailTemplatesSettings() {
           />
         </label>
         <label className="text-sm text-slate-700 block">
-          <span className="font-medium">Body HTML (optional)</span>
-          <Textarea
-            className="min-h-[140px]"
-            value={form.body_html_template}
-            onChange={(e) => setForm((f) => ({ ...f, body_html_template: e.target.value }))}
-            disabled={loading}
-          />
-        </label>
-        <label className="text-sm text-slate-700 block">
-          <span className="font-medium">Body Text (optional)</span>
+          <span className="font-medium">Body (Text, Platzhalter erlaubt)</span>
           <Textarea
             className="min-h-[140px]"
             value={form.body_text_template}

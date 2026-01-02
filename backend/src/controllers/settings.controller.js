@@ -283,7 +283,7 @@ export const getEmailTemplates = async (_req, res) => {
     const tmpl = await getGlobalEmailTemplate();
     return res.json({
       subject_template: tmpl?.subject_template || "",
-      body_html_template: tmpl?.body_html_template || "",
+      body_html_template: null,
       body_text_template: tmpl?.body_text_template || "",
       updated_at: tmpl?.updated_at || null,
     });
@@ -296,7 +296,6 @@ export const getEmailTemplates = async (_req, res) => {
 export const updateEmailTemplates = async (req, res) => {
   try {
     const subject = (req.body?.subject_template || "").trim();
-    const bodyHtml = (req.body?.body_html_template || "").trim() || null;
     const bodyText = (req.body?.body_text_template || "").trim() || null;
 
     if (!subject) {
@@ -305,13 +304,12 @@ export const updateEmailTemplates = async (req, res) => {
 
     const saved = await saveGlobalEmailTemplate({
       subject_template: subject,
-      body_html_template: bodyHtml,
       body_text_template: bodyText,
     });
 
     return res.json({
       subject_template: saved.subject_template || "",
-      body_html_template: saved.body_html_template || "",
+      body_html_template: null,
       body_text_template: saved.body_text_template || "",
       updated_at: saved.updated_at || null,
       message: "E-Mail-Vorlage gespeichert.",

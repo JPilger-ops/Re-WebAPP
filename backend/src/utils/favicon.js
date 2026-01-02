@@ -3,7 +3,7 @@ import path from "path";
 import { prisma } from "./prisma.js";
 
 const PUBLIC_DIR = path.resolve("public");
-const DEFAULT_FILENAME = "logos/RE-WebAPP.png";
+const DEFAULT_FILENAME = "RE-WebAPP.png";
 const DEFAULT_SUBDIR = "logos";
 const TARGET_FILENAME = "favicon.ico";
 
@@ -12,7 +12,7 @@ const MAX_SIZE = 1024 * 1024; // 1MB
 
 export const getFaviconSettings = async () => {
   const row = await prisma.favicon_settings.findUnique({ where: { id: 1 } });
-  return row || { filename: DEFAULT_FILENAME };
+  return row || { filename: TARGET_FILENAME };
 };
 
 export const saveFavicon = async ({ buffer, mime }) => {
