@@ -17,8 +17,8 @@ docker compose version
 
 ## Schnellstart (Compose)
 ```bash
-git clone <repo-url> rechnungsapp
-cd rechnungsapp
+git clone https://github.com/JPilger-ops/Re-WebAPP
+cd Re-WebAPP
 ./scripts/setup.sh                 # legt .env + backend/.env an, falls fehlen
 ./scripts/build-meta.sh            # setzt BUILD_* (für lokale Builds optional)
 docker compose pull                # zieht fertiges Image (APP_IMAGE/APP_IMAGE_TAG, default ghcr.io/jpilger-ops/re-webapp:latest)
