@@ -171,10 +171,11 @@ HOST_PDF_ARCHIVE="${HOST_PDF_BASE}/archive"
 HOST_PDF_TRASH="${HOST_PDF_BASE}/trash"
 mkdir -p "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}"
 HOST_PUBLIC="${RELEASE_DIR}/backend/public"
-mkdir -p "${HOST_PUBLIC}"
+HOST_PUBLIC_LOGOS="${HOST_PUBLIC}/logos"
+mkdir -p "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}"
 # Rechte hostseitig auf node:node (1000) setzen; Fallback chmod 777
-chown -R 1000:1000 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" 2>/dev/null || true
-chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" 2>/dev/null || true
+chown -R 1000:1000 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" 2>/dev/null || true
+chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" 2>/dev/null || true
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
