@@ -25,6 +25,7 @@ import {
   resolveGlobalSmtpFromEnv,
 } from "../utils/smtpSettings.js";
 import { getGlobalEmailTemplate } from "../utils/emailTemplates.js";
+import { ensureBrandingAssetsSync } from "../utils/favicon.js";
 
 const fetchFirstItemDescription = async (invoiceId) => {
   if (!invoiceId) return null;
@@ -59,6 +60,7 @@ const PUBLIC_ROOT = path.resolve("public");
 
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
 const defaultLogoPath = path.join(PUBLIC_ROOT, "logos/HK_LOGO.png");
+const transparentPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==";
 
 const getPdfPaths = async () => {
   const base = await getPdfSettings();
@@ -94,10 +96,12 @@ const moveInvoicePdfToArchive = async (invoiceNumber) => {
 
 let defaultLogoBase64 = "";
 try {
+  ensureBrandingAssetsSync();
   defaultLogoBase64 = fs.readFileSync(defaultLogoPath, "base64");
   console.log("Standard-Logo erfolgreich geladen:", defaultLogoPath);
 } catch (err) {
   console.error("Standard-Logo konnte NICHT geladen werden:", defaultLogoPath, err);
+  defaultLogoBase64 = transparentPngBase64;
 }
 
 const n = (value) => Number(value) || 0;
