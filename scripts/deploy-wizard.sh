@@ -238,7 +238,7 @@ info "Synchronisiere UI-Assets aus dem Image nach backend/public (ohne bestehend
 docker run --rm \
   -v "${HOST_PUBLIC}:/host" \
   "${APP_IMAGE_EFF}:${APP_IMAGE_TAG_EFF}" \
-  sh -c "mkdir -p /host && for item in /app/public/*; do name=\$(basename \"${item}\"); if [ \"${name}\" = \"logos\" ] || [ \"${name}\" = \"favicon.ico\" ]; then continue; fi; cp -r \"${item}\" /host/; done && chown -R 1000:1000 /host || true"
+  sh -c 'mkdir -p /host && for item in /app/public/*; do name=$(basename "${item}"); if [ "${name}" = "logos" ] || [ "${name}" = "favicon.ico" ]; then continue; fi; cp -r "${item}" /host/; done && chown -R 1000:1000 /host || true'
 
 info "Prisma Migrationen anwenden"
 docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma migrate deploy
