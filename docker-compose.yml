@@ -9,7 +9,7 @@ services:
     networks:
       - appnet
     volumes:
-      - ./data/db:/var/lib/postgresql/data
+      - ${DB_DATA_PATH:-./data/db}:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -47,6 +47,8 @@ services:
     volumes:
       - ./backend/pdfs:/app/pdfs
       - ./backend/public:/app/public
+      - ${PUBLIC_LOGOS_PATH:-./data/public/logos}:/app/public/logos
+      - ${PUBLIC_FAVICON_PATH:-./data/public/favicon.ico}:/app/public/favicon.ico
     healthcheck:
       test:
         [

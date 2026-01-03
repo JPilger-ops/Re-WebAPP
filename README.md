@@ -53,6 +53,7 @@ Update (ENV bleibt, aber Image/Tag kann gewählt werden):
 cd /opt/rechnungsapp/current   # oder dein BASE/current
 ./scripts/deploy-wizard.sh     # Modus: update, fragt APP_IMAGE / APP_IMAGE_TAG ab (default: bisherige Werte)
 ```
+- Wizard legt Branding-Pfade persistent unter `shared/public/logos` und `shared/public/favicon.ico` ab (`PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH`) und erstellt vor Updates ein `pg_dump` in `shared/backups`, damit Logos und DB-Daten erhalten bleiben.
 
 Manuell (ohne Wizard):
 ```bash
@@ -62,6 +63,7 @@ docker compose up -d
 docker compose run --rm app npx prisma migrate deploy
 curl http://127.0.0.1:3031/api/version
 ```
+- Für manuelle Deploys `PUBLIC_LOGOS_PATH` und `PUBLIC_FAVICON_PATH` auf einen persistenten Pfad (Default `./data/public/...`) zeigen lassen und bei Bedarf via `./scripts/setup.sh` mit Default-Assets befüllen, damit Branding beim Update bleibt.
 - Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
 
 ## Update (ohne Wizard)

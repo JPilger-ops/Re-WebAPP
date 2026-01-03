@@ -35,6 +35,22 @@ fi
 info "Wichtige Variablen (aus .env):"
 grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT|APP_BIND_IP|APP_PUBLIC_PORT)=' .env || true
 
+# Persistente Branding-Pfade anlegen und mit Defaults befüllen, damit Updates Logos/Favicon behalten
+LOGO_PATH="$(grep -m1 '^PUBLIC_LOGOS_PATH=' .env | cut -d= -f2- || true)"
+LOGO_PATH="${LOGO_PATH:-./data/public/logos}"
+FAVICON_PATH="$(grep -m1 '^PUBLIC_FAVICON_PATH=' .env | cut -d= -f2- || true)"
+FAVICON_PATH="${FAVICON_PATH:-./data/public/favicon.ico}"
+
+mkdir -p "${LOGO_PATH}"
+if compgen -G "backend/public/logos/*" >/dev/null 2>&1; then
+  cp -n backend/public/logos/* "${LOGO_PATH}/" 2>/dev/null || true
+fi
+mkdir -p "$(dirname "${FAVICON_PATH}")"
+if [ -f backend/public/favicon.ico ] && [ ! -e "${FAVICON_PATH}" ]; then
+  cp -n backend/public/favicon.ico "${FAVICON_PATH}" 2>/dev/null || true
+fi
+chmod -R 777 "${LOGO_PATH}" "$(dirname "${LOGO_PATH}")" "$(dirname "${FAVICON_PATH}")" "${FAVICON_PATH}" 2>/dev/null || true
+
 if [ "$QUIET_SETUP" != "1" ]; then
 cat <<'EOF'
 Nächste Schritte:
