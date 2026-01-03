@@ -41,7 +41,8 @@ export const saveFavicon = async ({ buffer, mime }) => {
     err.status = 400;
     throw err;
   }
-  await fs.promises.mkdir(PUBLIC_DIR, { recursive: true });
+  await ensureDir(PUBLIC_DIR);
+  await ensureDir(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
   const targetPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
   await fs.promises.writeFile(targetPath, buffer);
   const saved = await prisma.favicon_settings.upsert({

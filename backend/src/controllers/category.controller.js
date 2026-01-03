@@ -14,9 +14,22 @@ const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 
 const ensureLogosDir = () => {
   try {
-    if (!fs.existsSync(logosDir)) {
-      fs.mkdirSync(logosDir, { recursive: true });
+    // Wenn logosDir ein Symlink ist, Ziel auflösen und dort anlegen
+    try {
+      const stat = fs.lstatSync(logosDir);
+      if (stat.isSymbolicLink()) {
+        const target = fs.readlinkSync(logosDir);
+        const absTarget = path.isAbsolute(target)
+          ? target
+          : path.join(path.dirname(logosDir), target);
+        fs.mkdirSync(absTarget, { recursive: true });
+        return absTarget;
+      }
+    } catch {
+      // ignore and fall through to mkdir
     }
+
+    fs.mkdirSync(logosDir, { recursive: true });
     const resolved = fs.realpathSync(logosDir);
     fs.mkdirSync(resolved, { recursive: true });
     return resolved;
