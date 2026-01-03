@@ -12,6 +12,20 @@ const logosDir = path.join(__dirname, "../../public/logos");
 const MAX_LOGO_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
 const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 
+const ensureLogosDir = () => {
+  try {
+    if (!fs.existsSync(logosDir)) {
+      fs.mkdirSync(logosDir, { recursive: true });
+    }
+    const resolved = fs.realpathSync(logosDir);
+    fs.mkdirSync(resolved, { recursive: true });
+    return resolved;
+  } catch (err) {
+    console.warn("Konnte Logos-Verzeichnis nicht sicherstellen:", err.message);
+    return logosDir;
+  }
+};
+
 // Alle Kategorien holen
 export const getAllCategories = async (req, res) => {
   try {
@@ -372,6 +386,8 @@ export const saveCategoryTemplate = async (req, res) => {
 // Logo-Upload (Base64 über JSON)
 export const uploadLogo = async (req, res) => {
   try {
+    const targetDir = ensureLogosDir();
+
     const { filename, dataUrl } = req.body || {};
     if (!filename || !dataUrl) {
       return res.status(400).json({ message: "filename und dataUrl sind erforderlich." });
@@ -399,11 +415,7 @@ export const uploadLogo = async (req, res) => {
       return res.status(400).json({ message: "Datei ist zu groß (max. 1.5 MB)." });
     }
 
-    if (!fs.existsSync(logosDir)) {
-      fs.mkdirSync(logosDir, { recursive: true });
-    }
-
-    const targetPath = path.join(logosDir, safeName);
+    const targetPath = path.join(targetDir, safeName);
     fs.writeFileSync(targetPath, buffer);
 
     return res.json({ filename: safeName, size: buffer.length });
