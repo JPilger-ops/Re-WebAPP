@@ -14,6 +14,9 @@ const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 
 const ensureLogosDir = () => {
   try {
+    // Basisverzeichnis sicherstellen
+    fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+
     // Wenn logosDir ein Symlink ist, Ziel auflösen und dort anlegen
     try {
       const stat = fs.lstatSync(logosDir);
@@ -26,7 +29,7 @@ const ensureLogosDir = () => {
         return absTarget;
       }
     } catch {
-      // ignore and fall through to mkdir
+      // ignore and fall through
     }
 
     fs.mkdirSync(logosDir, { recursive: true });
