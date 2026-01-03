@@ -39,11 +39,27 @@ const writeIfMissingSync = (targetPath, base64) => {
   }
 };
 
+const resolveWritablePath = (targetPath) => {
+  try {
+    const stat = fs.lstatSync(targetPath);
+    if (stat.isSymbolicLink()) {
+      const link = fs.readlinkSync(targetPath);
+      const abs = path.isAbsolute(link) ? link : path.join(path.dirname(targetPath), link);
+      ensureDirSync(path.dirname(abs));
+      return abs;
+    }
+  } catch {
+    // not existing or not a symlink; fall through
+  }
+  ensureDirSync(path.dirname(targetPath));
+  return targetPath;
+};
+
 export const ensureBrandingAssetsSync = () => {
   try {
     ensureDirSync(PUBLIC_DIR);
     ensureDirSync(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
-    const faviconPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
+    const faviconPath = resolveWritablePath(path.join(PUBLIC_DIR, TARGET_FILENAME));
     if (!fs.existsSync(faviconPath)) {
       writeIfMissingSync(faviconPath, TRANSPARENT_PNG_BASE64);
     }
@@ -78,7 +94,7 @@ export const saveFavicon = async ({ buffer, mime }) => {
     throw err;
   }
   ensureBrandingAssetsSync();
-  const targetPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
+  const targetPath = resolveWritablePath(path.join(PUBLIC_DIR, TARGET_FILENAME));
   await fs.promises.writeFile(targetPath, buffer);
   const saved = await prisma.favicon_settings.upsert({
     where: { id: 1 },
@@ -92,7 +108,7 @@ export const resetFavicon = async () => {
   ensureBrandingAssetsSync();
   await ensureDir(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
   const source = path.join(PUBLIC_DIR, DEFAULT_SUBDIR, DEFAULT_FILENAME);
-  const targetPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
+  const targetPath = resolveWritablePath(path.join(PUBLIC_DIR, TARGET_FILENAME));
   await fs.promises.copyFile(source, targetPath).catch((err) => {
     err.status = 500;
     throw err;
