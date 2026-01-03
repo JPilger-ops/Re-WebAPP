@@ -83,6 +83,34 @@ ln -sfn "${SHARED_DIR}/data" "${RELEASE_DIR}/data"
 rm -rf "${RELEASE_DIR}/backend/pdfs"
 ln -sfn "${SHARED_DIR}/pdfs" "${RELEASE_DIR}/backend/pdfs"
 
+# Gemeinsame Branding-Pfade (Logos/Favicon) auf shared verlinken
+SHARED_PUBLIC="${SHARED_DIR}/public"
+SHARED_LOGOS="${SHARED_PUBLIC}/logos"
+SHARED_FAVICON="${SHARED_PUBLIC}/favicon.ico"
+mkdir -p "${SHARED_LOGOS}"
+
+# Bestehende Assets aus aktuellem Release übernehmen (nur falls vorhanden)
+if [ -d "${CURRENT_LINK}/backend/public/logos" ]; then
+  cp -an "${CURRENT_LINK}/backend/public/logos/." "${SHARED_LOGOS}/" 2>/dev/null || true
+fi
+if [ -f "${CURRENT_LINK}/backend/public/favicon.ico" ]; then
+  cp -an "${CURRENT_LINK}/backend/public/favicon.ico" "${SHARED_FAVICON}" 2>/dev/null || true
+fi
+
+# Defaults aus neuem Release bereitstellen, falls im Shared-Bereich noch nichts liegt
+if [ -d "${RELEASE_DIR}/backend/public/logos" ]; then
+  cp -an "${RELEASE_DIR}/backend/public/logos/." "${SHARED_LOGOS}/" 2>/dev/null || true
+fi
+if [ -f "${RELEASE_DIR}/backend/public/favicon.ico" ] && [ ! -f "${SHARED_FAVICON}" ]; then
+  cp -an "${RELEASE_DIR}/backend/public/favicon.ico" "${SHARED_FAVICON}" 2>/dev/null || true
+fi
+
+# Symlinks ins neue Release setzen
+rm -rf "${RELEASE_DIR}/backend/public/logos"
+ln -sfn "${SHARED_LOGOS}" "${RELEASE_DIR}/backend/public/logos"
+rm -f "${RELEASE_DIR}/backend/public/favicon.ico"
+ln -sfn "${SHARED_FAVICON}" "${RELEASE_DIR}/backend/public/favicon.ico"
+
 cd "${RELEASE_DIR}"
 if [[ "${MODE,,}" == "install" ]]; then
   info "Führe Basis-Setup aus (env-Dateien)"
@@ -168,16 +196,18 @@ else
 fi
 
 # Host-Pfade (Bind-Mount) ermitteln und Rechte setzen, damit PDF/Branding schreibbar sind
-HOST_PDF_BASE="${RELEASE_DIR}/backend/pdfs"
+HOST_PDF_BASE="${SHARED_DIR}/pdfs"
 HOST_PDF_ARCHIVE="${HOST_PDF_BASE}/archive"
 HOST_PDF_TRASH="${HOST_PDF_BASE}/trash"
 mkdir -p "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}"
 HOST_PUBLIC="${RELEASE_DIR}/backend/public"
-HOST_PUBLIC_LOGOS="${HOST_PUBLIC}/logos"
-mkdir -p "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}"
+HOST_PUBLIC_LOGOS="${SHARED_LOGOS}"
+HOST_PUBLIC_FAVICON="${SHARED_FAVICON}"
+mkdir -p "${HOST_PUBLIC}"
+[ -f "${HOST_PUBLIC_FAVICON}" ] || touch "${HOST_PUBLIC_FAVICON}"
 # Rechte hostseitig auf node:node (1000) setzen; Fallback chmod 777
-chown -R 1000:1000 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" 2>/dev/null || true
-chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" 2>/dev/null || true
+chown -R 1000:1000 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" "${HOST_PUBLIC_FAVICON}" 2>/dev/null || true
+chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" "${HOST_PUBLIC_FAVICON}" 2>/dev/null || true
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
@@ -208,7 +238,7 @@ info "Synchronisiere UI-Assets aus dem Image nach backend/public (ohne bestehend
 docker run --rm \
   -v "${HOST_PUBLIC}:/host" \
   "${APP_IMAGE_EFF}:${APP_IMAGE_TAG_EFF}" \
-  sh -c "mkdir -p /host && cp -r /app/public/* /host/ && chown -R 1000:1000 /host || true"
+  sh -c "mkdir -p /host && for item in /app/public/*; do name=\$(basename \"${item}\"); if [ \"${name}\" = \"logos\" ] || [ \"${name}\" = \"favicon.ico\" ]; then continue; fi; cp -r \"${item}\" /host/; done && chown -R 1000:1000 /host || true"
 
 info "Prisma Migrationen anwenden"
 docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma migrate deploy
