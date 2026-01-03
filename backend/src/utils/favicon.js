@@ -69,7 +69,7 @@ const resolveWritablePath = (targetPath) => {
 export const ensureBrandingAssetsSync = () => {
   try {
     ensureDirSync(PUBLIC_DIR);
-    ensureDirSync(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
+    ensureDirSync(path.join(PUBLIC_DIR, DEFAULT_SUBDIR)); // stellt logos/-Ordner sicher
     const faviconPath = resolveWritablePath(path.join(PUBLIC_DIR, TARGET_FILENAME));
     if (!fs.existsSync(faviconPath)) {
       writeIfMissingSync(faviconPath, TRANSPARENT_PNG_BASE64);

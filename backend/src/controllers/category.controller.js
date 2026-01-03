@@ -25,6 +25,7 @@ const ensureLogosDir = () => {
         const absTarget = path.isAbsolute(target)
           ? target
           : path.join(path.dirname(logosDir), target);
+        fs.mkdirSync(path.dirname(absTarget), { recursive: true });
         fs.mkdirSync(absTarget, { recursive: true });
         return absTarget;
       }
@@ -32,6 +33,7 @@ const ensureLogosDir = () => {
       // ignore and fall through
     }
 
+    fs.mkdirSync(path.dirname(logosDir), { recursive: true });
     fs.mkdirSync(logosDir, { recursive: true });
     const resolved = fs.realpathSync(logosDir);
     fs.mkdirSync(resolved, { recursive: true });
