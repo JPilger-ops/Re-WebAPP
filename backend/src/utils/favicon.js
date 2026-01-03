@@ -10,6 +10,16 @@ const TARGET_FILENAME = "favicon.ico";
 const allowedMime = ["image/png", "image/x-icon", "image/vnd.microsoft.icon", "image/svg+xml"];
 const MAX_SIZE = 1024 * 1024; // 1MB
 
+const ensureDir = async (dir) => {
+  await fs.promises.mkdir(dir, { recursive: true }).catch(() => {});
+};
+
+const exists = async (p) =>
+  fs.promises
+    .access(p, fs.constants.R_OK)
+    .then(() => true)
+    .catch(() => false);
+
 export const getFaviconSettings = async () => {
   const row = await prisma.favicon_settings.findUnique({ where: { id: 1 } });
   return row || { filename: TARGET_FILENAME };
@@ -43,9 +53,13 @@ export const saveFavicon = async ({ buffer, mime }) => {
 };
 
 export const resetFavicon = async () => {
+  await ensureDir(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
   const source = path.join(PUBLIC_DIR, DEFAULT_SUBDIR, DEFAULT_FILENAME);
   const targetPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
-  await fs.promises.copyFile(source, targetPath);
+  await fs.promises.copyFile(source, targetPath).catch((err) => {
+    err.status = 500;
+    throw err;
+  });
   const saved = await prisma.favicon_settings.upsert({
     where: { id: 1 },
     update: { filename: TARGET_FILENAME, updated_at: new Date() },
@@ -56,13 +70,24 @@ export const resetFavicon = async () => {
 
 export const resolveFaviconPath = async () => {
   const settings = await getFaviconSettings();
+  await ensureDir(PUBLIC_DIR);
+  await ensureDir(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
   const targetPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
-  const exists = await fs.promises
-    .access(targetPath, fs.constants.R_OK)
-    .then(() => true)
-    .catch(() => false);
-  if (exists) return { path: targetPath, updated_at: settings.updated_at };
-  // Fallback to default
   const defPath = path.join(PUBLIC_DIR, DEFAULT_SUBDIR, DEFAULT_FILENAME);
+
+  if (!(await exists(targetPath))) {
+    if (await exists(defPath)) {
+      await fs.promises.copyFile(defPath, targetPath).catch(() => {});
+    }
+  }
+
+  if (await exists(targetPath)) {
+    return { path: targetPath, updated_at: settings.updated_at };
+  }
+  // Fallback to default
+  if (await exists(defPath)) {
+    return { path: defPath, updated_at: settings.updated_at };
+  }
+  // Let express handle missing file; avoids unhandled ENOENT in sendFile
   return { path: defPath, updated_at: settings.updated_at };
 };
