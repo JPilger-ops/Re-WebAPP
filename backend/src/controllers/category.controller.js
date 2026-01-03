@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
 import nodemailer from "nodemailer";
 import { ImapFlow } from "imapflow";
+import { ensureBrandingAssets } from "../utils/favicon.js";
 
 const PUBLIC_DIR = path.resolve("public");
 const logosDir = path.join(PUBLIC_DIR, "logos");
@@ -398,6 +399,7 @@ export const saveCategoryTemplate = async (req, res) => {
 // Logo-Upload (Base64 über JSON)
 export const uploadLogo = async (req, res) => {
   try {
+    await ensureBrandingAssets();
     const targetDir = ensureLogosDir();
 
     const { filename, dataUrl } = req.body || {};
@@ -440,12 +442,11 @@ export const uploadLogo = async (req, res) => {
 // Logos aus dem /public/logos Verzeichnis auflisten
 export const listLogos = async (req, res) => {
   try {
-    if (!fs.existsSync(logosDir)) {
-      return res.json([]);
-    }
+    await ensureBrandingAssets();
+    const targetDir = ensureLogosDir();
 
     const files = fs
-      .readdirSync(logosDir, { withFileTypes: true })
+      .readdirSync(targetDir, { withFileTypes: true })
       .filter((entry) => entry.isFile())
       .map((entry) => entry.name)
       .filter((name) => allowedLogoExt.includes(path.extname(name).toLowerCase()))
