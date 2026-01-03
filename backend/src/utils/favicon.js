@@ -120,10 +120,19 @@ export const resetFavicon = async () => {
   await ensureDir(path.join(PUBLIC_DIR, DEFAULT_SUBDIR));
   const source = path.join(PUBLIC_DIR, DEFAULT_SUBDIR, DEFAULT_FILENAME);
   const targetPath = resolveWritablePath(path.join(PUBLIC_DIR, TARGET_FILENAME));
-  await fs.promises.copyFile(source, targetPath).catch((err) => {
-    err.status = 500;
-    throw err;
-  });
+
+  try {
+    if (await exists(source)) {
+      await fs.promises.copyFile(source, targetPath);
+    } else {
+      writeIfMissingSync(targetPath, TRANSPARENT_PNG_BASE64);
+    }
+  } catch (err) {
+    // Fallback: schreibe transparentes Icon, falls Copy scheitert
+    writeIfMissingSync(targetPath, TRANSPARENT_PNG_BASE64);
+    if (err?.status === undefined) err.status = 500;
+  }
+
   const saved = await prisma.favicon_settings.upsert({
     where: { id: 1 },
     update: { filename: TARGET_FILENAME, updated_at: new Date() },
@@ -135,7 +144,7 @@ export const resetFavicon = async () => {
 export const resolveFaviconPath = async () => {
   const settings = await getFaviconSettings();
   ensureBrandingAssetsSync();
-  const targetPath = path.join(PUBLIC_DIR, TARGET_FILENAME);
+  const targetPath = resolveWritablePath(path.join(PUBLIC_DIR, TARGET_FILENAME));
   const defPath = path.join(PUBLIC_DIR, DEFAULT_SUBDIR, DEFAULT_FILENAME);
 
   if (!(await exists(targetPath))) {
