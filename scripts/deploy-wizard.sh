@@ -209,12 +209,21 @@ mkdir -p "${HOST_PUBLIC}"
 chown -R 1000:1000 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" "${HOST_PUBLIC_FAVICON}" 2>/dev/null || true
 chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOST_PUBLIC}" "${HOST_PUBLIC_LOGOS}" "${HOST_PUBLIC_FAVICON}" 2>/dev/null || true
 
+BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
+JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
+
+# DB-Settings zwischen .env (Compose/DB) und backend/.env (App) synchron halten,
+# damit keine "password authentication failed" durch abweichende Werte entstehen.
+info "Übernehme DB-Einstellungen aus .env nach backend/.env"
+for key in DB_HOST DB_PORT DB_NAME DB_SCHEMA DB_USER DB_PASS DATABASE_URL; do
+  val="$(current_env_value "${ENV_FILE}" "${key}")"
+  [ -n "${val}" ] && set_env_value "${BACKEND_ENV_FILE}" "${key}" "${val}"
+done
+
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
 fi
 
-BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
-JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
 if [[ "${MODE,,}" == "install" ]]; then
   info "Backend-Env (JWT_SECRET wird benötigt; andere Keys später in der UI konfigurierbar)"
   set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
