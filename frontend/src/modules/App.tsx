@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, Link, Outlet, useParams, useSearchParams } from "react-router-dom";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   ApiKeyInfo,
@@ -351,7 +351,7 @@ function IdleWatcher() {
       events.forEach((ev) => window.removeEventListener(ev, resetTimer));
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [user, location.pathname, logout, navigate, setError]);
+  }, [IDLE_MS, THROTTLE_MS, location.pathname, logout, navigate, setError, user]);
 
   return null;
 }
@@ -748,36 +748,35 @@ function Customers() {
   const [busyDelete, setBusyDelete] = useState(false);
   const [toast, setToast] = useState<FormStatus>(null);
 
-  const applyFilter = (list: Customer[], term: string) => {
+  const applyFilter = useCallback((list: Customer[], term: string) => {
     const t = term.toLowerCase();
     if (!t) return list;
     return list.filter((c) =>
       [c.name, c.email, c.city, c.zip].some((v) => (v || "").toLowerCase().includes(t))
     );
-  };
+  }, []);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await listCustomers();
       setCustomers(res);
-      setFiltered(applyFilter(res, search));
     } catch (err: any) {
       const apiErr = err as ApiError;
       setError(apiErr.message || "Kunden konnten nicht geladen werden.");
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
   }, []);
 
   useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
     setFiltered(applyFilter(customers, search));
-  }, [customers, search]);
+  }, [applyFilter, customers, search]);
 
   const onDelete = async (id: number) => {
     setBusyDelete(true);
@@ -1110,12 +1109,12 @@ function Invoices() {
     error?: string | null;
   }>({ open: false, status: "idle" });
 
-  const computeStatus = (inv: InvoiceListItem): "open" | "sent" | "paid" | "canceled" => {
+  const computeStatus = useCallback((inv: InvoiceListItem): "open" | "sent" | "paid" | "canceled" => {
     if (inv.canceled_at) return "canceled";
     if (inv.status_paid_at) return "paid";
     if (inv.status_sent) return "sent";
     return "open";
-  };
+  }, []);
 
   const datevLabel = (inv: InvoiceListItem) => {
     const status = inv.datev_export_status;
@@ -1139,15 +1138,16 @@ function Invoices() {
     return labels[s];
   };
 
-  const applyFilter = (
-    list: InvoiceListItem[],
-    term: string,
-    status: InvoiceStatusFilter,
-    categoryKey: string,
-    customerTerm: string,
-    invoiceNoTerm: string,
-    order: "asc" | "desc"
-  ) => {
+  const applyFilter = useCallback(
+    (
+      list: InvoiceListItem[],
+      term: string,
+      status: InvoiceStatusFilter,
+      categoryKey: string,
+      customerTerm: string,
+      invoiceNoTerm: string,
+      order: "asc" | "desc"
+    ) => {
     const t = term.toLowerCase();
     const ct = customerTerm.toLowerCase();
     const it = invoiceNoTerm.toLowerCase();
@@ -1179,9 +1179,11 @@ function Invoices() {
         }
         return order === "asc" ? aDate - bDate : bDate - aDate;
       });
-  };
+    },
+    [computeStatus]
+  );
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -1197,7 +1199,6 @@ function Invoices() {
       ]);
       setInvoices(res);
       setCategories(cats);
-      setFiltered(applyFilter(res, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter, sortOrder));
       setSelectedIds((prev) => prev.filter((id) => res.some((inv) => inv.id === id)));
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -1205,17 +1206,17 @@ function Invoices() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [categoryFilter, customerFilter, fromDate, statusFilter, toDate]);
 
   useEffect(() => {
     load();
-  }, [fromDate, toDate, customerFilter, statusFilter, categoryFilter, invoiceNumberFilter, sortOrder]);
+  }, [load]);
 
   useEffect(() => {
     setFiltered(
       applyFilter(invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter, sortOrder)
     );
-  }, [invoices, search, statusFilter, categoryFilter, customerFilter, invoiceNumberFilter, sortOrder]);
+  }, [applyFilter, categoryFilter, customerFilter, invoiceNumberFilter, invoices, search, sortOrder, statusFilter]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => filtered.some((inv) => inv.id === id)));
@@ -2285,7 +2286,7 @@ function InvoiceFormModal({
     return Number.isFinite(num) ? num : NaN;
   };
 
-  const loadBase = async () => {
+  const loadBase = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -2335,11 +2336,11 @@ function InvoiceFormModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, mode]);
 
   useEffect(() => {
     loadBase();
-  }, []);
+  }, [loadBase]);
 
   const refreshInvoiceNumber = async () => {
     setError(null);
@@ -2854,9 +2855,9 @@ function InvoiceDetailPage() {
     const totalGross = rows.reduce((sum, r) => sum + (r.gross || 0), 0);
 
     return { rows, totalNet, totalVat, totalGross };
-  }, [inv, items]);
+  }, [inv]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
@@ -2869,11 +2870,11 @@ function InvoiceDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   const statusBadge = () => {
     if (!detail) return null;
@@ -3429,7 +3430,7 @@ function CategoryFormModal({
     } else {
       listCategoryLogos().then((l) => setAvailableLogos(l)).catch(() => {});
     }
-  }, []);
+  }, [category, mode]);
 
   const onFileSelect = async (file?: File) => {
     if (!file) return;
