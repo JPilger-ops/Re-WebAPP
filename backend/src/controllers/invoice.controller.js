@@ -94,15 +94,7 @@ const moveInvoicePdfToArchive = async (invoiceNumber) => {
   }
 };
 
-let defaultLogoBase64 = "";
-try {
-  ensureBrandingAssetsSync();
-  defaultLogoBase64 = fs.readFileSync(defaultLogoPath, "base64");
-  console.log("Standard-Logo erfolgreich geladen:", defaultLogoPath);
-} catch (err) {
-  console.error("Standard-Logo konnte NICHT geladen werden:", defaultLogoPath, err);
-  defaultLogoBase64 = transparentPngBase64;
-}
+ensureBrandingAssetsSync();
 
 const n = (value) => Number(value) || 0;
 const toNumber = (value) =>
@@ -1297,6 +1289,9 @@ export const getInvoicePdf = async (req, res) => {
     if (err?.code === "NOT_FOUND") {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
+    if (err?.code === "LOGO_NOT_FOUND") {
+      return res.status(400).json({ message: err.message || "Kategorie-Logo fehlt. Bitte Logo neu hochladen." });
+    }
     console.error("Fehler bei der PDF-Erstellung:", err);
     return res.status(500).json({ error: "Fehler bei der PDF-Erstellung" });
   }
@@ -1341,6 +1336,9 @@ export const regenerateInvoicePdf = async (req, res) => {
   } catch (err) {
     if (err?.code === "NOT_FOUND") {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    if (err?.code === "LOGO_NOT_FOUND") {
+      return res.status(400).json({ message: err.message || "Kategorie-Logo fehlt. Bitte Logo neu hochladen." });
     }
     console.error("PDF Regenerate fehlgeschlagen:", err);
     return res.status(500).json({ message: "PDF konnte nicht neu erstellt werden." });
@@ -1393,23 +1391,17 @@ async function ensureInvoicePdf(id) {
       },
     };
 
-    let logoBase64ForInvoice = defaultLogoBase64;
+    let logoBase64ForInvoice = null;
     if (categoryLogo) {
-      try {
-        const categoryLogoPath = path.join(
-          __dirname,
-          "../../public/logos",
-          categoryLogo
-        );
-
-        if (fs.existsSync(categoryLogoPath)) {
-          logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
-          console.log("Kategorie-Logo geladen:", categoryLogoPath);
-        } else {
-          console.warn("Kategorie-Logo nicht gefunden, nutze Default-Logo:", categoryLogoPath);
-        }
-      } catch (err) {
-        console.warn("Fehler beim Laden des Kategorie-Logos, nutze Default-Logo:", err);
+      const categoryLogoPath = path.join(PUBLIC_ROOT, "logos", categoryLogo);
+      if (fs.existsSync(categoryLogoPath)) {
+        logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
+        console.log("Kategorie-Logo geladen:", categoryLogoPath);
+      } else {
+        const error = new Error(`Kategorie-Logo fehlt oder wurde gelöscht: ${categoryLogo}. Bitte Logo neu hochladen oder Kategorie ohne Logo speichern.`);
+        error.code = "LOGO_NOT_FOUND";
+        error.logo_path = categoryLogoPath;
+        throw error;
       }
     }
 
@@ -1836,7 +1828,13 @@ function generateInvoiceHtml(
   "></div>
 
   <div class="brand-box">
-    <img src="${header.logo_url ? header.logo_url : `data:image/png;base64,${logoBase64ForInvoice}`}" alt="Logo" />
+    ${
+      header.logo_url
+        ? `<img src="${header.logo_url}" alt="Logo" />`
+        : logoBase64ForInvoice
+        ? `<img src="data:image/png;base64,${logoBase64ForInvoice}" alt="Logo" />`
+        : ""
+    }
     <div class="brand-sub">
       ${brandLines.join("<br>")}
     </div>
@@ -2192,6 +2190,9 @@ export const sendInvoiceEmail = async (req, res) => {
     if (err?.code === "NOT_FOUND") {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
+    if (err?.code === "LOGO_NOT_FOUND") {
+      return res.status(400).json({ message: err.message || "Kategorie-Logo fehlt. Bitte Logo neu hochladen oder Kategorie ohne Logo speichern." });
+    }
     if (includeDatev) {
       try {
         await updateDatevExportStatus(id, DATEV_STATUS.FAILED, err?.message || "DATEV-Versand fehlgeschlagen.");
@@ -2276,6 +2277,9 @@ export const exportInvoiceToDatev = async (req, res) => {
   } catch (err) {
     if (err?.code === "NOT_FOUND") {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
+    }
+    if (err?.code === "LOGO_NOT_FOUND") {
+      return res.status(400).json({ message: err.message || "Kategorie-Logo fehlt. Bitte Logo neu hochladen." });
     }
     console.error("DATEV Export fehlgeschlagen:", err);
     const short =
