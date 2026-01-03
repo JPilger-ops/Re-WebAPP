@@ -30,6 +30,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PUBLIC_ROOT = path.resolve("public");
 
 const app = express();
 app.disable("x-powered-by");
@@ -136,7 +137,7 @@ app.get("/favicon.ico", async (_req, res, next) => {
     return next(err);
   }
 });
-app.use(express.static(path.join(__dirname, "../public")));
+app.use(express.static(PUBLIC_ROOT));
 
 /* -------------------------
    🚀 API ROUTES
@@ -184,12 +185,12 @@ if (enableHkformsMock) {
    🌐 FRONTEND ROUTE
 -------------------------- */
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  res.sendFile(path.join(PUBLIC_ROOT, "index.html"));
 });
 
 // SPA fallback für alles außer /api/*
 app.get(/^\/(?!api\/).*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  res.sendFile(path.join(PUBLIC_ROOT, "index.html"));
 });
 
 // Hintergrundjob: Überfällig-Markierung + HKForms Sync

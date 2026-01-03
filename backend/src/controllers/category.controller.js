@@ -6,9 +6,8 @@ import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
 import nodemailer from "nodemailer";
 import { ImapFlow } from "imapflow";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const logosDir = path.join(__dirname, "../../public/logos");
+const PUBLIC_DIR = path.resolve("public");
+const logosDir = path.join(PUBLIC_DIR, "logos");
 const MAX_LOGO_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
 const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 
