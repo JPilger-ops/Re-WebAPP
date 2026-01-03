@@ -83,7 +83,20 @@ upsert_env_var "BUILD_TIME" "${BUILD_TIME}"
 
 export BUILD_SHA BUILD_NUMBER BUILD_TIME
 # Schreibe auch Build-Info-JSON für den Runtime-Fallback
-node "${ROOT_DIR}/backend/scripts/write-build-info.mjs"
+if command -v node >/dev/null 2>&1; then
+  node "${ROOT_DIR}/backend/scripts/write-build-info.mjs"
+else
+  # Fallback ohne Node: einfache JSON-Datei schreiben
+  cat > "${ROOT_DIR}/backend/build-info.json" <<EOF
+{
+  "sha": "${BUILD_SHA}",
+  "number": $(printf '%s\n' "${BUILD_NUMBER}" | sed 's/[^0-9].*$//'),
+  "time": "${BUILD_TIME}"
+}
+EOF
+  echo "[warn] node nicht gefunden – build-info.json per Shell erzeugt."
+fi
+
 echo "Build-Metadaten gesetzt: sha=${BUILD_SHA}, number=${BUILD_NUMBER}, time=${BUILD_TIME}"
 
 if [ "${SKIP_DOCKER_COMPOSE:-0}" = "1" ]; then
