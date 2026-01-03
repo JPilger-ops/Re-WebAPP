@@ -45,6 +45,17 @@ const resolveWritablePath = (targetPath) => {
     if (stat.isSymbolicLink()) {
       const link = fs.readlinkSync(targetPath);
       const abs = path.isAbsolute(link) ? link : path.join(path.dirname(targetPath), link);
+      const insidePublic = abs.startsWith(PUBLIC_DIR);
+      if (!insidePublic) {
+        // Symlink zeigt außerhalb des Public-Volumes (z.B. Host-Pfad) → Symlink entfernen und lokale Datei nutzen
+        try {
+          fs.unlinkSync(targetPath);
+        } catch {
+          // ignore
+        }
+        ensureDirSync(path.dirname(targetPath));
+        return targetPath;
+      }
       ensureDirSync(path.dirname(abs));
       return abs;
     }
