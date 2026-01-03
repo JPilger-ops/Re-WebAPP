@@ -123,6 +123,22 @@ const PERMISSION_OPTIONS: { key: string; label: string }[] = [
   { key: "categories.delete", label: "Kategorien löschen" },
 ];
 
+const EMAIL_PLACEHOLDERS = [
+  "{{recipient_name}}",
+  "{{recipient_street}}",
+  "{{recipient_zip}}",
+  "{{recipient_city}}",
+  "{{invoice_number}}",
+  "{{invoice_date}}",
+  "{{due_date}}",
+  "{{amount}}",
+  "{{bank_name}}",
+  "{{iban}}",
+  "{{bic}}",
+  "{{company_name}}",
+  "{{category_name}}",
+];
+
 function extractBuildNumber(info: VersionInfo | null) {
   const raw = info?.build?.number;
   if (raw === undefined || raw === null) return null;
@@ -3599,6 +3615,26 @@ function CategoryFormModal({
             onChange={(e) => setTemplate((t) => ({ ...t, body_text: e.target.value }))}
             className="min-h-[120px]"
           />
+          <div className="space-y-1">
+            <div className="text-xs text-slate-600">Platzhalter (Plain Text, wird 1:1 ersetzt):</div>
+            <div className="flex flex-wrap gap-2 text-xs text-slate-700">
+              {EMAIL_PLACEHOLDERS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="px-2 py-1 border border-slate-200 rounded bg-slate-50 hover:bg-slate-100"
+                  onClick={() =>
+                    setTemplate((t) => ({
+                      ...t,
+                      body_text: t.body_text ? `${t.body_text}${t.body_text.endsWith("\n") ? "" : "\n"}${p}` : p,
+                    }))
+                  }
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {status && <Alert type={status.type === "success" ? "success" : "error"}>{status.message}</Alert>}
@@ -4651,22 +4687,6 @@ function EmailTemplatesSettings() {
     }
   };
 
-  const placeholders = [
-    "{{recipient_name}}",
-    "{{recipient_street}}",
-    "{{recipient_zip}}",
-    "{{recipient_city}}",
-    "{{invoice_number}}",
-    "{{invoice_date}}",
-    "{{due_date}}",
-    "{{amount}}",
-    "{{bank_name}}",
-    "{{iban}}",
-    "{{bic}}",
-    "{{company_name}}",
-    "{{category_name}}",
-  ];
-
   return (
     <div className="space-y-5">
       <div>
@@ -4710,7 +4730,7 @@ function EmailTemplatesSettings() {
       <div className="border border-dashed border-slate-200 rounded-md p-3 bg-slate-50">
         <div className="font-semibold text-sm mb-1">Platzhalter</div>
         <div className="flex flex-wrap gap-2 text-xs text-slate-700">
-          {placeholders.map((p) => (
+          {EMAIL_PLACEHOLDERS.map((p) => (
             <code key={p} className="px-2 py-1 bg-white border border-slate-200 rounded">
               {p}
             </code>
