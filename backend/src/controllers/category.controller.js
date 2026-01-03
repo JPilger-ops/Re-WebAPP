@@ -25,6 +25,17 @@ const ensureLogosDir = () => {
         const absTarget = path.isAbsolute(target)
           ? target
           : path.join(path.dirname(logosDir), target);
+        const insidePublic = absTarget.startsWith(PUBLIC_DIR);
+        if (!insidePublic) {
+          // Symlink zeigt nach außen -> entfernen und lokalen Ordner erzeugen
+          try {
+            fs.unlinkSync(logosDir);
+          } catch {
+            // ignore
+          }
+          fs.mkdirSync(logosDir, { recursive: true });
+          return fs.realpathSync(logosDir);
+        }
         fs.mkdirSync(path.dirname(absTarget), { recursive: true });
         fs.mkdirSync(absTarget, { recursive: true });
         return absTarget;
