@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ApiError, AuthUser, login as apiLogin, logout as apiLogout, me } from "./api";
 
 type AuthState = {
@@ -37,47 +37,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (username: string, password: string) => {
-    setError(null);
-    const res = await apiLogin(username, password);
-    const current = await me();
-    setUser(current);
-    return current;
-  };
-
-  const logout = async () => {
-    try {
-      await apiLogout();
-    } finally {
-      setUser(null);
-      clearIdleTimers();
-    }
-  };
-
-  const refresh = async () => {
-    try {
-      const u = await me();
-      setUser(u);
-      return u;
-    } catch (err) {
-      const apiErr = err as ApiError;
-      if (apiErr.status === 401) {
-        setUser(null);
-      }
-      return null;
-    }
-  };
-
-  const clearIdleTimers = () => {
+  const clearIdleTimers = useCallback(() => {
     if (warnTimerRef.current) window.clearTimeout(warnTimerRef.current);
     if (logoutTimerRef.current) window.clearTimeout(logoutTimerRef.current);
     if (intervalRef.current) window.clearInterval(intervalRef.current);
     warnTimerRef.current = null;
     logoutTimerRef.current = null;
     intervalRef.current = null;
-  };
+  }, []);
 
-  const scheduleIdleTimers = () => {
+  const autoLogout = useCallback(async () => {
+    clearIdleTimers();
+    try {
+      await apiLogout();
+    } catch {
+      // ignore
+    } finally {
+      setUser(null);
+      try {
+        window.location.href = "/login?reason=idle";
+      } catch {
+        // ignore
+      }
+    }
+  }, [clearIdleTimers]);
+
+  const scheduleIdleTimers = useCallback(() => {
     clearIdleTimers();
     const now = Date.now();
     lastActiveRef.current = now;
@@ -98,28 +83,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logoutTimerRef.current = window.setTimeout(() => {
       autoLogout();
     }, IDLE_TIMEOUT_MS);
-  };
+  }, [autoLogout, clearIdleTimers]);
 
-  const handleActivity = () => {
+  const handleActivity = useCallback(() => {
     lastActiveRef.current = Date.now();
     scheduleIdleTimers();
-  };
+  }, [scheduleIdleTimers]);
 
-  const autoLogout = async () => {
-    clearIdleTimers();
+  const login = useCallback(async (username: string, password: string) => {
+    setError(null);
+    const res = await apiLogin(username, password);
+    const current = await me();
+    setUser(current);
+    return current;
+  }, []);
+
+  const logout = useCallback(async () => {
     try {
       await apiLogout();
-    } catch {
-      // ignore
     } finally {
       setUser(null);
-      try {
-        window.location.href = "/login?reason=idle";
-      } catch {
-        // ignore
-      }
+      clearIdleTimers();
     }
-  };
+  }, [clearIdleTimers]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const u = await me();
+      setUser(u);
+      return u;
+    } catch (err) {
+      const apiErr = err as ApiError;
+      if (apiErr.status === 401) {
+        setUser(null);
+      }
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       document.removeEventListener("visibilitychange", checkVisibility);
       clearIdleTimers();
     };
-  }, [user]);
+  }, [autoLogout, clearIdleTimers, handleActivity, scheduleIdleTimers, user]);
 
   const value = useMemo(
     () => ({
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetIdleTimer: scheduleIdleTimers,
       idleMsRemaining,
     }),
-    [user, loading, error, idleWarning, idleMsRemaining]
+    [user, loading, login, logout, refresh, error, setError, idleWarning, scheduleIdleTimers, idleMsRemaining]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
