@@ -55,9 +55,10 @@ function normalizeEpcText(text) {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PUBLIC_ROOT = path.resolve("public");
 
 // 🔹 Standard-Logo (Fallback, wenn Kategorie kein eigenes Logo hat)
-const defaultLogoPath = path.join(__dirname, "../../public/logos/HK_LOGO.png");
+const defaultLogoPath = path.join(PUBLIC_ROOT, "logos/HK_LOGO.png");
 
 const getPdfPaths = async () => {
   const base = await getPdfSettings();
