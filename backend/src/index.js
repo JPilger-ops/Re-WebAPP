@@ -18,17 +18,19 @@ import app from "./server.js";
 const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
 const appDomain = process.env.APP_DOMAIN || (httpsDisabled ? "http://localhost:3030" : "https://rechnung.intern");
 const port = Number(process.env.APP_PORT || process.env.APP_HTTPS_PORT || 3030);
+const bindHost = process.env.APP_HOST || process.env.APP_BIND_IP || "0.0.0.0";
+const publicPort = Number(process.env.APP_PUBLIC_PORT || process.env.APP_HTTPS_PORT || process.env.APP_PORT || 3031);
 const trustProxyEnv = (process.env.TRUST_PROXY || "1");
 const corsOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern");
 const publicUrl = process.env.APP_PUBLIC_URL || appDomain;
 
-console.log("[config] httpsDisabled:", httpsDisabled, "| port:", port, "| trustProxy:", trustProxyEnv);
+console.log("[config] httpsDisabled:", httpsDisabled, "| listen:", `${bindHost}:${port}`, "| publicPort:", publicPort, "| trustProxy:", trustProxyEnv);
 console.log("[config] CORS_ORIGINS:", corsOrigins);
 console.log("[config] APP_PUBLIC_URL:", publicUrl);
 
 if (httpsDisabled) {
-  http.createServer(app).listen(port, () => {
-    console.log(`HTTP Server läuft auf Port ${port} für ${appDomain}`);
+  http.createServer(app).listen(port, bindHost, () => {
+    console.log(`HTTP Server läuft auf ${bindHost}:${port} (public: ${publicUrl})`);
   });
 } else {
   // Use app-specific env vars to avoid collision with system SSL_CERT_DIR
@@ -51,7 +53,7 @@ if (httpsDisabled) {
   };
 
   // --- HTTPS SERVER STARTEN ---
-  https.createServer(httpsOptions, app).listen(httpsPort, () => {
-    console.log(`HTTPS Server läuft auf Port ${httpsPort} für ${appDomain}`);
+  https.createServer(httpsOptions, app).listen(httpsPort, bindHost, () => {
+    console.log(`HTTPS Server läuft auf ${bindHost}:${httpsPort} (public: ${publicUrl})`);
   });
 }

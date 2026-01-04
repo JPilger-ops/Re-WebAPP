@@ -61,6 +61,7 @@ VERSIONS_DIR="${BASE_DIR}/versions"
 RELEASE_DIR="${VERSIONS_DIR}/${RELEASE_SHA}"
 CURRENT_LINK="${BASE_DIR}/current"
 SHARED_DIR="${BASE_DIR}/shared"
+SHARED_BACKUPS="${SHARED_DIR}/backups"
 
 mkdir -p "${VERSIONS_DIR}" "${SHARED_DIR}"
 if [ -d "${RELEASE_DIR}" ]; then
@@ -77,7 +78,7 @@ info "Exportiere aktuellen Stand nach ${RELEASE_DIR}"
 git -C "${ROOT_DIR}" archive --format=tar HEAD | tar -x -C "${RELEASE_DIR}"
 
 # Gemeinsame Daten/PDF-Pfade auf shared verlinken, damit Upgrades keine Daten verlieren.
-mkdir -p "${SHARED_DIR}/data" "${SHARED_DIR}/pdfs"
+mkdir -p "${SHARED_DIR}/data" "${SHARED_DIR}/pdfs" "${SHARED_BACKUPS}"
 rm -rf "${RELEASE_DIR}/data"
 ln -sfn "${SHARED_DIR}/data" "${RELEASE_DIR}/data"
 rm -rf "${RELEASE_DIR}/backend/pdfs"
@@ -163,6 +164,11 @@ else
   info "Update-Modus: .env bleibt unverändert (keine Prompts)."
 fi
 
+# DB-Datenpfad für docker compose (Standard: shared/data/db)
+DB_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "DB_DATA_PATH")"
+DB_DATA_PATH="${DB_DATA_PATH_VAL:-${SHARED_DIR}/data/db}"
+set_env_value "${ENV_FILE}" "DB_DATA_PATH" "${DB_DATA_PATH}"
+
 # Image-Einstellungen (Install: fragen und setzen; Update: Tag/Repo wählbar)
 APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
 APP_IMAGE_TAG_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE_TAG")"
@@ -203,6 +209,8 @@ mkdir -p "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}"
 HOST_PUBLIC="${RELEASE_DIR}/backend/public"
 HOST_PUBLIC_LOGOS="${SHARED_LOGOS}"
 HOST_PUBLIC_FAVICON="${SHARED_FAVICON}"
+set_env_value "${ENV_FILE}" "PUBLIC_LOGOS_PATH" "${HOST_PUBLIC_LOGOS}"
+set_env_value "${ENV_FILE}" "PUBLIC_FAVICON_PATH" "${HOST_PUBLIC_FAVICON}"
 mkdir -p "${HOST_PUBLIC}"
 [ -f "${HOST_PUBLIC_FAVICON}" ] || touch "${HOST_PUBLIC_FAVICON}"
 # Rechte hostseitig auf node:node (1000) setzen; Fallback chmod 777
@@ -236,6 +244,28 @@ info "Schreibe Build-Metadaten in .env (ohne Build)"
 BUILD_SHA="${RELEASE_SHA}" BUILD_NUMBER="${RELEASE_NUMBER}" BUILD_TIME="${RELEASE_TIME}" SKIP_DOCKER_COMPOSE=1 ./scripts/build-meta.sh
 
 export COMPOSE_PROJECT_NAME="${PROJECT_NAME}"
+
+# Optionales Backup vor dem Update (sichert DB-Volume)
+if [[ "${MODE,,}" == "update" ]]; then
+  DB_USER_BACKUP="$(current_env_value "${ENV_FILE}" "DB_USER")"
+  DB_NAME_BACKUP="$(current_env_value "${ENV_FILE}" "DB_NAME")"
+  DB_PASS_BACKUP="$(current_env_value "${ENV_FILE}" "DB_PASS")"
+  DB_HOST_BACKUP="$(current_env_value "${ENV_FILE}" "DB_HOST")"
+  DB_PORT_BACKUP="$(current_env_value "${ENV_FILE}" "DB_PORT")"
+
+  info "Starte DB-Container (für Backup, falls noch nicht läuft)"
+  docker compose --project-name "${PROJECT_NAME}" up -d db
+
+  BACKUP_TS="$(date -u +"%Y%m%dT%H%M%SZ")"
+  BACKUP_FILE="${SHARED_BACKUPS}/db-backup-${PROJECT_NAME}-${BACKUP_TS}.sql"
+  info "Erstelle DB-Backup unter ${BACKUP_FILE}"
+  if PGPASSWORD="${DB_PASS_BACKUP}" docker compose --project-name "${PROJECT_NAME}" exec -T db pg_dump -h "${DB_HOST_BACKUP:-db}" -p "${DB_PORT_BACKUP:-5432}" -U "${DB_USER_BACKUP:-rechnung_app}" "${DB_NAME_BACKUP:-rechnung_prod}" > "${BACKUP_FILE}"; then
+    info "DB-Backup erstellt."
+  else
+    warn "DB-Backup fehlgeschlagen (Update läuft weiter)."
+    rm -f "${BACKUP_FILE}" || true
+  fi
+fi
 
 APP_IMAGE_EFF="${APP_IMAGE_VAL:-rechnungsapp}"
 APP_IMAGE_TAG_EFF="${APP_IMAGE_TAG_VAL:-latest}"
