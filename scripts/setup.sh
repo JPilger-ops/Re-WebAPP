@@ -39,7 +39,7 @@ grep -E '^(DB_HOST|DB_PORT|DB_USER|DB_PASS|DB_NAME|DB_SCHEMA|APP_HOST|APP_PORT|A
 LOGO_PATH="$(grep -m1 '^PUBLIC_LOGOS_PATH=' .env | cut -d= -f2- || true)"
 LOGO_PATH="${LOGO_PATH:-./data/public/logos}"
 FAVICON_PATH="$(grep -m1 '^PUBLIC_FAVICON_PATH=' .env | cut -d= -f2- || true)"
-FAVICON_PATH="${FAVICON_PATH:-./data/public/favicon.ico}"
+FAVICON_PATH="${FAVICON_PATH:-./backend/public/favicon.ico}"
 
 mkdir -p "${LOGO_PATH}"
 if compgen -G "backend/public/logos/*" >/dev/null 2>&1; then

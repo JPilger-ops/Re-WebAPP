@@ -4,7 +4,7 @@ Interne Rechnungs- und Verwaltungs-App (Docker Compose: Backend Node/Express/Pri
 
 ## Stack & Ports
 - Backend lauscht intern auf `APP_PORT` (default 3030); extern via Compose auf `APP_BIND_IP:APP_PUBLIC_PORT` (default 0.0.0.0:3031).
-- Branding/Uploads bleiben persistent über `PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH` (Default `./data/public/...`).
+- Branding/Uploads bleiben persistent über `PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH` (Default Logos: `./data/public/logos`, Favicon: `./backend/public/favicon.ico`).
 - Scripts: `./scripts/setup.sh` (legt .env + backend/.env an), `./scripts/build-meta.sh` (BUILD_* setzen + optional build).
 
 ## Voraussetzungen (Ubuntu 22.04)
