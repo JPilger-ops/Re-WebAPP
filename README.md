@@ -1,6 +1,11 @@
 # Re-WebAPP (dev_Prisma)
 
-Interne Rechnungs- und Verwaltungs-App. Läuft ausschließlich via Docker Compose (Backend: Node/Express/Prisma, Frontend: React/Vite, DB: Postgres).
+Interne Rechnungs- und Verwaltungs-App (Docker Compose: Backend Node/Express/Prisma, Frontend React/Vite, DB Postgres).
+
+## Stack & Ports
+- Backend lauscht intern auf `APP_PORT` (default 3030); extern via Compose auf `APP_BIND_IP:APP_PUBLIC_PORT` (default 0.0.0.0:3031).
+- Branding/Uploads bleiben persistent über `PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH` (Default `./data/public/...`).
+- Scripts: `./scripts/setup.sh` (legt .env + backend/.env an), `./scripts/build-meta.sh` (BUILD_* setzen + optional build).
 
 ## Voraussetzungen (Ubuntu 22.04)
 ```bash
@@ -11,68 +16,41 @@ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o 
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-docker --version
-docker compose version
+docker --version && docker compose version
 ```
 
-## Schnellstart (Compose)
+## Schnellstart (fertiges Image)
 ```bash
 git clone https://github.com/JPilger-ops/Re-WebAPP
 cd Re-WebAPP
-./scripts/setup.sh                 # legt .env + backend/.env an, falls fehlen
-./scripts/build-meta.sh            # setzt BUILD_* (für lokale Builds optional)
-docker compose pull                # zieht fertiges Image (APP_IMAGE/APP_IMAGE_TAG, default ghcr.io/jpilger-ops/re-webapp:latest)
-docker compose up -d               # startet DB + App
+./scripts/setup.sh
+./scripts/build-meta.sh            # optional für lokale Builds
+docker compose pull                # zieht APP_IMAGE/APP_IMAGE_TAG (default ghcr.io/jpilger-ops/re-webapp:latest)
+docker compose up -d
 curl http://127.0.0.1:3031/api/version
 ```
 Login: `admin` / `admin` (bitte direkt ändern).
 
-## Deployment mit Wizard (empfohlen, image-basiert)
-Neu-Install (alle ENV abfragen, Image ziehen, starten):
+## Deployment Wizard (empfohlen)
 ```bash
-# Prereqs (Ubuntu 22.04, einmalig)
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Repo holen
 git clone https://github.com/JPilger-ops/Re-WebAPP /opt/rechnungsapp
 cd /opt/rechnungsapp
-
-# Wizard starten (Modus: install)
-./scripts/deploy-wizard.sh
-# Prompts: Pfad, Modus=install, Projektname, DB_*/Ports/JWT_SECRET, APP_IMAGE/APP_IMAGE_TAG (default ghcr.io/jpilger-ops/re-webapp:latest)
-# Der Wizard spiegelt die UI-Assets aus dem gewählten Image in backend/public, damit die Oberfläche immer zum Image passt (Branding/Uploads bleiben erhalten).
+./scripts/deploy-wizard.sh    # Modus: install oder update
 ```
-Healthcheck:
-```bash
-curl http://127.0.0.1:3031/api/version
-```
+- Fragt DB-/Port-/JWT-/Image-Werte ab und spiegelt UI-Assets aus dem Image nach `backend/public` (Branding/Uploads bleiben bestehen).
+- Legt Branding-Pfade persistent unter `shared/public/logos` und `shared/public/favicon.ico` an und erstellt im Update-Modus ein `pg_dump` nach `shared/backups`.
+- Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
 
-Update (ENV bleibt, aber Image/Tag kann gewählt werden):
-```bash
-cd /opt/rechnungsapp/current   # oder dein BASE/current
-./scripts/deploy-wizard.sh     # Modus: update, fragt APP_IMAGE / APP_IMAGE_TAG ab (default: bisherige Werte)
-```
-- Wizard legt Branding-Pfade persistent unter `shared/public/logos` und `shared/public/favicon.ico` ab (`PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH`) und erstellt vor Updates ein `pg_dump` in `shared/backups`, damit Logos und DB-Daten erhalten bleiben.
-
-Manuell (ohne Wizard):
+## Manuelles Deploy/Update (ohne Wizard)
 ```bash
 cd /opt/rechnungsapp/current
 docker compose pull
 docker compose up -d
 docker compose run --rm app npx prisma migrate deploy
-curl http://127.0.0.1:3031/api/version
+curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version
 ```
-- Für manuelle Deploys `PUBLIC_LOGOS_PATH` und `PUBLIC_FAVICON_PATH` auf einen persistenten Pfad (Default `./data/public/...`) zeigen lassen und bei Bedarf via `./scripts/setup.sh` mit Default-Assets befüllen, damit Branding beim Update bleibt.
-- Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
-
-## Update (ohne Wizard)
-```bash
-git pull
-./scripts/build-meta.sh
-docker compose up -d --build
-curl http://127.0.0.1:3031/api/version
-```
+- Für Updates aus Source: `git pull && ./scripts/build-meta.sh && docker compose up -d --build`
+- Branding-Pfade auf persistente Locations zeigen lassen (`PUBLIC_LOGOS_PATH`, `PUBLIC_FAVICON_PATH`, Default `./data/public/...`), ggf. via `./scripts/setup.sh` mit Default-Assets befüllen.
 
 ## Backups
 ```bash
@@ -80,9 +58,9 @@ docker compose exec db pg_dump -U $DB_USER -d $DB_NAME > backup.sql
 cat backup.sql | docker compose exec -T db psql -U $DB_USER -d $DB_NAME
 ```
 
-## Troubleshooting (kurz)
+## Troubleshooting
 - White Screen: Hard Reload, prüfen ob `backend/public/assets` 200 liefern.
-- PDF-Fehler: Pfade/Schreibrechte prüfen (UI-Settings), Verzeichnisse bestehen.
-- Mail: `EMAIL_SEND_DISABLED` / `EMAIL_REDIRECT_TO` prüfen, SMTP in UI hinterlegen.
-- Version prüfen: `curl http://127.0.0.1:3031/api/version`
-- CORS: In den UI-Netzwerk-Settings `CORS_ORIGINS` als kommaseparierte Liste (z.B. `https://rechnung.intern,http://localhost:3031`). Wenn TLS extern terminiert, Origin mit https eintragen, Backend bleibt intern HTTP.
+- PDF: Pfade/Schreibrechte in den UI-PDF-Settings prüfen, Verzeichnisse existieren.
+- Mail: `EMAIL_SEND_DISABLED` / `EMAIL_REDIRECT_TO` prüfen, SMTP in UI setzen.
+- Version: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
+- CORS: UI-Netzwerk-Settings `CORS_ORIGINS` befüllen (z.B. `https://rechnung.intern,http://localhost:3031`); bei externer TLS-Termination Origin als https eintragen.

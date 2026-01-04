@@ -1614,7 +1614,7 @@ function Invoices() {
         )}
 
         {!loading && filtered.length > 0 && (
-          <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
+          <div className="relative overflow-visible bg-white border border-slate-200 rounded-lg shadow-sm">
             <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
               <div className="w-12 text-center">
                 <input
@@ -1627,7 +1627,7 @@ function Invoices() {
               </div>
               <div className="flex-1">Rechnung</div>
               <div className="w-28 text-right">Betrag</div>
-              <div className="w-10 text-right">…</div>
+              <div className="w-14 text-right">…</div>
             </div>
             <div>
               <table className="w-full text-sm">
@@ -1686,7 +1686,7 @@ function Invoices() {
                         <td className="px-3 py-3 w-28 text-right align-top text-slate-900">
                           {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
                         </td>
-                        <td className="px-3 py-3 w-12 text-right align-top">
+                        <td className="px-3 py-3 w-14 text-right align-top">
                           <MoreMenu
                             items={[
                               { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
