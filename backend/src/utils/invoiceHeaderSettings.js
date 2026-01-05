@@ -2,6 +2,15 @@ import { prisma } from "./prisma.js";
 
 export async function getInvoiceHeaderSettings() {
   const row = await prisma.invoice_header_settings.findUnique({ where: { id: 1 } });
+  // Falls Prisma-Client noch ohne phone-Feld generiert wurde, hole es per Raw-Query dazu
+  let rawPhone = null;
+  try {
+    const raw = await prisma.$queryRaw`SELECT phone FROM invoice_header_settings WHERE id = 1`;
+    rawPhone = Array.isArray(raw) && raw[0]?.phone ? String(raw[0].phone) : null;
+  } catch {
+    // ignore
+  }
+
   if (!row) {
     return {
       id: 1,
@@ -11,7 +20,7 @@ export async function getInvoiceHeaderSettings() {
       zip: null,
       city: null,
       country: null,
-      phone: null,
+      phone: rawPhone,
       vat_id: null,
       bank_name: null,
       iban: null,
@@ -21,7 +30,7 @@ export async function getInvoiceHeaderSettings() {
       updated_at: null,
     };
   }
-  return row;
+  return { ...row, phone: rawPhone ?? row.phone ?? null };
 }
 
 export async function saveInvoiceHeaderSettings(input = {}) {
@@ -46,5 +55,13 @@ export async function saveInvoiceHeaderSettings(input = {}) {
     where: { id: 1 },
     update: data,
     create: { id: 1, ...data },
+  }).then(async (saved) => {
+    // Fallback: phone setzen, falls Prisma-Client das Feld nicht kennt
+    try {
+      await prisma.$executeRaw`UPDATE invoice_header_settings SET phone = ${data.phone} WHERE id = 1`;
+    } catch {
+      // ignore
+    }
+    return { ...saved, phone: data.phone };
   });
 }
