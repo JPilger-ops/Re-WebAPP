@@ -599,6 +599,7 @@ function Dashboard() {
   const [recent, setRecent] = useState<RecentInvoice[]>([]);
   const [recentStatus, setRecentStatus] = useState<FormStatus>(null);
   const [recentLoading, setRecentLoading] = useState(true);
+  const [preview, setPreview] = useState<{ open: boolean; html: string; text: string; subject: string } | null>(null);
 
   useEffect(() => {
     setRecentStatus(null);
@@ -615,23 +616,42 @@ function Dashboard() {
     return { text: "offen", tone: "amber" as const };
   };
 
+  const openInvoice = (id: number) => navigate(`/invoices/${id}`);
+
+  const openPdf = (id: number) => {
+    window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
+  };
+
+  const regeneratePdf = async (id: number) => {
+    try {
+      await regenerateInvoicePdf(id);
+      openPdf(id);
+    } catch (err: any) {
+      alert((err as ApiError)?.message || "PDF konnte nicht neu erstellt werden.");
+    }
+  };
+
+  const previewEmail = async (id: number) => {
+    try {
+      const data = await getInvoiceEmailPreview(id);
+      setPreview({ open: true, html: data.body_html || "", text: data.body_text || "", subject: data.subject });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      alert(apiErr.message || "E-Mail-Vorschau konnte nicht geladen werden.");
+    }
+  };
+
   const actionMenu = (inv: RecentInvoice) => (
     <MoreMenu
       items={[
-        { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
-        { label: "PDF öffnen", onClick: () => window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank") },
+        { label: "Öffnen", onClick: () => openInvoice(inv.id) },
+        { label: "PDF öffnen", onClick: () => openPdf(inv.id) },
+        { label: "E-Mail Vorschau", onClick: () => previewEmail(inv.id) },
         ...(user?.role_name === "admin"
           ? [
               {
                 label: "PDF neu erstellen",
-                onClick: async () => {
-                  try {
-                    await regenerateInvoicePdf(inv.id);
-                    window.open(`/api/invoices/${inv.id}/pdf?mode=inline`, "_blank");
-                  } catch (err: any) {
-                    alert((err as ApiError)?.message || "PDF konnte nicht neu erstellt werden.");
-                  }
-                },
+                onClick: () => regeneratePdf(inv.id),
               },
             ]
           : []),
@@ -676,12 +696,12 @@ function Dashboard() {
           </div>
           {recentLoading && <span className="text-xs text-slate-500">Lade ...</span>}
         </div>
-        {recentStatus && <Alert type={recentStatus.type === "error" ? "error" : "success"}>{recentStatus.message}</Alert>}
-        {!recentLoading && !recent.length && !recentStatus && (
-          <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
-        )}
-        {!recentLoading && recent.length > 0 && (
-          <div className="relative border border-slate-200 rounded-lg">
+          {recentStatus && <Alert type={recentStatus.type === "error" ? "error" : "success"}>{recentStatus.message}</Alert>}
+          {!recentLoading && !recent.length && !recentStatus && (
+            <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
+          )}
+          {!recentLoading && recent.length > 0 && (
+            <div className="relative border border-slate-200 rounded-lg">
             <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
               <div className="flex-1">Rechnung</div>
               <div className="w-20 text-right">Betrag</div>
@@ -723,6 +743,30 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      {preview?.open && (
+        <Modal title={preview.subject || "E-Mail Vorschau"} onClose={() => setPreview(null)}>
+          <div className="space-y-3">
+            <div>
+              <div className="font-semibold">Betreff</div>
+              <div className="text-sm">{preview.subject}</div>
+            </div>
+            <div>
+              <div className="font-semibold">HTML</div>
+              <div
+                className="border border-slate-200 rounded p-3 prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: preview.html || "<em>(leer)</em>" }}
+              />
+            </div>
+            <div>
+              <div className="font-semibold">Text</div>
+              <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap text-sm bg-white">
+                {preview.text || "(leer)"}
+              </pre>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

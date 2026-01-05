@@ -33,7 +33,12 @@ export const setNetworkDefaults = ({ cors_origins, trust_proxy }) => {
 const isValidOrigin = (origin) => {
   try {
     const url = new URL(origin);
-    return (url.protocol === "http:" || url.protocol === "https:") && !url.pathname && !url.search && !url.hash;
+    const hasOnlyHost =
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      (url.pathname === "" || url.pathname === "/") &&
+      !url.search &&
+      !url.hash;
+    return hasOnlyHost;
   } catch {
     return false;
   }
