@@ -4862,7 +4862,7 @@ function InvoiceHeaderForm() {
             className="input"
           />
         </Field>
-        <Field label="Adresse Zeile 1">
+        <Field label="Inhaber">
           <input
             value={form.address_line1}
             onChange={(e) => setForm((f) => ({ ...f, address_line1: e.target.value }))}

@@ -142,6 +142,9 @@ export const createCategory = async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Fehler beim Erstellen der Kategorie:", err);
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "Kategorie-Key existiert bereits." });
+    }
     res.status(500).json({ message: "Fehler beim Erstellen der Kategorie" });
   }
 };

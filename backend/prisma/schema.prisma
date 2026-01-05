@@ -24,8 +24,8 @@ model category_email_accounts {
   category_id        Int                @unique
   display_name       String?
   email_address      String
-  imap_host          String
-  imap_port          Int
+  imap_host          String?
+  imap_port          Int?
   imap_secure        Boolean            @default(true)
   imap_user          String?
   imap_pass          String?
