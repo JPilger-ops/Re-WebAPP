@@ -697,17 +697,17 @@ function Dashboard() {
           {recentLoading && <span className="text-xs text-slate-500">Lade ...</span>}
         </div>
           {recentStatus && <Alert type={recentStatus.type === "error" ? "error" : "success"}>{recentStatus.message}</Alert>}
-          {!recentLoading && !recent.length && !recentStatus && (
-            <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
-          )}
-          {!recentLoading && recent.length > 0 && (
-            <div className="relative border border-slate-200 rounded-lg">
+        {!recentLoading && !recent.length && !recentStatus && (
+          <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
+        )}
+        {!recentLoading && recent.length > 0 && (
+          <div className="relative border border-slate-200 rounded-lg">
             <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
               <div className="flex-1">Rechnung</div>
               <div className="w-20 text-right">Betrag</div>
               <div className="w-10 text-right">…</div>
             </div>
-            <div className="max-h-[360px] overflow-y-auto">
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <tbody>
                   {recent.map((inv) => {
@@ -728,10 +728,8 @@ function Dashboard() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3 w-20 text-right align-top">
-                          {inv.gross_total != null
-                            ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            : "–"}
+                        <td className="px-3 py-3 w-24 text-right align-top text-slate-900">
+                          {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
                         </td>
                         <td className="px-3 py-3 w-10 text-right align-top">{actionMenu(inv)}</td>
                       </tr>
