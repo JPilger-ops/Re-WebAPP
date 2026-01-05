@@ -713,7 +713,7 @@ function Dashboard() {
               <div className="w-20 text-right">Betrag</div>
               <div className="w-10 text-right">…</div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-visible">
               <table className="w-full text-sm">
                 <tbody>
                   {recent.map((inv) => {
