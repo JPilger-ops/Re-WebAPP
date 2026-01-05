@@ -617,6 +617,12 @@ function Dashboard() {
   };
 
   const openInvoice = (id: number) => navigate(`/invoices/${id}`);
+  const formatAmount = (value: any) => {
+    const num = Number(value);
+    return Number.isFinite(num)
+      ? `${num.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+      : "–";
+  };
 
   const openPdf = (id: number) => {
     window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
@@ -729,7 +735,7 @@ function Dashboard() {
                           </div>
                         </td>
                         <td className="px-3 py-3 w-24 text-right align-top text-slate-900">
-                          {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
+                          {formatAmount(inv.gross_total)}
                         </td>
                         <td className="px-3 py-3 w-10 text-right align-top">{actionMenu(inv)}</td>
                       </tr>
