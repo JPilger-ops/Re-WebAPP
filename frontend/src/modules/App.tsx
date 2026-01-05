@@ -1358,6 +1358,11 @@ function Invoices() {
         include_datev: sendModal.includeDatev,
       });
       setToast({ type: "success", message: res.message || "E-Mail gesendet." });
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === sendModal.id ? { ...inv, status_sent: true, status_sent_at: new Date().toISOString() } : inv
+        )
+      );
       setSendModal({ open: false });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -2975,6 +2980,14 @@ function InvoiceDetailPage() {
     try {
       const res = await sendInvoiceEmailApi(detail.invoice.id, { to: sendModal.to.trim() });
       setToast({ type: "success", message: res.message || "E-Mail gesendet." });
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              invoice: { ...prev.invoice, status_sent: true, status_sent_at: new Date().toISOString() },
+            }
+          : prev
+      );
       setSendModal({ open: false });
     } catch (err: any) {
       const apiErr = err as ApiError;
