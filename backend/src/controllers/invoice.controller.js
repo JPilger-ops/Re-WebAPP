@@ -11,6 +11,7 @@ import { getDatevSettings } from "../utils/datevSettings.js";
 import nodemailer from "nodemailer";
 import { ensureInvoiceCategoriesTable } from "../utils/categoryTable.js";
 import { getInvoiceHeaderSettings } from "../utils/invoiceHeaderSettings.js";
+import { getTaxSettings } from "../utils/taxSettings.js";
 import {
   buildDatevMailBody,
   buildDatevMailSubject,
@@ -1422,6 +1423,7 @@ async function ensureInvoicePdf(id) {
       line_total_gross: toNumber(item.line_total_gross),
     }));
     const bankSettings = await getBankSettings();
+    const taxSettings = await getTaxSettings();
     const headerSettings = await getInvoiceHeaderSettings();
     console.log(`[PDF] ${items.length} Positionen + Bank-Settings geladen für Invoice ${id}`);
 
@@ -1511,7 +1513,8 @@ async function ensureInvoicePdf(id) {
       sepaQrBase64,
       logoBase64ForInvoice,
       bankSettings,
-      header
+      header,
+      taxSettings
     );
 
     //
@@ -1605,7 +1608,8 @@ function generateInvoiceHtml(
   sepaQrBase64,
   logoBase64ForInvoice,
   bankSettings,
-  headerSettings
+  headerSettings,
+  taxSettings = {}
 ) {
   const formatIban = (iban) => {
     if (!iban) return "-";
@@ -1626,6 +1630,7 @@ function generateInvoiceHtml(
     zip: headerSettings?.zip || "",
     city: headerSettings?.city || "",
     country: headerSettings?.country || "",
+    phone: headerSettings?.phone || "",
     vat_id: headerSettings?.vat_id || "",
     footer_text: headerSettings?.footer_text || "",
     logo_url: headerSettings?.logo_url || null,
@@ -1633,11 +1638,15 @@ function generateInvoiceHtml(
 
   const brandLines = [
     header.company_name,
-    [header.address_line1, header.address_line2].filter(Boolean).join(", "),
+    header.address_line1,
+    header.address_line2,
     [header.zip, header.city].filter(Boolean).join(" "),
     header.country,
+    header.phone ? `Tel: ${header.phone}` : "",
     header.vat_id ? `USt-IdNr.: ${header.vat_id}` : "",
   ].filter(Boolean);
+
+  const taxNumber = taxSettings?.tax_number || "";
 
   return `
 <!DOCTYPE html>
@@ -1841,7 +1850,9 @@ function generateInvoiceHtml(
   </div>
 
   <div class="sender-line">
-    ${[header.company_name, header.address_line1, header.address_line2, [header.zip, header.city].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
+    ${[header.company_name, header.address_line1, header.address_line2, [header.zip, header.city].filter(Boolean).join(" "), header.phone ? `Tel: ${header.phone}` : ""]
+      .filter(Boolean)
+      .join(" · ")}
   </div>
 
   <div class="recipient">
@@ -1923,6 +1934,11 @@ function generateInvoiceHtml(
       ${
         header.vat_id
           ? `USt-IdNr.: ${header.vat_id}<br>`
+          : ""
+      }
+      ${
+        taxNumber
+          ? `Steuernummer: ${taxNumber}<br>`
           : ""
       }
       Bank: ${bankDisplay.bank_name} · IBAN: ${bankDisplay.iban} · BIC: ${bankDisplay.bic}<br>
