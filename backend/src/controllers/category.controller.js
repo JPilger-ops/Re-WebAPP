@@ -158,7 +158,8 @@ export const updateCategory = async (req, res) => {
 
   const cleanKey = (key ?? "").trim();
   const cleanLabel = (label ?? "").trim();
-  const cleanLogo = (logo_file ?? "").trim();
+  const logoProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "logo_file");
+  const cleanLogo = logoProvided ? (logo_file ?? "").trim() : undefined;
 
   if (!cleanKey || !cleanLabel) {
     return res.status(400).json({ message: "key und label sind erforderlich." });
@@ -166,6 +167,20 @@ export const updateCategory = async (req, res) => {
 
   try {
     await ensureInvoiceCategoriesTable();
+    let finalLogo = cleanLogo;
+
+    // Logo nur überschreiben, wenn es explizit mitgesendet wird; andernfalls altes Logo behalten
+    if (!logoProvided || cleanLogo === "") {
+      const existing = await db.query(
+        `SELECT logo_file FROM invoice_categories WHERE id = $1`,
+        [id]
+      );
+      if (existing.rowCount === 0) {
+        return res.status(404).json({ message: "Kategorie nicht gefunden." });
+      }
+      finalLogo = logoProvided && cleanLogo === "" ? null : existing.rows[0].logo_file;
+    }
+
     const result = await db.query(
       `
       UPDATE invoice_categories
@@ -173,7 +188,7 @@ export const updateCategory = async (req, res) => {
       WHERE id = $4
       RETURNING id, key, label, logo_file
       `,
-      [cleanKey, cleanLabel, cleanLogo, id]
+      [cleanKey, cleanLabel, finalLogo ?? null, id]
     );
 
     if (result.rowCount === 0) {
@@ -183,6 +198,9 @@ export const updateCategory = async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Fehler beim Aktualisieren der Kategorie:", err);
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "Kategorie-Key existiert bereits." });
+    }
     res.status(500).json({ message: "Fehler beim Aktualisieren der Kategorie" });
   }
 };
