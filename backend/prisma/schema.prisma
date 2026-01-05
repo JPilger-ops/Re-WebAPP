@@ -191,6 +191,7 @@ model invoice_header_settings {
   zip            String?   @db.VarChar(50)
   city           String?   @db.VarChar(255)
   country        String?   @db.VarChar(100)
+  phone          String?   @db.VarChar(100)
   vat_id         String?   @db.VarChar(100)
   bank_name      String?   @db.VarChar(255)
   iban           String?   @db.VarChar(100)

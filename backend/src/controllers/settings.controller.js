@@ -616,6 +616,7 @@ export const updateInvoiceHeaderData = async (req, res) => {
       zip: req.body?.zip?.trim() || null,
       city: req.body?.city?.trim() || null,
       country: req.body?.country?.trim() || null,
+      phone: req.body?.phone?.trim() || null,
       vat_id: req.body?.vat_id?.trim() || null,
       bank_name: req.body?.bank_name?.trim() || null,
       iban: req.body?.iban?.trim() || null,

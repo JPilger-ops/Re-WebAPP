@@ -681,7 +681,7 @@ function Dashboard() {
           <EmptyState title="Noch keine Rechnungen" description="Lege eine neue Rechnung an, um zu starten." />
         )}
         {!recentLoading && recent.length > 0 && (
-          <div className="overflow-hidden border border-slate-200 rounded-lg">
+          <div className="relative border border-slate-200 rounded-lg">
             <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
               <div className="flex-1">Rechnung</div>
               <div className="w-20 text-right">Betrag</div>
@@ -4802,6 +4802,7 @@ function InvoiceHeaderForm() {
     zip: "",
     city: "",
     country: "",
+    phone: "",
     vat_id: "",
     bank_name: "",
     iban: "",
@@ -4822,6 +4823,7 @@ function InvoiceHeaderForm() {
           zip: data.zip || "",
           city: data.city || "",
           country: data.country || "",
+          phone: data.phone || "",
           vat_id: data.vat_id || "",
           bank_name: data.bank_name || "",
           iban: data.iban || "",
@@ -4910,7 +4912,13 @@ function InvoiceHeaderForm() {
             className="input"
           />
         </Field>
-        <div className="hidden md:block" />
+        <Field label="Telefon">
+          <input
+            value={form.phone}
+            onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            className="input"
+          />
+        </Field>
         <Field label="Bank">
           <input
             value={form.bank_name}

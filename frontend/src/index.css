@@ -47,6 +47,12 @@ body {
   background: transparent;
 }
 
+/* Datalist (Autocomplete) besser lesbar */
+datalist option {
+  color: #0f172a;
+  background: #fff;
+}
+
 .motion-safe {
   transition: all 0.16s ease;
 }

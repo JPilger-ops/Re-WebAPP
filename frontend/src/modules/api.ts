@@ -115,6 +115,7 @@ export interface InvoiceHeaderSettings {
   zip: string | null;
   city: string | null;
   country: string | null;
+  phone: string | null;
   vat_id: string | null;
   bank_name: string | null;
   iban: string | null;
