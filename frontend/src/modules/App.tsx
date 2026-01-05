@@ -728,10 +728,8 @@ function Dashboard() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3 w-20 text-right align-top">
-                          {inv.gross_total != null
-                            ? inv.gross_total.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            : "–"}
+                        <td className="px-3 py-3 w-24 text-right align-top text-slate-900">
+                          {inv.gross_total != null ? `${inv.gross_total.toFixed(2)} €` : "–"}
                         </td>
                         <td className="px-3 py-3 w-10 text-right align-top">{actionMenu(inv)}</td>
                       </tr>
