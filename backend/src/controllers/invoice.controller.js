@@ -1636,6 +1636,7 @@ function generateInvoiceHtml(
     logo_url: headerSettings?.logo_url || null,
   };
 
+  const vatId = header.vat_id || taxSettings?.vat_id || "";
   const brandLines = [
     header.company_name,
     header.address_line1,
@@ -1643,7 +1644,6 @@ function generateInvoiceHtml(
     [header.zip, header.city].filter(Boolean).join(" "),
     header.country,
     header.phone ? `Tel: ${header.phone}` : "",
-    header.vat_id ? `USt-IdNr.: ${header.vat_id}` : "",
   ].filter(Boolean);
 
   const taxNumber = taxSettings?.tax_number || "";
@@ -1931,11 +1931,7 @@ function generateInvoiceHtml(
     }
 
     <div class="footer">
-      ${
-        header.vat_id
-          ? `USt-IdNr.: ${header.vat_id}<br>`
-          : ""
-      }
+      ${vatId ? `USt-IdNr.: ${vatId}<br>` : ""}
       ${
         taxNumber
           ? `Steuernummer: ${taxNumber}<br>`
