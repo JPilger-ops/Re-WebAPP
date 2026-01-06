@@ -19,6 +19,7 @@ import categoryRoutes from "./routes/category.routes.js";
 import settingsRoutes from "./routes/settings.routes.js";
 import versionRoutes from "./routes/version.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
+import backupRoutes from "./routes/backup.routes.js";
 import { resolveFaviconPath } from "./utils/favicon.js";
 import {
   setNetworkDefaults,
@@ -151,6 +152,7 @@ app.use("/api/stats", authRequired, statsRoutes);
 app.use("/api/testdb", authRequired, testRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/backups", backupRoutes);
 app.use("/api/version", versionRoutes);
 
 // DEV-only HKForms Mock (bypass auth), can be enabled in prod via HKFORMS_MOCK_ENABLE=1 for tests

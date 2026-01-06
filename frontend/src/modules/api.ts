@@ -187,6 +187,23 @@ export interface NetworkDiagnostics {
   trust_proxy_effective: number | boolean;
 }
 
+export interface BackupSettings {
+  local_path: string;
+  nas_path?: string | null;
+  default_target?: "local" | "nas";
+  retention?: number | null;
+}
+
+export interface BackupSummary {
+  id: string;
+  filename: string;
+  path?: string;
+  target: "local" | "nas";
+  created_at: string;
+  size?: number | null;
+  includes?: { db: boolean; files: boolean; env: boolean };
+}
+
 export async function getSmtpSettings() {
   return apiFetch<SmtpSettings>("/settings/smtp");
 }
@@ -342,6 +359,56 @@ export async function updateNetworkSettings(payload: { cors_origins: string[]; t
 
 export async function getNetworkDiagnostics() {
   return apiFetch<NetworkDiagnostics>("/settings/network/diagnostics");
+}
+
+export async function getBackupSettings() {
+  return apiFetch<BackupSettings>("/backups/settings");
+}
+
+export async function updateBackupSettings(payload: BackupSettings) {
+  return apiFetch<BackupSettings>("/backups/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testBackupPathApi(payload: { path: string }) {
+  return apiFetch<{ ok: boolean; path: string }>("/backups/test-path", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listBackups() {
+  return apiFetch<BackupSummary[]>("/backups");
+}
+
+export async function createBackupApi(payload?: { target?: "local" | "nas"; include_db?: boolean; include_files?: boolean; include_env?: boolean }) {
+  return apiFetch<{ backup: BackupSummary }>("/backups", {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function restoreBackupApi(payload: { name: string; target?: "local" | "nas"; restore_db?: boolean; restore_files?: boolean; restore_env?: boolean }) {
+  return apiFetch<{ message: string }>("/backups/restore", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteBackupApi(name: string, target?: "local" | "nas") {
+  const suffix = target ? `?target=${encodeURIComponent(target)}` : "";
+  return apiFetch<{ message: string }>(`/backups/${encodeURIComponent(name)}${suffix}`, { method: "DELETE" });
+}
+
+export function backupDownloadUrl(name: string, target?: "local" | "nas") {
+  const suffix = target ? `?target=${encodeURIComponent(target)}` : "";
+  return `${API_BASE}/backups/${encodeURIComponent(name)}/download${suffix}`;
+}
+
+export function invoicesArchiveUrl() {
+  return `${API_BASE}/backups/invoices/archive`;
 }
 
 export async function regenerateInvoicePdf(id: number) {
