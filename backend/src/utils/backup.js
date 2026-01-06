@@ -17,6 +17,8 @@ const DATA_ROOT = process.env.APP_DATA_PATH || "/tmp/rechnungsapp-data";
 const CONFIG_PATH = process.env.BACKUP_CONFIG_PATH || path.join(DATA_ROOT, "backup-config.json");
 const DEFAULT_LOCAL_PATH = process.env.BACKUP_LOCAL_PATH || path.join(DATA_ROOT, "backups");
 const DEFAULT_NAS_PATH = process.env.BACKUP_NAS_PATH || "";
+const PG_DUMP_BIN = process.env.PG_DUMP_PATH || "pg_dump";
+const PSQL_BIN = process.env.PSQL_PATH || "psql";
 const META_SUFFIX = ".json";
 
 const ensureDir = async (dir) => {
@@ -117,12 +119,17 @@ const runPgDump = async (destPath) => {
 
   await new Promise((resolve, reject) => {
     const out = fs.createWriteStream(destPath);
-    const child = spawn("pg_dump", args, { env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(PG_DUMP_BIN, args, { env, stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (d) => {
       stderr += d.toString();
     });
-    child.on("error", (err) => reject(err));
+    child.on("error", (err) => {
+      if (err.code === "ENOENT") {
+        return reject(new Error(`pg_dump nicht gefunden (${PG_DUMP_BIN}). Bitte PG_DUMP_PATH setzen oder Binary installieren.`));
+      }
+      return reject(err);
+    });
     child.on("close", (code) => {
       if (code === 0) return resolve();
       return reject(new Error(`pg_dump exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`));
@@ -143,13 +150,18 @@ const runPgRestore = async (sqlPath) => {
   if (cfg.password) env.PGPASSWORD = cfg.password;
 
   await new Promise((resolve, reject) => {
-    const child = spawn("psql", args, { env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(PSQL_BIN, args, { env, stdio: ["pipe", "pipe", "pipe"] });
     let stderr = "";
     fs.createReadStream(sqlPath).pipe(child.stdin);
     child.stderr.on("data", (d) => {
       stderr += d.toString();
     });
-    child.on("error", (err) => reject(err));
+    child.on("error", (err) => {
+      if (err.code === "ENOENT") {
+        return reject(new Error(`psql nicht gefunden (${PSQL_BIN}). Bitte PSQL_PATH setzen oder Binary installieren.`));
+      }
+      return reject(err);
+    });
     child.on("close", (code) => {
       if (code === 0) return resolve();
       return reject(new Error(`psql exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`));
