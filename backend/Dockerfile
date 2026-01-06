@@ -59,6 +59,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
   chromium \
   curl \
+  postgresql-client \
   ca-certificates \
   fonts-liberation \
   libatk-bridge2.0-0 libatk1.0-0 \
