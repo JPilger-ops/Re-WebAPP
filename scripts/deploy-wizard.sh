@@ -148,6 +148,7 @@ if [[ "${MODE,,}" == "install" ]]; then
   APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
   APP_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PORT")"
   APP_HTTPS_DISABLE_VAL="$(current_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE")"
+  ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
 
   set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
   set_env_value "${ENV_FILE}" "DB_PORT" "$(prompt "DB_PORT" "${DB_PORT_VAL:-5432}")"
@@ -160,6 +161,7 @@ if [[ "${MODE,,}" == "install" ]]; then
   set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
   set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
   set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "${APP_HTTPS_DISABLE_VAL:-true}")"
+  set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-1}"
 else
   info "Update-Modus: .env bleibt unverändert (keine Prompts)."
 fi
@@ -168,6 +170,8 @@ fi
 DB_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "DB_DATA_PATH")"
 DB_DATA_PATH="${DB_DATA_PATH_VAL:-${SHARED_DIR}/data/db}"
 set_env_value "${ENV_FILE}" "DB_DATA_PATH" "${DB_DATA_PATH}"
+ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
+set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-1}"
 
 # Image-Einstellungen (Install: fragen und setzen; Update: Tag/Repo wählbar)
 APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
@@ -227,6 +231,8 @@ for key in DB_HOST DB_PORT DB_NAME DB_SCHEMA DB_USER DB_PASS DATABASE_URL; do
   val="$(current_env_value "${ENV_FILE}" "${key}")"
   [ -n "${val}" ] && set_env_value "${BACKEND_ENV_FILE}" "${key}" "${val}"
 done
+ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
+[ -n "${ALLOW_NFS_MOUNT_VAL}" ] && set_env_value "${BACKEND_ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL}"
 
 if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
