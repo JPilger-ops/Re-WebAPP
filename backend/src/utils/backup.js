@@ -86,12 +86,28 @@ export const ensureNfsMounted = async (cfgOverride = null) => {
   }
 
   const mountDir = path.resolve(mountPoint);
-  await ensureDir(mountDir);
+  try {
+    await ensureDir(mountDir);
+  } catch (err) {
+    const code = (err && typeof err === "object" && "code" in err) ? err.code : null;
+    if (code === "EACCES") {
+      throw new Error(`NFS Mountpunkt ${mountDir} ist nicht beschreibbar. Bitte Pfad wechseln oder Verzeichnis mit passenden Rechten anlegen (root).`);
+    }
+    throw err;
+  }
 
   const testWrite = async () => {
     const tmp = path.join(mountDir, `.nfs-test-${Date.now()}.tmp`);
-    await fs.promises.writeFile(tmp, "ok");
-    await fs.promises.unlink(tmp);
+    try {
+      await fs.promises.writeFile(tmp, "ok");
+      await fs.promises.unlink(tmp);
+    } catch (err) {
+      const code = (err && typeof err === "object" && "code" in err) ? err.code : null;
+      if (code === "EACCES") {
+        throw new Error(`Keine Schreibrechte auf NFS-Pfad ${mountDir}. Bitte Rechte prüfen oder mounten.`);
+      }
+      throw err;
+    }
   };
 
   try {
