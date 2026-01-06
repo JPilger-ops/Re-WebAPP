@@ -21,6 +21,12 @@ const PG_DUMP_BIN = process.env.PG_DUMP_PATH || "pg_dump";
 const PSQL_BIN = process.env.PSQL_PATH || "psql";
 const META_SUFFIX = ".json";
 
+const toNullableInt = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
 const ensureDir = async (dir) => {
   const resolved = path.resolve(dir);
   await fs.promises.mkdir(resolved, { recursive: true });
@@ -39,7 +45,108 @@ const defaultConfig = () => ({
   local_path: DEFAULT_LOCAL_PATH,
   nas_path: DEFAULT_NAS_PATH || null,
   default_target: "local",
-  retention: null,
+  retention: {
+    max_count: null,
+    max_days: null,
+  },
+  auto: {
+    enabled: false,
+    interval_minutes: 1440,
+    target: "local",
+    include_db: true,
+    include_files: true,
+    include_env: false,
+    last_run_at: null,
+    next_run_at: null,
+  },
+  nfs: {
+    enabled: false,
+    server: "",
+    export_path: "",
+    mount_point: "",
+    options: "",
+  },
+});
+
+const nfsMountAllowed = () =>
+  ["1", "true", "yes"].includes((process.env.ALLOW_NFS_MOUNT || "").toLowerCase());
+
+export const ensureNfsMounted = async (cfgOverride = null) => {
+  const cfg = cfgOverride || await loadBackupConfig();
+  const nfs = cfg?.nfs || {};
+  if (!nfs.enabled) return { mounted: false, message: "NFS deaktiviert" };
+
+  const server = (nfs.server || "").trim();
+  const exportPath = (nfs.export_path || "").trim();
+  const mountPoint = (nfs.mount_point || "").trim();
+  const options = (nfs.options || "").trim();
+
+  if (!server || !exportPath || !mountPoint) {
+    throw new Error("NFS Konfiguration unvollständig (Server/Share/Mountpunkt).");
+  }
+
+  const mountDir = path.resolve(mountPoint);
+  await ensureDir(mountDir);
+
+  const testWrite = async () => {
+    const tmp = path.join(mountDir, `.nfs-test-${Date.now()}.tmp`);
+    await fs.promises.writeFile(tmp, "ok");
+    await fs.promises.unlink(tmp);
+  };
+
+  try {
+    await testWrite();
+    return { mounted: true, path: mountDir, justMounted: false };
+  } catch {
+    if (!nfsMountAllowed()) {
+      throw new Error("NFS nicht gemountet. Bitte manuell mounten oder ALLOW_NFS_MOUNT=1 setzen.");
+    }
+  }
+
+  const target = `${server}:${exportPath}`;
+  const args = ["-t", "nfs"];
+  if (options) args.push("-o", options);
+  args.push(target, mountDir);
+
+  await new Promise((resolve, reject) => {
+    const child = spawn("mount", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (d) => {
+      stderr += d.toString();
+    });
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
+      if (code === 0) return resolve();
+      return reject(new Error(`NFS Mount fehlgeschlagen: ${stderr || `exit ${code}`}`));
+    });
+  });
+
+  await testWrite();
+  return { mounted: true, path: mountDir, justMounted: true };
+};
+
+const mergeConfig = (base, incoming) => ({
+  ...base,
+  ...incoming,
+  retention: {
+    ...base.retention,
+    ...(incoming?.retention || {}),
+    max_count: toNullableInt(incoming?.retention?.max_count ?? base.retention.max_count),
+    max_days: toNullableInt(incoming?.retention?.max_days ?? base.retention.max_days),
+  },
+  auto: {
+    ...base.auto,
+    ...(incoming?.auto || {}),
+    interval_minutes: toNullableInt(incoming?.auto?.interval_minutes ?? base.auto.interval_minutes) || base.auto.interval_minutes,
+    enabled: Boolean(incoming?.auto?.enabled ?? base.auto.enabled),
+    include_db: Boolean(incoming?.auto?.include_db ?? base.auto.include_db),
+    include_files: Boolean(incoming?.auto?.include_files ?? base.auto.include_files),
+    include_env: Boolean(incoming?.auto?.include_env ?? base.auto.include_env),
+  },
+  nfs: {
+    ...base.nfs,
+    ...(incoming?.nfs || {}),
+  },
 });
 
 export const loadBackupConfig = async () => {
@@ -48,14 +155,7 @@ export const loadBackupConfig = async () => {
   try {
     const raw = await fs.promises.readFile(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw || "{}");
-    return {
-      ...fallback,
-      ...parsed,
-      local_path: parsed.local_path || fallback.local_path,
-      nas_path: parsed.nas_path || fallback.nas_path || null,
-      default_target: parsed.default_target === "nas" ? "nas" : "local",
-      retention: parsed.retention ?? fallback.retention ?? null,
-    };
+    return mergeConfig(fallback, parsed);
   } catch {
     return fallback;
   }
@@ -64,9 +164,9 @@ export const loadBackupConfig = async () => {
 export const saveBackupConfig = async (updates = {}) => {
   const current = await loadBackupConfig();
   const nasProvided = Object.prototype.hasOwnProperty.call(updates, "nas_path");
+  const merged = mergeConfig(current, updates);
   const next = {
-    ...current,
-    ...updates,
+    ...merged,
     local_path: updates.local_path || current.local_path || DEFAULT_LOCAL_PATH,
     nas_path: nasProvided ? (updates.nas_path || null) : current.nas_path || null,
     default_target: updates.default_target === "nas" ? "nas" : "local",
@@ -228,6 +328,30 @@ export const listBackups = async () => {
   return results.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 };
 
+export const enforceRetention = async (target) => {
+  const cfg = await loadBackupConfig();
+  const retention = cfg.retention || {};
+  const maxCount = toNullableInt(retention.max_count);
+  const maxDays = toNullableInt(retention.max_days);
+  if (!maxCount && !maxDays) return;
+
+  const backups = (await listBackups()).filter((b) => b.target === target);
+  const sorted = backups.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const now = Date.now();
+  const threshold = maxDays ? now - maxDays * 24 * 60 * 60 * 1000 : null;
+  const toDelete = [];
+
+  sorted.forEach((b, idx) => {
+    const created = b.created_at ? new Date(b.created_at).getTime() : null;
+    if (maxCount && idx >= maxCount) toDelete.push(b);
+    else if (threshold && created && created < threshold) toDelete.push(b);
+  });
+
+  for (const item of toDelete) {
+    await deleteBackup({ name: item.filename, target });
+  }
+};
+
 const resolveTargetDir = (target, cfg) => {
   if (target === "nas") {
     if (!cfg.nas_path) throw new Error("NAS-Pfad ist nicht konfiguriert.");
@@ -237,6 +361,10 @@ const resolveTargetDir = (target, cfg) => {
 };
 
 const ensureTargetDir = async (target, cfg) => {
+  const nfs = cfg.nfs || {};
+  if (target === "nas" && nfs.enabled) {
+    await ensureNfsMounted(cfg);
+  }
   const dir = resolveTargetDir(target, cfg);
   await writeableTest(dir);
   return dir;
@@ -316,6 +444,8 @@ export const createBackup = async ({ target = "local", include_db = true, includ
       ...meta,
       size: stats.size,
     }, null, 2));
+
+    await enforceRetention(target);
 
     return {
       id,

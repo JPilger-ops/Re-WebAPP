@@ -9,12 +9,58 @@ import {
   streamBackupFile,
   streamInvoicesArchive,
   testBackupPath,
+  ensureNfsMounted,
 } from "../utils/backup.js";
+import { reloadBackupScheduler } from "../jobs/backupScheduler.js";
 
 const assertAbsolute = (value, label) => {
   if (!value || typeof value !== "string") throw new Error(`${label} darf nicht leer sein.`);
   if (!path.isAbsolute(value)) throw new Error(`${label} muss absolut sein.`);
   return value;
+};
+
+const toNullableInt = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const normalizeRetention = (payload = {}) => ({
+  max_count: toNullableInt(payload.max_count),
+  max_days: toNullableInt(payload.max_days),
+});
+
+const normalizeAuto = (payload = {}) => {
+  const interval = Math.max(Number(payload.interval_minutes) || 0, 15);
+  return {
+    enabled: Boolean(payload.enabled),
+    interval_minutes: interval,
+    target: payload.target === "nas" ? "nas" : "local",
+    include_db: Boolean(payload.include_db ?? true),
+    include_files: Boolean(payload.include_files ?? true),
+    include_env: Boolean(payload.include_env ?? false),
+  };
+};
+
+const normalizeNfs = (payload = {}) => {
+  const enabled = Boolean(payload.enabled);
+  const server = (payload.server || "").trim();
+  const export_path = (payload.export_path || "").trim();
+  const mount_point = (payload.mount_point || "").trim();
+  const options = (payload.options || "").trim();
+  if (enabled) {
+    if (!server || !export_path || !mount_point) {
+      throw new Error("NFS Angaben unvollständig (Server/Share/Mountpunkt).");
+    }
+    assertAbsolute(mount_point, "NFS Mountpunkt");
+  }
+  return {
+    enabled,
+    server,
+    export_path,
+    mount_point,
+    options,
+  };
 };
 
 export const getBackupSettings = async (_req, res) => {
@@ -28,20 +74,27 @@ export const getBackupSettings = async (_req, res) => {
 };
 
 export const updateBackupSettings = async (req, res) => {
-  const { local_path, nas_path, default_target, retention } = req.body || {};
+  const { local_path, nas_path, default_target, retention, auto, nfs } = req.body || {};
   try {
-    const next = await saveBackupConfig({
+    const nfsConfig = nfs ? normalizeNfs(nfs) : undefined;
+    const resolvedNas =
+      nas_path ? assertAbsolute(nas_path, "NAS Pfad") : nas_path === "" ? null : undefined;
+    const updates = {
       local_path: local_path ? assertAbsolute(local_path, "Lokaler Pfad") : undefined,
-      nas_path: nas_path ? assertAbsolute(nas_path, "NAS Pfad") : nas_path === "" ? null : undefined,
+      nas_path: resolvedNas !== undefined ? resolvedNas : nfsConfig?.enabled ? path.join(nfsConfig.mount_point, "backups") : undefined,
       default_target: default_target === "nas" ? "nas" : "local",
-      retention: retention ?? null,
-    });
+      retention: retention ? normalizeRetention(retention) : undefined,
+      auto: auto ? normalizeAuto(auto) : undefined,
+      nfs: nfsConfig,
+    };
+    const next = await saveBackupConfig(updates);
     await testBackupPath(next.local_path);
     if (next.nas_path) {
       await testBackupPath(next.nas_path).catch((err) => {
         console.warn("[backup] NAS Pfad nicht beschreibbar:", err?.message || err);
       });
     }
+    await reloadBackupScheduler();
     res.json(next);
   } catch (err) {
     console.error("[backup] settings update failed:", err);
@@ -56,6 +109,16 @@ export const testBackupPathHandler = async (req, res) => {
     res.json({ ok: true, path: resolved });
   } catch (err) {
     return res.status(400).json({ message: err?.message || "Pfad-Test fehlgeschlagen." });
+  }
+};
+
+export const mountNfsHandler = async (_req, res) => {
+  try {
+    const result = await ensureNfsMounted();
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("[backup] nfs mount failed:", err);
+    return res.status(400).json({ ok: false, message: err?.message || "NFS Mount fehlgeschlagen." });
   }
 };
 

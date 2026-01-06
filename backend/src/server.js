@@ -21,6 +21,7 @@ import versionRoutes from "./routes/version.routes.js";
 import statsRoutes from "./routes/stats.routes.js";
 import backupRoutes from "./routes/backup.routes.js";
 import { resolveFaviconPath } from "./utils/favicon.js";
+import { startBackupScheduler } from "./jobs/backupScheduler.js";
 import {
   setNetworkDefaults,
   loadNetworkSettingsCache,
@@ -197,4 +198,5 @@ app.get(/^\/(?!api\/).*/, (req, res) => {
 
 // Hintergrundjob: Überfällig-Markierung + HKForms Sync
 startOverdueJob();
+startBackupScheduler().catch((err) => console.error("[backup] scheduler start failed:", err));
 export default app;
