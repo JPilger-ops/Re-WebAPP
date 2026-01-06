@@ -17,11 +17,22 @@ import {
   VersionInfo,
   User,
   Role,
+  BackupSettings,
+  BackupSummary,
   getInvoiceHeader,
   getSmtpSettings,
   getNetworkSettings,
   updateNetworkSettings,
   getNetworkDiagnostics,
+  getBackupSettings,
+  updateBackupSettings,
+  testBackupPathApi,
+  listBackups,
+  createBackupApi,
+  restoreBackupApi,
+  deleteBackupApi,
+  backupDownloadUrl,
+  invoicesArchiveUrl,
   login as apiLogin,
   testSmtp,
   updateInvoiceHeader,
@@ -3722,6 +3733,7 @@ function AdminSettings() {
     { key: "bank", label: "Bank / Steuer" },
     { key: "datev", label: "DATEV" },
     { key: "hkforms", label: "Forms-Sync" },
+    { key: "backups", label: "Backups" },
     { key: "network", label: "Netzwerk" },
     { key: "security", label: "Sicherheit" },
   ];
@@ -3755,6 +3767,8 @@ function AdminSettings() {
             <ApiKeysSection />
           </div>
         );
+      case "backups":
+        return <BackupSettingsPanel />;
       case "network":
         return <NetworkSettingsForm />;
       case "security":
@@ -4053,6 +4067,444 @@ function FaviconSettingsForm() {
         </button>
       </div>
       {status && <Alert type={status.type === "error" ? "error" : "success"}>{status.message}</Alert>}
+    </div>
+  );
+}
+
+function BackupSettingsPanel() {
+  const [settings, setSettings] = useState<BackupSettings>({ local_path: "", nas_path: "", default_target: "local" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<FormStatus>(null);
+  const [pathStatus, setPathStatus] = useState<FormStatus>(null);
+  const [listStatus, setListStatus] = useState<FormStatus>(null);
+  const [backups, setBackups] = useState<BackupSummary[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [createTarget, setCreateTarget] = useState<"local" | "nas">("local");
+  const [includeDb, setIncludeDb] = useState(true);
+  const [includeFiles, setIncludeFiles] = useState(true);
+  const [includeEnv, setIncludeEnv] = useState(true);
+  const [busyCreate, setBusyCreate] = useState(false);
+  const [restoreDialog, setRestoreDialog] = useState<{ backup: BackupSummary; options: { db: boolean; files: boolean; env: boolean } } | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<BackupSummary | null>(null);
+  const [busyRestore, setBusyRestore] = useState(false);
+  const [busyDelete, setBusyDelete] = useState(false);
+
+  const formatSize = (size?: number | null) => {
+    if (!size && size !== 0) return "–";
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  const targetLabel = (target: "local" | "nas") => (target === "nas" ? "NAS" : "Server");
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setStatus(null);
+    try {
+      const data = await getBackupSettings();
+      setSettings({
+        local_path: data.local_path || "",
+        nas_path: data.nas_path || "",
+        default_target: data.default_target === "nas" ? "nas" : "local",
+        retention: data.retention ?? null,
+      });
+      setCreateTarget(data.default_target === "nas" ? "nas" : "local");
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Backups-Einstellungen konnten nicht geladen werden." });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadBackups = useCallback(async () => {
+    setListStatus(null);
+    setListLoading(true);
+    try {
+      const list = await listBackups();
+      setBackups(list);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setListStatus({ type: "error", message: apiErr.message || "Backups konnten nicht geladen werden." });
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSettings();
+    loadBackups();
+  }, [loadSettings, loadBackups]);
+
+  const onSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    try {
+      const saved = await updateBackupSettings(settings);
+      setSettings(saved);
+      setCreateTarget(saved.default_target === "nas" ? "nas" : "local");
+      setStatus({ type: "success", message: "Einstellungen gespeichert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setStatus({ type: "error", message: apiErr.message || "Einstellungen konnten nicht gespeichert werden." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onTestPath = async (pathValue: string, label: string) => {
+    setPathStatus(null);
+    try {
+      const res = await testBackupPathApi({ path: pathValue });
+      setPathStatus({ type: "success", message: `${label} schreibbar: ${res.path}` });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setPathStatus({ type: "error", message: apiErr.message || `${label} konnte nicht geprüft werden.` });
+    }
+  };
+
+  const onCreateBackup = async () => {
+    setBusyCreate(true);
+    setListStatus(null);
+    try {
+      const res = await createBackupApi({
+        target: createTarget,
+        include_db: includeDb,
+        include_files: includeFiles,
+        include_env: includeEnv,
+      });
+      const created = res.backup;
+      setBackups((prev) => [created, ...prev.filter((b) => b.filename !== created.filename)]);
+      setListStatus({ type: "success", message: "Backup erstellt." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setListStatus({ type: "error", message: apiErr.message || "Backup konnte nicht erstellt werden." });
+    } finally {
+      setBusyCreate(false);
+    }
+  };
+
+  const confirmRestore = (backup: BackupSummary) => {
+    setRestoreDialog({ backup, options: { db: true, files: true, env: false } });
+  };
+
+  const handleRestore = async () => {
+    if (!restoreDialog) return;
+    setBusyRestore(true);
+    setListStatus(null);
+    try {
+      await restoreBackupApi({
+        name: restoreDialog.backup.filename,
+        target: restoreDialog.backup.target,
+        restore_db: restoreDialog.options.db,
+        restore_files: restoreDialog.options.files,
+        restore_env: restoreDialog.options.env,
+      });
+      setListStatus({ type: "success", message: "Backup wiederhergestellt." });
+      setRestoreDialog(null);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setListStatus({ type: "error", message: apiErr.message || "Restore fehlgeschlagen." });
+    } finally {
+      setBusyRestore(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDialog) return;
+    setBusyDelete(true);
+    setListStatus(null);
+    try {
+      await deleteBackupApi(deleteDialog.filename, deleteDialog.target);
+      setBackups((prev) => prev.filter((b) => b.filename !== deleteDialog.filename));
+      setListStatus({ type: "success", message: "Backup gelöscht." });
+      setDeleteDialog(null);
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setListStatus({ type: "error", message: apiErr.message || "Backup konnte nicht gelöscht werden." });
+    } finally {
+      setBusyDelete(false);
+    }
+  };
+
+  const invoicesLink = invoicesArchiveUrl();
+  const settingsValid = settings.local_path.trim().length > 0;
+  const canCreate = createTarget === "local" || (createTarget === "nas" && (settings.nas_path || "").trim().length > 0);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Backups</h2>
+        <p className="text-sm text-slate-600">
+          Sichere Datenbank, PDFs (inkl. Archiv/Trash) und Konfiguration (.env). Archive werden als ZIP erstellt, damit sie ohne Zusatztools entpackt werden können.
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+          <h3 className="font-semibold text-slate-800 mb-2">Speicherziele</h3>
+          <form className="space-y-3" onSubmit={onSaveSettings}>
+            <label className="block text-sm text-slate-700">
+              <span className="font-medium">Lokaler Pfad</span>
+              <input
+                className="input mt-1"
+                value={settings.local_path || ""}
+                onChange={(e) => setSettings((s) => ({ ...s, local_path: e.target.value }))}
+                disabled={loading}
+                required
+              />
+            </label>
+            <label className="block text-sm text-slate-700">
+              <span className="font-medium">NAS Pfad (optional)</span>
+              <input
+                className="input mt-1"
+                value={settings.nas_path || ""}
+                onChange={(e) => setSettings((s) => ({ ...s, nas_path: e.target.value }))}
+                disabled={loading}
+                placeholder="/mnt/nas/backups"
+              />
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="defaultTarget"
+                  value="local"
+                  checked={settings.default_target !== "nas"}
+                  onChange={() => setSettings((s) => ({ ...s, default_target: "local" }))}
+                  disabled={loading}
+                />
+                Standard: Lokaler Pfad
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="defaultTarget"
+                  value="nas"
+                  checked={settings.default_target === "nas"}
+                  onChange={() => setSettings((s) => ({ ...s, default_target: "nas" }))}
+                  disabled={loading}
+                />
+                Standard: NAS (falls gesetzt)
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" type="submit" disabled={saving || loading || !settingsValid}>
+                {saving ? "Speichere ..." : "Speichern"}
+              </button>
+              <button
+                className="btn-secondary"
+                type="button"
+                onClick={() => onTestPath(settings.local_path, "Lokaler Pfad")}
+                disabled={loading}
+              >
+                Pfad testen
+              </button>
+              {settings.nas_path && (
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  onClick={() => onTestPath(settings.nas_path || "", "NAS Pfad")}
+                  disabled={loading}
+                >
+                  NAS testen
+                </button>
+              )}
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={() => {
+                  loadSettings();
+                  loadBackups();
+                }}
+              >
+                Neu laden
+              </button>
+            </div>
+            {status && <Alert type={status.type === "error" ? "error" : "success"}>{status.message}</Alert>}
+            {pathStatus && <Alert type={pathStatus.type === "error" ? "error" : "success"}>{pathStatus.message}</Alert>}
+          </form>
+        </div>
+
+        <div className="border border-slate-200 rounded-lg p-4 bg-white space-y-3">
+          <h3 className="font-semibold text-slate-800">Backup erstellen</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="createTarget"
+                value="local"
+                checked={createTarget === "local"}
+                onChange={() => setCreateTarget("local")}
+              />
+              Auf Server speichern
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="createTarget"
+                value="nas"
+                checked={createTarget === "nas"}
+                onChange={() => setCreateTarget("nas")}
+                disabled={!settings.nas_path}
+              />
+              Auf NAS speichern
+            </label>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={includeDb} onChange={(e) => setIncludeDb(e.target.checked)} />
+              Datenbank
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={includeFiles} onChange={(e) => setIncludeFiles(e.target.checked)} />
+              PDFs &amp; Branding
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={includeEnv} onChange={(e) => setIncludeEnv(e.target.checked)} />
+              .env Dateien
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={onCreateBackup} disabled={busyCreate || !canCreate}>
+              {busyCreate ? "Sichert ..." : "Backup erstellen"}
+            </Button>
+            <Button variant="secondary" onClick={() => window.open(invoicesLink, "_blank")}>
+              Rechnungen (ZIP) herunterladen
+            </Button>
+          </div>
+          <p className="text-xs text-slate-600">
+            Hinweis: Restore überschreibt Daten. Standardmäßig werden .env nicht automatisch zurückgespielt, aktiviere das beim Restore falls benötigt.
+          </p>
+          {listStatus && <Alert type={listStatus.type === "error" ? "error" : "success"}>{listStatus.message}</Alert>}
+        </div>
+      </div>
+
+      <div className="border border-slate-200 rounded-lg p-4 bg-white">
+        <div className="flex items-center justify-between mb-3 gap-3">
+          <div>
+            <h3 className="font-semibold text-slate-800">Verfügbare Backups</h3>
+            <p className="text-sm text-slate-600">Neueste zuerst. Aktionen nur für Admins möglich.</p>
+          </div>
+          <Button variant="secondary" onClick={loadBackups} disabled={listLoading}>
+            {listLoading ? "Lädt ..." : "Aktualisieren"}
+          </Button>
+        </div>
+        {listLoading && (
+          <div className="flex items-center gap-2 text-slate-600">
+            <Spinner /> Lade Backups ...
+          </div>
+        )}
+        {!listLoading && backups.length === 0 && (
+          <EmptyState title="Keine Backups gefunden" description="Lege ein erstes Backup an." />
+        )}
+        {!listLoading && backups.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+              <thead className="bg-slate-50 text-slate-700">
+                <tr>
+                  <th className="text-left px-3 py-2">Datei</th>
+                  <th className="text-left px-3 py-2">Ort</th>
+                  <th className="text-left px-3 py-2">Erstellt</th>
+                  <th className="text-left px-3 py-2">Größe</th>
+                  <th className="text-left px-3 py-2">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map((b) => (
+                  <tr key={`${b.target}-${b.filename}`} className="border-t border-slate-200">
+                    <td className="px-3 py-2">
+                      <div className="font-semibold text-slate-900 break-all">{b.filename}</div>
+                      <div className="text-xs text-slate-600">
+                        {(b.includes?.db ? "DB" : "")} {b.includes?.files ? "• Files" : ""} {b.includes?.env ? "• env" : ""}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{targetLabel(b.target)}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {b.created_at ? new Date(b.created_at).toLocaleString() : "–"}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{formatSize(b.size)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-2">
+                        <a
+                          className="btn-secondary text-xs"
+                          href={backupDownloadUrl(b.filename, b.target)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Download
+                        </a>
+                        <Button variant="secondary" onClick={() => confirmRestore(b)}>
+                          Restore
+                        </Button>
+                        <Button variant="ghost" onClick={() => setDeleteDialog(b)}>
+                          Löschen
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {restoreDialog && (
+        <Modal title={`Backup wiederherstellen (${restoreDialog.backup.filename})`} onClose={() => setRestoreDialog(null)}>
+          <div className="space-y-3 text-sm">
+            <p className="text-slate-700">
+              Restore überschreibt bestehende Daten. Stelle sicher, dass keine Nutzer aktiv arbeiten. .env wird nur wiederhergestellt, wenn gewählt.
+            </p>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={restoreDialog.options.db}
+                onChange={(e) => setRestoreDialog((d) => d ? { ...d, options: { ...d.options, db: e.target.checked } } : null)}
+              />
+              Datenbank wiederherstellen
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={restoreDialog.options.files}
+                onChange={(e) => setRestoreDialog((d) => d ? { ...d, options: { ...d.options, files: e.target.checked } } : null)}
+              />
+              PDFs/Branding wiederherstellen
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={restoreDialog.options.env}
+                onChange={(e) => setRestoreDialog((d) => d ? { ...d, options: { ...d.options, env: e.target.checked } } : null)}
+              />
+              .env Dateien überschreiben
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setRestoreDialog(null)} disabled={busyRestore}>
+                Abbrechen
+              </Button>
+              <Button onClick={handleRestore} disabled={busyRestore}>
+                {busyRestore ? "Stellt wieder her ..." : "Restore ausführen"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {deleteDialog && (
+        <Confirm
+          title="Backup löschen?"
+          description={`Backup ${deleteDialog.filename} (${targetLabel(deleteDialog.target)}) entfernen?`}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteDialog(null)}
+          busy={busyDelete}
+        />
+      )}
     </div>
   );
 }
