@@ -86,8 +86,9 @@ const resolveDbConfig = () => {
   const url = process.env.DATABASE_URL || "";
   if (url) {
     const parsed = new URL(url.replace(/^postgres:/, "postgresql:"));
-    // Prisma hängt oft ?schema=public an; pg_dump versteht das nicht → entfernen.
-    parsed.searchParams.delete("schema");
+    // Prisma hängt oft ?schema=public an; pg_dump versteht das nicht → Query bereinigen.
+    const entries = Array.from(parsed.searchParams.entries()).filter(([k]) => k !== "schema");
+    parsed.search = entries.length ? `?${new URLSearchParams(entries).toString()}` : "";
     const sanitized = parsed.toString();
     return {
       connectionString: sanitized,
