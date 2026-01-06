@@ -86,8 +86,11 @@ const resolveDbConfig = () => {
   const url = process.env.DATABASE_URL || "";
   if (url) {
     const parsed = new URL(url.replace(/^postgres:/, "postgresql:"));
+    // Prisma hängt oft ?schema=public an; pg_dump versteht das nicht → entfernen.
+    parsed.searchParams.delete("schema");
+    const sanitized = parsed.toString();
     return {
-      connectionString: url,
+      connectionString: sanitized,
       host: parsed.hostname,
       port: parsed.port || "5432",
       user: decodeURIComponent(parsed.username || ""),
