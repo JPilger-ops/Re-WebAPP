@@ -191,7 +191,27 @@ export interface BackupSettings {
   local_path: string;
   nas_path?: string | null;
   default_target?: "local" | "nas";
-  retention?: number | null;
+  retention?: {
+    max_count?: number | null;
+    max_days?: number | null;
+  } | null;
+  nfs?: {
+    enabled?: boolean;
+    server?: string;
+    export_path?: string;
+    mount_point?: string;
+    options?: string;
+  };
+  auto?: {
+    enabled?: boolean;
+    interval_minutes?: number | null;
+    target?: "local" | "nas";
+    include_db?: boolean;
+    include_files?: boolean;
+    include_env?: boolean;
+    last_run_at?: string | null;
+    next_run_at?: string | null;
+  } | null;
 }
 
 export interface BackupSummary {
@@ -376,6 +396,12 @@ export async function testBackupPathApi(payload: { path: string }) {
   return apiFetch<{ ok: boolean; path: string }>("/backups/test-path", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function mountNfsShare() {
+  return apiFetch<{ ok: boolean; path?: string; message?: string; mounted?: boolean; justMounted?: boolean }>("/backups/nfs/mount", {
+    method: "POST",
   });
 }
 

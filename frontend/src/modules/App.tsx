@@ -27,6 +27,7 @@ import {
   getBackupSettings,
   updateBackupSettings,
   testBackupPathApi,
+  mountNfsShare,
   listBackups,
   createBackupApi,
   restoreBackupApi,
@@ -4072,11 +4073,32 @@ function FaviconSettingsForm() {
 }
 
 function BackupSettingsPanel() {
-  const [settings, setSettings] = useState<BackupSettings>({ local_path: "", nas_path: "", default_target: "local" });
+  const defaultRetention = { max_count: null as number | null, max_days: null as number | null };
+  const defaultNfs = { enabled: false, server: "", export_path: "", mount_point: "", options: "" };
+  const defaultAuto = {
+    enabled: false,
+    interval_minutes: 1440,
+    target: "local" as "local" | "nas",
+    include_db: true,
+    include_files: true,
+    include_env: false,
+    last_run_at: null as string | null,
+    next_run_at: null as string | null,
+  };
+
+  const [settings, setSettings] = useState<BackupSettings>({
+    local_path: "",
+    nas_path: "",
+    default_target: "local",
+    retention: defaultRetention,
+    nfs: defaultNfs,
+    auto: defaultAuto,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<FormStatus>(null);
   const [pathStatus, setPathStatus] = useState<FormStatus>(null);
+  const [nfsStatus, setNfsStatus] = useState<FormStatus>(null);
   const [listStatus, setListStatus] = useState<FormStatus>(null);
   const [backups, setBackups] = useState<BackupSummary[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -4089,6 +4111,12 @@ function BackupSettingsPanel() {
   const [deleteDialog, setDeleteDialog] = useState<BackupSummary | null>(null);
   const [busyRestore, setBusyRestore] = useState(false);
   const [busyDelete, setBusyDelete] = useState(false);
+  const [busyMount, setBusyMount] = useState(false);
+
+  const retention = settings.retention || defaultRetention;
+  const nfsCfg = settings.nfs || defaultNfs;
+  const autoCfg = settings.auto || defaultAuto;
+  const autoHours = Math.max(Math.round(((autoCfg.interval_minutes || 1440) as number) / 60), 1);
 
   const formatSize = (size?: number | null) => {
     if (!size && size !== 0) return "–";
@@ -4109,7 +4137,9 @@ function BackupSettingsPanel() {
         local_path: data.local_path || "",
         nas_path: data.nas_path || "",
         default_target: data.default_target === "nas" ? "nas" : "local",
-        retention: data.retention ?? null,
+        retention: data.retention || defaultRetention,
+        nfs: data.nfs || defaultNfs,
+        auto: data.auto || { ...defaultAuto, target: data.default_target === "nas" ? "nas" : "local" },
       });
       setCreateTarget(data.default_target === "nas" ? "nas" : "local");
     } catch (err: any) {
@@ -4144,7 +4174,12 @@ function BackupSettingsPanel() {
     setSaving(true);
     setStatus(null);
     try {
-      const saved = await updateBackupSettings(settings);
+      const saved = await updateBackupSettings({
+        ...settings,
+        retention,
+        nfs: nfsCfg,
+        auto: { ...autoCfg, interval_minutes: autoHours * 60 },
+      });
       setSettings(saved);
       setCreateTarget(saved.default_target === "nas" ? "nas" : "local");
       setStatus({ type: "success", message: "Einstellungen gespeichert." });
@@ -4158,12 +4193,38 @@ function BackupSettingsPanel() {
 
   const onTestPath = async (pathValue: string, label: string) => {
     setPathStatus(null);
+    if (!pathValue.trim()) {
+      setPathStatus({ type: "error", message: `${label} fehlt.` });
+      return;
+    }
     try {
       const res = await testBackupPathApi({ path: pathValue });
       setPathStatus({ type: "success", message: `${label} schreibbar: ${res.path}` });
     } catch (err: any) {
       const apiErr = err as ApiError;
       setPathStatus({ type: "error", message: apiErr.message || `${label} konnte nicht geprüft werden.` });
+    }
+  };
+
+  const onMountNfs = async () => {
+    setNfsStatus(null);
+    setBusyMount(true);
+    try {
+      const res = await mountNfsShare();
+      if (res.ok) {
+        const msg = res.justMounted ? "NFS gemountet und schreibbar." : "NFS bereits verfügbar.";
+        setNfsStatus({ type: "success", message: res.message || msg });
+        if (res.path && !settings.nas_path) {
+          setSettings((s) => ({ ...s, nas_path: s.nas_path || s.nfs?.mount_point || res.path }));
+        }
+      } else {
+        setNfsStatus({ type: "error", message: res.message || "NFS Mount fehlgeschlagen." });
+      }
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setNfsStatus({ type: "error", message: apiErr.message || "NFS Mount fehlgeschlagen." });
+    } finally {
+      setBusyMount(false);
     }
   };
 
@@ -4232,8 +4293,9 @@ function BackupSettingsPanel() {
   };
 
   const invoicesLink = invoicesArchiveUrl();
-  const settingsValid = settings.local_path.trim().length > 0;
-  const canCreate = createTarget === "local" || (createTarget === "nas" && (settings.nas_path || "").trim().length > 0);
+  const nasConfigured = (settings.nas_path || nfsCfg.mount_point || "").trim().length > 0;
+  const settingsValid = settings.local_path?.trim().length > 0;
+  const canCreate = createTarget === "local" || (createTarget === "nas" && nasConfigured);
 
   return (
     <div className="space-y-6">
@@ -4245,8 +4307,8 @@ function BackupSettingsPanel() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-          <h3 className="font-semibold text-slate-800 mb-2">Speicherziele</h3>
+        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-4">
+          <h3 className="font-semibold text-slate-800">Speicherziele &amp; NFS</h3>
           <form className="space-y-3" onSubmit={onSaveSettings}>
             <label className="block text-sm text-slate-700">
               <span className="font-medium">Lokaler Pfad</span>
@@ -4292,28 +4354,190 @@ function BackupSettingsPanel() {
                 Standard: NAS (falls gesetzt)
               </label>
             </div>
+
+            <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-slate-800 text-sm">NFS Mount</h4>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!nfsCfg.enabled}
+                    onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), enabled: e.target.checked } }))}
+                  />
+                  Aktivieren
+                </label>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 text-sm">
+                <label className="block">
+                  <span className="font-medium">Server</span>
+                  <input
+                    className="input mt-1"
+                    value={nfsCfg.server || ""}
+                    onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), server: e.target.value } }))}
+                    disabled={loading}
+                    placeholder="10.0.0.10"
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-medium">Share/Export</span>
+                  <input
+                    className="input mt-1"
+                    value={nfsCfg.export_path || ""}
+                    onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), export_path: e.target.value } }))}
+                    disabled={loading}
+                    placeholder="/export/backups"
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-medium">Mountpunkt</span>
+                  <input
+                    className="input mt-1"
+                    value={nfsCfg.mount_point || ""}
+                    onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), mount_point: e.target.value } }))}
+                    disabled={loading}
+                    placeholder="/mnt/nfs"
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-medium">Mount Optionen (optional)</span>
+                  <input
+                    className="input mt-1"
+                    value={nfsCfg.options || ""}
+                    onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), options: e.target.value } }))}
+                    disabled={loading}
+                    placeholder="rw,vers=4.1"
+                  />
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="btn-secondary" type="button" onClick={() => onTestPath(settings.local_path, "Lokaler Pfad")} disabled={loading}>
+                  Pfad testen
+                </button>
+                {nasConfigured && (
+                  <button className="btn-secondary" type="button" onClick={() => onTestPath(settings.nas_path || nfsCfg.mount_point || "", "NAS Pfad")} disabled={loading}>
+                    NAS testen
+                  </button>
+                )}
+                <button className="btn-secondary" type="button" onClick={onMountNfs} disabled={busyMount || !nfsCfg.enabled}>
+                  {busyMount ? "Mounten..." : "NFS mounten/prüfen"}
+                </button>
+              </div>
+              {nfsStatus && <Alert type={nfsStatus.type === "error" ? "error" : "success"}>{nfsStatus.message}</Alert>}
+            </div>
+
+            <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-2">
+              <h4 className="font-semibold text-slate-800 text-sm">Retention</h4>
+              <div className="grid gap-2 md:grid-cols-2 text-sm">
+                <label className="block">
+                  <span className="font-medium">Max. Anzahl Backups</span>
+                  <input
+                    className="input mt-1"
+                    type="number"
+                    min={1}
+                    value={retention.max_count ?? ""}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        retention: { ...(s.retention || defaultRetention), max_count: e.target.value ? Number(e.target.value) : null },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-medium">Max. Alter (Tage)</span>
+                  <input
+                    className="input mt-1"
+                    type="number"
+                    min={1}
+                    value={retention.max_days ?? ""}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        retention: { ...(s.retention || defaultRetention), max_days: e.target.value ? Number(e.target.value) : null },
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-slate-600">Ältere Backups werden nach neuen Sicherungen automatisch gelöscht.</p>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-slate-800 text-sm">Auto-Backups</h4>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!autoCfg.enabled}
+                    onChange={(e) => setSettings((s) => ({ ...s, auto: { ...(s.auto || defaultAuto), enabled: e.target.checked } }))}
+                  />
+                  Aktivieren
+                </label>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 text-sm">
+                <label className="block">
+                  <span className="font-medium">Intervall (Stunden)</span>
+                  <input
+                    className="input mt-1"
+                    type="number"
+                    min={1}
+                    value={autoHours}
+                    onChange={(e) => {
+                      const hours = Math.max(Number(e.target.value) || 1, 1);
+                      setSettings((s) => ({ ...s, auto: { ...(s.auto || defaultAuto), interval_minutes: hours * 60 } }));
+                    }}
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-medium">Ziel</span>
+                  <select
+                    className="input mt-1"
+                    value={autoCfg.target === "nas" ? "nas" : "local"}
+                    onChange={(e) => setSettings((s) => ({ ...s, auto: { ...(s.auto || defaultAuto), target: e.target.value === "nas" ? "nas" : "local" } }))}
+                  >
+                    <option value="local">Server</option>
+                    <option value="nas" disabled={!nasConfigured}>
+                      NAS
+                    </option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!autoCfg.include_db}
+                    onChange={(e) => setSettings((s) => ({ ...s, auto: { ...(s.auto || defaultAuto), include_db: e.target.checked } }))}
+                  />
+                  Datenbank
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!autoCfg.include_files}
+                    onChange={(e) => setSettings((s) => ({ ...s, auto: { ...(s.auto || defaultAuto), include_files: e.target.checked } }))}
+                  />
+                  PDFs &amp; Branding
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!autoCfg.include_env}
+                    onChange={(e) => setSettings((s) => ({ ...s, auto: { ...(s.auto || defaultAuto), include_env: e.target.checked } }))}
+                  />
+                  .env Dateien
+                </label>
+              </div>
+              <div className="text-xs text-slate-600 space-y-1">
+                <div>Letzter Lauf: {autoCfg.last_run_at ? new Date(autoCfg.last_run_at).toLocaleString() : "–"}</div>
+                <div>Nächster Lauf: {autoCfg.next_run_at ? new Date(autoCfg.next_run_at).toLocaleString() : "– (nach Speichern neu berechnet)"}</div>
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <button className="btn-primary" type="submit" disabled={saving || loading || !settingsValid}>
                 {saving ? "Speichere ..." : "Speichern"}
               </button>
-              <button
-                className="btn-secondary"
-                type="button"
-                onClick={() => onTestPath(settings.local_path, "Lokaler Pfad")}
-                disabled={loading}
-              >
-                Pfad testen
-              </button>
-              {settings.nas_path && (
-                <button
-                  className="btn-secondary"
-                  type="button"
-                  onClick={() => onTestPath(settings.nas_path || "", "NAS Pfad")}
-                  disabled={loading}
-                >
-                  NAS testen
-                </button>
-              )}
               <button
                 className="btn-ghost"
                 type="button"
@@ -4350,7 +4574,7 @@ function BackupSettingsPanel() {
                 value="nas"
                 checked={createTarget === "nas"}
                 onChange={() => setCreateTarget("nas")}
-                disabled={!settings.nas_path}
+                disabled={!nasConfigured}
               />
               Auf NAS speichern
             </label>

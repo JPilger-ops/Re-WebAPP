@@ -10,6 +10,7 @@ import {
   restoreBackupHandler,
   testBackupPathHandler,
   updateBackupSettings,
+  mountNfsHandler,
 } from "../controllers/backup.controller.js";
 
 const router = Router();
@@ -19,6 +20,7 @@ router.use(authRequired, requireRole("admin"));
 router.get("/settings", getBackupSettings);
 router.put("/settings", updateBackupSettings);
 router.post("/test-path", testBackupPathHandler);
+router.post("/nfs/mount", mountNfsHandler);
 router.get("/invoices/archive", invoicesArchiveHandler);
 router.get("/", listBackupsHandler);
 router.post("/", createBackupHandler);
