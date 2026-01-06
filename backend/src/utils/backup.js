@@ -4,9 +4,12 @@ import os from "os";
 import archiver from "archiver";
 import unzipper from "unzipper";
 import { spawn } from "child_process";
-import { URL } from "url";
+import { URL, fileURLToPath } from "url";
 import { getPdfSettings } from "./pdfSettings.js";
 import { resolveBuildInfo } from "./buildInfo.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const DATA_ROOT = process.env.APP_DATA_PATH || path.resolve(ROOT_DIR, "../data");
