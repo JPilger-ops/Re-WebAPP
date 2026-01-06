@@ -12,7 +12,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ROOT_DIR = path.resolve(__dirname, "..");
-const DATA_ROOT = process.env.APP_DATA_PATH || path.resolve(ROOT_DIR, "../data");
+// Fallback auf /tmp, da /app meist read-only im Container ist. Für persistente Backups per Env pflegen.
+const DATA_ROOT = process.env.APP_DATA_PATH || "/tmp/rechnungsapp-data";
 const CONFIG_PATH = process.env.BACKUP_CONFIG_PATH || path.join(DATA_ROOT, "backup-config.json");
 const DEFAULT_LOCAL_PATH = process.env.BACKUP_LOCAL_PATH || path.join(DATA_ROOT, "backups");
 const DEFAULT_NAS_PATH = process.env.BACKUP_NAS_PATH || "";
