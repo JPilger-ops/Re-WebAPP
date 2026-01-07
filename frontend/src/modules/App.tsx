@@ -2319,6 +2319,8 @@ function InvoiceFormModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recipientOpen, setRecipientOpen] = useState(false);
+  const recipientBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const close = onClose || (() => {});
   const handleCancel = () => {
     if (onCancel) onCancel();
@@ -2429,6 +2431,26 @@ function InvoiceFormModal({
       if (partialMatches.length === 1) return partialMatches[0];
     }
     return null;
+  };
+
+  const recipientSuggestions = useMemo(() => {
+    const needle = form.name.trim().toLowerCase();
+    const list = customers.filter((c) => (c.name || "").trim());
+    if (!needle) return list.slice(0, 8);
+    return list.filter((c) => (c.name || "").trim().toLowerCase().includes(needle)).slice(0, 8);
+  }, [customers, form.name]);
+
+  const openRecipientSuggestions = () => {
+    if (recipientBlurTimer.current) {
+      clearTimeout(recipientBlurTimer.current);
+      recipientBlurTimer.current = null;
+    }
+    setRecipientOpen(true);
+  };
+
+  const closeRecipientSuggestions = () => {
+    if (recipientBlurTimer.current) clearTimeout(recipientBlurTimer.current);
+    recipientBlurTimer.current = setTimeout(() => setRecipientOpen(false), 120);
   };
 
   const handleRecipientNameChange = (value: string) => {
@@ -2595,16 +2617,41 @@ function InvoiceFormModal({
                 <input
                   className="input w-full"
                   value={form.name}
-                  onChange={(e) => handleRecipientNameChange(e.target.value)}
-                  list="recipient-suggestions"
+                  onChange={(e) => {
+                    handleRecipientNameChange(e.target.value);
+                    openRecipientSuggestions();
+                  }}
+                  onFocus={openRecipientSuggestions}
+                  onBlur={closeRecipientSuggestions}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setRecipientOpen(false);
+                  }}
                   placeholder="Empfänger eingeben oder wählen"
                   required
                 />
-                <datalist id="recipient-suggestions">
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.name} />
-                  ))}
-                </datalist>
+                {recipientOpen && recipientSuggestions.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-auto">
+                    {recipientSuggestions.map((c) => {
+                      const label = c.name || "";
+                      const subLabel = [c.company, c.email].filter(Boolean).join(" • ");
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-slate-100"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            handleRecipientNameChange(label);
+                            setRecipientOpen(false);
+                          }}
+                        >
+                          <div className="font-medium">{label || "–"}</div>
+                          {subLabel && <div className="text-xs text-slate-500">{subLabel}</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div className="text-xs text-slate-500">
                 Freitext möglich. Wähle einen Vorschlag, um Adressdaten automatisch zu übernehmen.
@@ -3273,9 +3320,9 @@ function InvoiceDetailPage() {
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
             <div className="text-xs uppercase text-slate-500">Beträge</div>
             {vatSummary.rows.length ? (
-              <div className="overflow-hidden border border-slate-100 rounded-lg">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
+              <div className="overflow-x-auto border border-slate-100 rounded-lg">
+                <table className="w-full text-sm min-w-[420px]">
+                  <thead className="bg-slate-50 text-xs text-slate-500 uppercase whitespace-nowrap">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">Satz</th>
                       <th className="px-3 py-2 text-right font-semibold">Netto</th>
@@ -3283,7 +3330,7 @@ function InvoiceDetailPage() {
                       <th className="px-3 py-2 text-right font-semibold">Brutto</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 whitespace-nowrap">
                     {vatSummary.rows.map((row) => (
                       <tr key={row.rateLabel} className="text-slate-800">
                         <td className="px-3 py-2 font-medium">{row.rateLabel}</td>
@@ -3299,7 +3346,7 @@ function InvoiceDetailPage() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot>
+                  <tfoot className="whitespace-nowrap">
                     <tr className="bg-slate-50 font-semibold text-slate-900 border-t border-slate-200">
                       <td className="px-3 py-2 text-left">Gesamt</td>
                       <td className="px-3 py-2 text-right">
@@ -4111,6 +4158,26 @@ function BackupSettingsPanel() {
   const [busyRestore, setBusyRestore] = useState(false);
   const [busyDelete, setBusyDelete] = useState(false);
   const [busyMount, setBusyMount] = useState(false);
+  const createTargetStorageKey = "backup-create-target";
+
+  const readCreateTarget = () => {
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = window.localStorage.getItem(createTargetStorageKey);
+      return stored === "nas" || stored === "local" ? stored : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistCreateTarget = (value: "local" | "nas") => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(createTargetStorageKey, value);
+    } catch {
+      // ignore storage errors
+    }
+  };
 
   const retention = settings.retention || defaultRetention;
   const nfsCfg = settings.nfs || defaultNfs;
@@ -4132,15 +4199,23 @@ function BackupSettingsPanel() {
     setStatus(null);
     try {
       const data = await getBackupSettings();
+      const defaultTarget = data.default_target === "nas" ? "nas" : "local";
+      const storedTarget = readCreateTarget();
+      const nasAvailable = !!(data.nas_path || data.nfs?.mount_point || "").trim();
+      const nextTarget = storedTarget || defaultTarget;
+      const resolvedTarget = nextTarget === "nas" && !nasAvailable ? "local" : nextTarget;
       setSettings({
         local_path: data.local_path || "",
         nas_path: data.nas_path || "",
-        default_target: data.default_target === "nas" ? "nas" : "local",
+        default_target: defaultTarget,
         retention: data.retention || defaultRetention,
         nfs: data.nfs || defaultNfs,
-        auto: data.auto || { ...defaultAuto, target: data.default_target === "nas" ? "nas" : "local" },
+        auto: data.auto || { ...defaultAuto, target: defaultTarget },
       });
-      setCreateTarget(data.default_target === "nas" ? "nas" : "local");
+      setCreateTarget(resolvedTarget);
+      if (!storedTarget || storedTarget !== resolvedTarget) {
+        persistCreateTarget(resolvedTarget);
+      }
     } catch (err: any) {
       const apiErr = err as ApiError;
       setStatus({ type: "error", message: apiErr.message || "Backups-Einstellungen konnten nicht geladen werden." });
@@ -4180,7 +4255,9 @@ function BackupSettingsPanel() {
         auto: { ...autoCfg, interval_minutes: autoHours * 60 },
       });
       setSettings(saved);
-      setCreateTarget(saved.default_target === "nas" ? "nas" : "local");
+      const nextTarget = saved.default_target === "nas" ? "nas" : "local";
+      setCreateTarget(nextTarget);
+      persistCreateTarget(nextTarget);
       setStatus({ type: "success", message: "Einstellungen gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -4562,7 +4639,10 @@ function BackupSettingsPanel() {
                 name="createTarget"
                 value="local"
                 checked={createTarget === "local"}
-                onChange={() => setCreateTarget("local")}
+                onChange={() => {
+                  setCreateTarget("local");
+                  persistCreateTarget("local");
+                }}
               />
               Auf Server speichern
             </label>
@@ -4572,7 +4652,10 @@ function BackupSettingsPanel() {
                 name="createTarget"
                 value="nas"
                 checked={createTarget === "nas"}
-                onChange={() => setCreateTarget("nas")}
+                onChange={() => {
+                  setCreateTarget("nas");
+                  persistCreateTarget("nas");
+                }}
                 disabled={!nasConfigured}
               />
               Auf NAS speichern
