@@ -12,10 +12,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ROOT_DIR = path.resolve(__dirname, "..");
-// Fallback auf /tmp, da /app meist read-only im Container ist. Für persistente Backups per Env pflegen.
-const DATA_ROOT = process.env.APP_DATA_PATH || "/tmp/rechnungsapp-data";
-const CONFIG_PATH = process.env.BACKUP_CONFIG_PATH || path.join(DATA_ROOT, "backup-config.json");
-const DEFAULT_LOCAL_PATH = process.env.BACKUP_LOCAL_PATH || path.join(DATA_ROOT, "backups");
+// Standard: persistenter Pfad unter /app/data (kann per APP_DATA_PATH/BACKUP_LOCAL_PATH überschrieben werden).
+const DEFAULT_DATA_ROOT = process.env.APP_DATA_PATH || process.env.BACKUP_DATA_PATH || "/app/data";
+const CONFIG_PATH = process.env.BACKUP_CONFIG_PATH || path.join(DEFAULT_DATA_ROOT, "backup-config.json");
+const DEFAULT_LOCAL_PATH = process.env.BACKUP_LOCAL_PATH || path.join(DEFAULT_DATA_ROOT, "backups");
 const DEFAULT_NAS_PATH = process.env.BACKUP_NAS_PATH || "";
 const PG_DUMP_BIN = process.env.PG_DUMP_PATH || "pg_dump";
 const PSQL_BIN = process.env.PSQL_PATH || "psql";
@@ -168,11 +168,24 @@ const mergeConfig = (base, incoming) => ({
 export const loadBackupConfig = async () => {
   await ensureDir(path.dirname(CONFIG_PATH));
   const fallback = defaultConfig();
+  const legacyPath = path.join("/tmp/rechnungsapp-data", "backup-config.json");
   try {
     const raw = await fs.promises.readFile(CONFIG_PATH, "utf8");
     const parsed = JSON.parse(raw || "{}");
     return mergeConfig(fallback, parsed);
   } catch {
+    // Migration: falls alte Config unter /tmp liegt, übernehmen
+    try {
+      if (fs.existsSync(legacyPath)) {
+        const legacyRaw = await fs.promises.readFile(legacyPath, "utf8");
+        const legacy = JSON.parse(legacyRaw || "{}");
+        const merged = mergeConfig(fallback, legacy);
+        await fs.promises.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2), "utf8");
+        return merged;
+      }
+    } catch {
+      // ignore legacy read errors
+    }
     return fallback;
   }
 };
