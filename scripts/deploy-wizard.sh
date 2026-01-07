@@ -148,6 +148,8 @@ if [[ "${MODE,,}" == "install" ]]; then
   APP_PUBLIC_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PUBLIC_PORT")"
   APP_PORT_VAL="$(current_env_value "${ENV_FILE}" "APP_PORT")"
   APP_HTTPS_DISABLE_VAL="$(current_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE")"
+  APP_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "APP_DATA_PATH")"
+  BACKUP_LOCAL_PATH_VAL="$(current_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH")"
   ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
 
   set_env_value "${ENV_FILE}" "DB_HOST" "$(prompt "DB_HOST" "${DB_HOST_VAL:-db}")"
@@ -161,6 +163,8 @@ if [[ "${MODE,,}" == "install" ]]; then
   set_env_value "${ENV_FILE}" "APP_PUBLIC_PORT" "$(prompt "APP_PUBLIC_PORT (Host-Port)" "${APP_PUBLIC_PORT_VAL:-3031}")"
   set_env_value "${ENV_FILE}" "APP_PORT" "$(prompt "APP_PORT (Container-Port)" "${APP_PORT_VAL:-3030}")"
   set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "${APP_HTTPS_DISABLE_VAL:-true}")"
+  set_env_value "${ENV_FILE}" "APP_DATA_PATH" "$(prompt "APP_DATA_PATH (Container, persistente Daten)" "${APP_DATA_PATH_VAL:-/app/data}")"
+  set_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH" "$(prompt "BACKUP_LOCAL_PATH (Container, Ziel für lokale Backups)" "${BACKUP_LOCAL_PATH_VAL:-/app/data/backups}")"
   set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-1}"
 else
   info "Update-Modus: .env bleibt unverändert (keine Prompts)."
@@ -170,6 +174,12 @@ fi
 DB_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "DB_DATA_PATH")"
 DB_DATA_PATH="${DB_DATA_PATH_VAL:-${SHARED_DIR}/data/db}"
 set_env_value "${ENV_FILE}" "DB_DATA_PATH" "${DB_DATA_PATH}"
+APP_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "APP_DATA_PATH")"
+[ -z "${APP_DATA_PATH_VAL}" ] && APP_DATA_PATH_VAL="/app/data"
+set_env_value "${ENV_FILE}" "APP_DATA_PATH" "${APP_DATA_PATH_VAL}"
+BACKUP_LOCAL_PATH_VAL="$(current_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH")"
+[ -z "${BACKUP_LOCAL_PATH_VAL}" ] && BACKUP_LOCAL_PATH_VAL="${APP_DATA_PATH_VAL}/backups"
+set_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH" "${BACKUP_LOCAL_PATH_VAL}"
 ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
 set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-1}"
 
@@ -231,6 +241,10 @@ for key in DB_HOST DB_PORT DB_NAME DB_SCHEMA DB_USER DB_PASS DATABASE_URL; do
   val="$(current_env_value "${ENV_FILE}" "${key}")"
   [ -n "${val}" ] && set_env_value "${BACKEND_ENV_FILE}" "${key}" "${val}"
 done
+APP_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "APP_DATA_PATH")"
+BACKUP_LOCAL_PATH_VAL="$(current_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH")"
+[ -n "${APP_DATA_PATH_VAL}" ] && set_env_value "${BACKEND_ENV_FILE}" "APP_DATA_PATH" "${APP_DATA_PATH_VAL}"
+[ -n "${BACKUP_LOCAL_PATH_VAL}" ] && set_env_value "${BACKEND_ENV_FILE}" "BACKUP_LOCAL_PATH" "${BACKUP_LOCAL_PATH_VAL}"
 ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
 [ -n "${ALLOW_NFS_MOUNT_VAL}" ] && set_env_value "${BACKEND_ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL}"
 
