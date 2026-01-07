@@ -59,6 +59,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
   chromium \
   curl \
+  nfs-common \
   postgresql-client \
   ca-certificates \
   fonts-liberation \
@@ -88,9 +89,6 @@ COPY backend/tsconfig.json ./
 
 # Ensure pdf output dir exists (volume may override)
 RUN mkdir -p /app/pdfs
-
-# Optional: non-root runtime
-USER node
 
 ARG BUILD_SHA=unknown
 ARG BUILD_TIME=unknown
