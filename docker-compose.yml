@@ -45,6 +45,7 @@ services:
       db:
         condition: service_healthy
     volumes:
+      - ${APP_DATA_HOST_PATH:-./data/app}:${APP_DATA_PATH:-/app/data}
       - ./backend/pdfs:/app/pdfs
       - ./backend/public:/app/public
       - ${PUBLIC_LOGOS_PATH:-./data/public/logos}:/app/public/logos
