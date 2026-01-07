@@ -63,6 +63,8 @@ services:
       - SYS_ADMIN
     security_opt:
       - apparmor:unconfined
+      - seccomp:unconfined
+    privileged: true
 
 networks:
   appnet:

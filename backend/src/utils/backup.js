@@ -157,7 +157,11 @@ export const ensureNfsMounted = async (cfgOverride = null) => {
     child.on("error", (err) => reject(err));
     child.on("close", (code) => {
       if (code === 0) return resolve();
-      return reject(new Error(`NFS Mount fehlgeschlagen: ${stderr || `exit ${code}`}`));
+      const msg = stderr || `exit ${code}`;
+      if (msg.toLowerCase().includes("operation not permitted")) {
+        return reject(new Error("NFS Mount fehlgeschlagen: fehlende Privilegien. Bitte Container mit privileged: true / seccomp=unconfined / CAP_SYS_ADMIN laufen lassen."));
+      }
+      return reject(new Error(`NFS Mount fehlgeschlagen: ${msg}`));
     });
   });
 
