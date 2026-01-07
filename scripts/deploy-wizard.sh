@@ -177,6 +177,13 @@ set_env_value "${ENV_FILE}" "DB_DATA_PATH" "${DB_DATA_PATH}"
 APP_DATA_PATH_VAL="$(current_env_value "${ENV_FILE}" "APP_DATA_PATH")"
 [ -z "${APP_DATA_PATH_VAL}" ] && APP_DATA_PATH_VAL="/app/data"
 set_env_value "${ENV_FILE}" "APP_DATA_PATH" "${APP_DATA_PATH_VAL}"
+APP_DATA_HOST_PATH_VAL="$(current_env_value "${ENV_FILE}" "APP_DATA_HOST_PATH")"
+[ -z "${APP_DATA_HOST_PATH_VAL}" ] && APP_DATA_HOST_PATH_VAL="${SHARED_DIR}/data/app"
+set_env_value "${ENV_FILE}" "APP_DATA_HOST_PATH" "${APP_DATA_HOST_PATH_VAL}"
+mkdir -p "${APP_DATA_HOST_PATH_VAL}" "${APP_DATA_HOST_PATH_VAL}/backups"
+# Rechte auf node:node (1000) versuchen, sonst weit offen, damit Backups/Config persistent bleiben.
+chown -R 1000:1000 "${APP_DATA_HOST_PATH_VAL}" 2>/dev/null || true
+chmod -R 777 "${APP_DATA_HOST_PATH_VAL}" 2>/dev/null || true
 BACKUP_LOCAL_PATH_VAL="$(current_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH")"
 [ -z "${BACKUP_LOCAL_PATH_VAL}" ] && BACKUP_LOCAL_PATH_VAL="${APP_DATA_PATH_VAL}/backups"
 set_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH" "${BACKUP_LOCAL_PATH_VAL}"
