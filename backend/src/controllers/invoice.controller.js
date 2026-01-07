@@ -1491,6 +1491,7 @@ async function ensureInvoicePdf(id) {
       zip: headerSettings?.zip || "",
       city: headerSettings?.city || "",
       country: headerSettings?.country || "",
+      phone: headerSettings?.phone || "",
       vat_id: headerSettings?.vat_id || "",
       footer_text: headerSettings?.footer_text || "",
       logo_url: headerSettings?.logo_url || null,
