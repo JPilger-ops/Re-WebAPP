@@ -3237,7 +3237,9 @@ function InvoiceDetailPage() {
                   <div className="text-xs text-slate-500 flex gap-3 mt-1">
                     <span>Menge: {Number(it.quantity).toLocaleString("de-DE")}</span>
                     <span>Preis: {Number(it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
-                    <span>MwSt: {it.vat_key}%</span>
+                    <span>
+                      MwSt: {it.vat_key === 1 ? "19%" : it.vat_key === 2 ? "7%" : `${it.vat_key}%`}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -5638,14 +5640,14 @@ function InvoiceSettingsForm() {
             className="input"
           />
         </Field>
-        <Field label="Straße">
+        <Field label="Inhaber">
           <input
             value={form.address_line1}
             onChange={(e) => setForm((f) => ({ ...f, address_line1: e.target.value }))}
             className="input"
           />
         </Field>
-        <Field label="Adresse Zeile 2">
+        <Field label="Straße">
           <input
             value={form.address_line2}
             onChange={(e) => setForm((f) => ({ ...f, address_line2: e.target.value }))}
