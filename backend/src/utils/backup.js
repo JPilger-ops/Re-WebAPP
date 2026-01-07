@@ -13,13 +13,23 @@ const __dirname = path.dirname(__filename);
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 // Standard: persistenter Pfad unter /app/data (kann per APP_DATA_PATH/BACKUP_LOCAL_PATH überschrieben werden).
-const DEFAULT_DATA_ROOT = process.env.APP_DATA_PATH || process.env.BACKUP_DATA_PATH || "/app/data";
-const CONFIG_PATH = process.env.BACKUP_CONFIG_PATH || path.join(DEFAULT_DATA_ROOT, "backup-config.json");
-const DEFAULT_LOCAL_PATH = process.env.BACKUP_LOCAL_PATH || path.join(DEFAULT_DATA_ROOT, "backups");
+let DATA_ROOT = process.env.APP_DATA_PATH || process.env.BACKUP_DATA_PATH || "/app/data";
+let CONFIG_PATH = process.env.BACKUP_CONFIG_PATH || path.join(DATA_ROOT, "backup-config.json");
+let DEFAULT_LOCAL_PATH = process.env.BACKUP_LOCAL_PATH || path.join(DATA_ROOT, "backups");
 const DEFAULT_NAS_PATH = process.env.BACKUP_NAS_PATH || "";
 const PG_DUMP_BIN = process.env.PG_DUMP_PATH || "pg_dump";
 const PSQL_BIN = process.env.PSQL_PATH || "psql";
 const META_SUFFIX = ".json";
+
+const setDataRoot = (root) => {
+  DATA_ROOT = root;
+  if (!process.env.BACKUP_CONFIG_PATH) {
+    CONFIG_PATH = path.join(DATA_ROOT, "backup-config.json");
+  }
+  if (!process.env.BACKUP_LOCAL_PATH) {
+    DEFAULT_LOCAL_PATH = path.join(DATA_ROOT, "backups");
+  }
+};
 
 const toNullableInt = (value) => {
   if (value === null || value === undefined || value === "") return null;
@@ -166,7 +176,17 @@ const mergeConfig = (base, incoming) => ({
 });
 
 export const loadBackupConfig = async () => {
-  await ensureDir(path.dirname(CONFIG_PATH));
+  try {
+    await ensureDir(path.dirname(CONFIG_PATH));
+  } catch (err) {
+    if (err?.code === "EACCES" && DATA_ROOT !== "/tmp/rechnungsapp-data") {
+      console.warn(`[backup] Datenpfad ${DATA_ROOT} nicht beschreibbar, falle zurück auf /tmp/rechnungsapp-data`);
+      setDataRoot("/tmp/rechnungsapp-data");
+      await ensureDir(path.dirname(CONFIG_PATH));
+    } else {
+      throw err;
+    }
+  }
   const fallback = defaultConfig();
   const legacyPath = path.join("/tmp/rechnungsapp-data", "backup-config.json");
   try {
