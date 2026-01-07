@@ -3730,8 +3730,7 @@ function AdminSettings() {
     { key: "branding", label: "Branding" },
     { key: "mail", label: "Mail / SMTP" },
     { key: "email_templates", label: "E-Mail Vorlagen" },
-    { key: "header", label: "Rechnungskopf" },
-    { key: "bank", label: "Bank / Steuer" },
+    { key: "invoices", label: "Rechnungen" },
     { key: "datev", label: "DATEV" },
     { key: "hkforms", label: "Forms-Sync" },
     { key: "backups", label: "Backups" },
@@ -3755,10 +3754,8 @@ function AdminSettings() {
         return <SmtpSettingsForm />;
       case "email_templates":
         return <EmailTemplatesSettings />;
-      case "header":
-        return <InvoiceHeaderForm />;
-      case "bank":
-        return <BankTaxSettingsForm />;
+      case "invoices":
+        return <InvoiceSettingsForm />;
       case "datev":
         return <DatevSettingsForm />;
       case "hkforms":
@@ -5509,11 +5506,27 @@ function EmailTemplatesSettings() {
   );
 }
 
-function InvoiceHeaderForm() {
+function InvoiceSettingsForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<FormStatus>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    company_name: string;
+    address_line1: string;
+    address_line2: string;
+    zip: string;
+    city: string;
+    country: string;
+    phone: string;
+    vat_id: string;
+    account_holder: string;
+    bank_name: string;
+    iban: string;
+    bic: string;
+    tax_number: string;
+    footer_text: string;
+    logo_url: string;
+  }>({
     company_name: "",
     address_line1: "",
     address_line2: "",
@@ -5522,9 +5535,11 @@ function InvoiceHeaderForm() {
     country: "",
     phone: "",
     vat_id: "",
+    account_holder: "",
     bank_name: "",
     iban: "",
     bic: "",
+    tax_number: "",
     footer_text: "",
     logo_url: "",
   });
@@ -5532,26 +5547,28 @@ function InvoiceHeaderForm() {
   useEffect(() => {
     setStatus(null);
     setLoading(true);
-    getInvoiceHeader()
-      .then((data) => {
+    Promise.all([getInvoiceHeader(), getBankSettings(), getTaxSettings()])
+      .then(([header, bank, tax]) => {
         setForm({
-          company_name: data.company_name || "",
-          address_line1: data.address_line1 || "",
-          address_line2: data.address_line2 || "",
-          zip: data.zip || "",
-          city: data.city || "",
-          country: data.country || "",
-          phone: data.phone || "",
-          vat_id: data.vat_id || "",
-          bank_name: data.bank_name || "",
-          iban: data.iban || "",
-          bic: data.bic || "",
-          footer_text: data.footer_text || "",
-          logo_url: data.logo_url || "",
+          company_name: header.company_name || "",
+          address_line1: header.address_line1 || "",
+          address_line2: header.address_line2 || "",
+          zip: header.zip || "",
+          city: header.city || "",
+          country: header.country || "",
+          phone: header.phone || "",
+          vat_id: tax.vat_id || header.vat_id || "",
+          account_holder: bank.account_holder || "",
+          bank_name: bank.bank_name || header.bank_name || "",
+          iban: bank.iban || header.iban || "",
+          bic: bank.bic || header.bic || "",
+          tax_number: tax.tax_number || "",
+          footer_text: header.footer_text || "",
+          logo_url: header.logo_url || "",
         });
       })
       .catch((err: ApiError) =>
-        setStatus({ type: "error", message: err.message || "Konnte Briefkopf nicht laden." })
+        setStatus({ type: "error", message: err.message || "Konnte Rechnungsdaten nicht laden." })
       )
       .finally(() => setLoading(false));
   }, []);
@@ -5561,8 +5578,34 @@ function InvoiceHeaderForm() {
     setSaving(true);
     setStatus(null);
     try {
-      await updateInvoiceHeader(form);
-      setStatus({ type: "success", message: "Briefkopf gespeichert." });
+      await Promise.all([
+        updateInvoiceHeader({
+          company_name: form.company_name || null,
+          address_line1: form.address_line1 || null,
+          address_line2: form.address_line2 || null,
+          zip: form.zip || null,
+          city: form.city || null,
+          country: form.country || null,
+          phone: form.phone || null,
+          vat_id: form.vat_id || null,
+          bank_name: form.bank_name || null,
+          iban: form.iban || null,
+          bic: form.bic || null,
+          footer_text: form.footer_text || null,
+          logo_url: form.logo_url || null,
+        }),
+        updateBankSettings({
+          account_holder: form.account_holder,
+          bank_name: form.bank_name,
+          iban: form.iban,
+          bic: form.bic,
+        }),
+        updateTaxSettings({
+          tax_number: form.tax_number || null,
+          vat_id: form.vat_id || null,
+        }),
+      ]);
+      setStatus({ type: "success", message: "Rechnungsdaten gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
       setStatus({ type: "error", message: apiErr.message || "Speichern fehlgeschlagen." });
@@ -5574,7 +5617,7 @@ function InvoiceHeaderForm() {
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Rechnungskopf / Briefkopf</h2>
+        <h2 className="text-xl font-semibold">Rechnungen</h2>
         {loading && <span className="text-sm text-slate-500">Lade ...</span>}
       </div>
       <p className="text-sm text-slate-600 mb-3">
@@ -5595,7 +5638,7 @@ function InvoiceHeaderForm() {
             className="input"
           />
         </Field>
-        <Field label="Inhaber">
+        <Field label="Straße">
           <input
             value={form.address_line1}
             onChange={(e) => setForm((f) => ({ ...f, address_line1: e.target.value }))}
@@ -5637,11 +5680,20 @@ function InvoiceHeaderForm() {
             className="input"
           />
         </Field>
+        <Field label="Kontoinhaber">
+          <input
+            value={form.account_holder}
+            onChange={(e) => setForm((f) => ({ ...f, account_holder: e.target.value }))}
+            className="input"
+            required
+          />
+        </Field>
         <Field label="Bank">
           <input
             value={form.bank_name}
             onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
             className="input"
+            required
           />
         </Field>
         <Field label="IBAN">
@@ -5649,12 +5701,21 @@ function InvoiceHeaderForm() {
             value={form.iban}
             onChange={(e) => setForm((f) => ({ ...f, iban: e.target.value }))}
             className="input"
+            required
           />
         </Field>
         <Field label="BIC">
           <input
             value={form.bic}
             onChange={(e) => setForm((f) => ({ ...f, bic: e.target.value }))}
+            className="input"
+            required
+          />
+        </Field>
+        <Field label="Steuernummer">
+          <input
+            value={form.tax_number}
+            onChange={(e) => setForm((f) => ({ ...f, tax_number: e.target.value }))}
             className="input"
           />
         </Field>
@@ -5692,6 +5753,7 @@ function InvoiceHeaderForm() {
     </div>
   );
 }
+
 
 function ApiKeysSection() {
   const [loading, setLoading] = useState(true);
