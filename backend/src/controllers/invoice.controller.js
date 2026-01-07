@@ -95,6 +95,27 @@ const moveInvoicePdfToArchive = async (invoiceNumber) => {
   }
 };
 
+const moveInvoicePdfToTrash = async (invoiceNumber) => {
+  try {
+    const { trash: trashDir, storage: pdfDir } = await getPdfPaths();
+    const candidates = [`RE-${invoiceNumber}.pdf`, `Rechnung-${invoiceNumber}.pdf`];
+    for (const name of candidates) {
+      const source = path.join(pdfDir, name);
+      if (fs.existsSync(source)) {
+        const parsed = path.parse(name);
+        let target = path.join(trashDir, name);
+        if (fs.existsSync(target)) {
+          target = path.join(trashDir, `${parsed.name}-${Date.now()}${parsed.ext}`);
+        }
+        await fs.promises.rename(source, target);
+        console.log(`[Delete] PDF in Papierkorb verschoben: ${name}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[Delete] PDF-Verschiebung fehlgeschlagen (${invoiceNumber}):`, err.message);
+  }
+};
+
 ensureBrandingAssetsSync();
 
 const n = (value) => Number(value) || 0;
@@ -2658,17 +2679,7 @@ export const deleteInvoice = async (req, res) => {
       });
     });
 
-    // PDF-Datei (falls vorhanden) löschen
-    try {
-      const { storage: pdfDir } = await getPdfPaths();
-      const filename = `Rechnung-${invoiceRow.invoice_number}.pdf`;
-      const filepath = path.join(pdfDir, filename);
-      if (fs.existsSync(filepath)) {
-        fs.unlinkSync(filepath);
-      }
-    } catch (err) {
-      console.warn("Konnte PDF-Datei nicht löschen:", err.message);
-    }
+    await moveInvoicePdfToTrash(invoiceRow.invoice_number);
 
     return res.json({ message: "Rechnung gelöscht" });
   } catch (err) {

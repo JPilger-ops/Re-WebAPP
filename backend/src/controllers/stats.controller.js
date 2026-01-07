@@ -27,6 +27,8 @@ export const getInvoiceStats = async (req, res) => {
       filters.push(`EXTRACT(YEAR FROM i.date)::int = $${values.length}`);
     }
 
+    filters.push("i.canceled_at IS NULL");
+
     if (categoryList && categoryList.length) {
       values.push(categoryList);
       filters.push(`i.category = ANY($${values.length})`);
