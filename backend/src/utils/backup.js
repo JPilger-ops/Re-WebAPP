@@ -81,6 +81,19 @@ const defaultConfig = () => ({
 const nfsMountAllowed = () =>
   ["1", "true", "yes"].includes((process.env.ALLOW_NFS_MOUNT || "").toLowerCase());
 
+const isMountActive = (mountPoint) => {
+  try {
+    const mounts = fs.readFileSync("/proc/mounts", "utf8");
+    const lines = mounts.split("\n").filter(Boolean);
+    return lines.some((line) => {
+      const parts = line.split(" ");
+      return parts[1] === mountPoint && parts[2].startsWith("nfs");
+    });
+  } catch {
+    return false;
+  }
+};
+
 export const ensureNfsMounted = async (cfgOverride = null) => {
   const cfg = cfgOverride || await loadBackupConfig();
   const nfs = cfg?.nfs || {};
@@ -120,13 +133,14 @@ export const ensureNfsMounted = async (cfgOverride = null) => {
     }
   };
 
-  try {
+  const mounted = isMountActive(mountDir);
+  if (mounted) {
     await testWrite();
     return { mounted: true, path: mountDir, justMounted: false };
-  } catch {
-    if (!nfsMountAllowed()) {
-      throw new Error("NFS nicht gemountet. Bitte manuell mounten oder ALLOW_NFS_MOUNT=1 setzen.");
-    }
+  }
+
+  if (!nfsMountAllowed()) {
+    throw new Error("NFS nicht gemountet. Bitte manuell mounten oder ALLOW_NFS_MOUNT=1 setzen.");
   }
 
   const target = `${server}:${exportPath}`;
