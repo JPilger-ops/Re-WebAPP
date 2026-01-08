@@ -44,6 +44,7 @@ const normalizeAuto = (payload = {}) => {
 
 const normalizeNfs = (payload = {}) => {
   const enabled = Boolean(payload.enabled);
+  const auto_mount = payload.auto_mount === undefined ? true : Boolean(payload.auto_mount);
   const server = (payload.server || "").trim();
   const export_path = (payload.export_path || "").trim();
   const mount_point = (payload.mount_point || "").trim();
@@ -56,6 +57,7 @@ const normalizeNfs = (payload = {}) => {
   }
   return {
     enabled,
+    auto_mount,
     server,
     export_path,
     mount_point,
@@ -74,19 +76,26 @@ export const getBackupSettings = async (_req, res) => {
 };
 
 export const updateBackupSettings = async (req, res) => {
-  const { local_path, nas_path, default_target, retention, auto, nfs } = req.body || {};
+  const { local_path, nas_path, default_target, retention, auto, nfs, ui_create_target } = req.body || {};
   try {
     const nfsConfig = nfs ? normalizeNfs(nfs) : undefined;
     const resolvedNas =
       nas_path ? assertAbsolute(nas_path, "NAS Pfad") : nas_path === "" ? null : undefined;
+    const uiTarget = ui_create_target === "nas" ? "nas" : ui_create_target === "local" ? "local" : undefined;
+    const defaultTarget = default_target === "nas" ? "nas" : default_target === "local" ? "local" : undefined;
     const updates = {
       local_path: local_path ? assertAbsolute(local_path, "Lokaler Pfad") : undefined,
       nas_path: resolvedNas !== undefined ? resolvedNas : nfsConfig?.enabled ? path.join(nfsConfig.mount_point, "backups") : undefined,
-      default_target: default_target === "nas" ? "nas" : "local",
       retention: retention ? normalizeRetention(retention) : undefined,
       auto: auto ? normalizeAuto(auto) : undefined,
       nfs: nfsConfig,
     };
+    if (defaultTarget) {
+      updates.default_target = defaultTarget;
+    }
+    if (uiTarget) {
+      updates.ui_create_target = uiTarget;
+    }
     const next = await saveBackupConfig(updates);
     await testBackupPath(next.local_path);
     if (next.nas_path) {
