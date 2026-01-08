@@ -191,12 +191,14 @@ export interface BackupSettings {
   local_path: string;
   nas_path?: string | null;
   default_target?: "local" | "nas";
+  ui_create_target?: "local" | "nas";
   retention?: {
     max_count?: number | null;
     max_days?: number | null;
   } | null;
   nfs?: {
     enabled?: boolean;
+    auto_mount?: boolean;
     server?: string;
     export_path?: string;
     mount_point?: string;
@@ -385,7 +387,7 @@ export async function getBackupSettings() {
   return apiFetch<BackupSettings>("/backups/settings");
 }
 
-export async function updateBackupSettings(payload: BackupSettings) {
+export async function updateBackupSettings(payload: Partial<BackupSettings>) {
   return apiFetch<BackupSettings>("/backups/settings", {
     method: "PUT",
     body: JSON.stringify(payload),

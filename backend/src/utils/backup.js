@@ -55,6 +55,7 @@ const defaultConfig = () => ({
   local_path: DEFAULT_LOCAL_PATH,
   nas_path: DEFAULT_NAS_PATH || null,
   default_target: "local",
+  ui_create_target: "local",
   retention: {
     max_count: null,
     max_days: null,
@@ -71,6 +72,7 @@ const defaultConfig = () => ({
   },
   nfs: {
     enabled: false,
+    auto_mount: true,
     server: "",
     export_path: "",
     mount_point: "",
@@ -231,12 +233,13 @@ export const loadBackupConfig = async () => {
 export const saveBackupConfig = async (updates = {}) => {
   const current = await loadBackupConfig();
   const nasProvided = Object.prototype.hasOwnProperty.call(updates, "nas_path");
+  const defaultTargetProvided = Object.prototype.hasOwnProperty.call(updates, "default_target");
   const merged = mergeConfig(current, updates);
   const next = {
     ...merged,
     local_path: updates.local_path || current.local_path || DEFAULT_LOCAL_PATH,
     nas_path: nasProvided ? (updates.nas_path || null) : current.nas_path || null,
-    default_target: updates.default_target === "nas" ? "nas" : "local",
+    default_target: defaultTargetProvided ? (updates.default_target === "nas" ? "nas" : "local") : current.default_target || "local",
   };
   await ensureDir(path.dirname(CONFIG_PATH));
   await fs.promises.writeFile(CONFIG_PATH, JSON.stringify(next, null, 2), "utf8");
@@ -429,7 +432,7 @@ const resolveTargetDir = (target, cfg) => {
 
 const ensureTargetDir = async (target, cfg) => {
   const nfs = cfg.nfs || {};
-  if (target === "nas" && nfs.enabled) {
+  if (target === "nas" && nfs.enabled && nfs.auto_mount !== false) {
     await ensureNfsMounted(cfg);
   }
   const dir = resolveTargetDir(target, cfg);

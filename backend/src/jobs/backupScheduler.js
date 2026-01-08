@@ -36,7 +36,7 @@ export const runAutoBackup = async () => {
     return;
   }
   try {
-    if (auto.target === "nas") {
+    if (auto.target === "nas" && cfg?.nfs?.auto_mount !== false) {
       await ensureNfsMounted(cfg);
     }
     await createBackup({

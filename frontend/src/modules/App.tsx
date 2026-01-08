@@ -2421,22 +2421,19 @@ function InvoiceFormModal({
     }
   };
 
-  const findCustomerByName = (value: string) => {
+  const findExactCustomerByName = (value: string) => {
     const needle = value.trim().toLowerCase();
     if (!needle) return null;
     const exact = customers.find((c) => (c.name || "").trim().toLowerCase() === needle);
     if (exact) return exact;
-    if (needle.length >= 3) {
-      const partialMatches = customers.filter((c) => (c.name || "").trim().toLowerCase().includes(needle));
-      if (partialMatches.length === 1) return partialMatches[0];
-    }
     return null;
   };
 
+  const recipientMinChars = 2;
   const recipientSuggestions = useMemo(() => {
     const needle = form.name.trim().toLowerCase();
+    if (needle.length < recipientMinChars) return [];
     const list = customers.filter((c) => (c.name || "").trim());
-    if (!needle) return list.slice(0, 8);
     return list.filter((c) => (c.name || "").trim().toLowerCase().includes(needle)).slice(0, 8);
   }, [customers, form.name]);
 
@@ -2453,8 +2450,7 @@ function InvoiceFormModal({
     recipientBlurTimer.current = setTimeout(() => setRecipientOpen(false), 120);
   };
 
-  const handleRecipientNameChange = (value: string) => {
-    const match = findCustomerByName(value);
+  const applyRecipientSelection = (value: string, match: Customer | null) => {
     const trimmed = value.trim();
     setForm((f) => {
       const base = {
@@ -2478,6 +2474,11 @@ function InvoiceFormModal({
       }
       return base;
     });
+  };
+
+  const handleRecipientNameChange = (value: string) => {
+    const match = findExactCustomerByName(value);
+    applyRecipientSelection(value, match);
   };
 
   const updateItem = (idx: number, field: keyof InvoiceItem, value: any) => {
@@ -2626,6 +2627,7 @@ function InvoiceFormModal({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setRecipientOpen(false);
                   }}
+                  autoComplete="off"
                   placeholder="Empfänger eingeben oder wählen"
                   required
                 />
@@ -2641,7 +2643,7 @@ function InvoiceFormModal({
                           className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-slate-100"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
-                            handleRecipientNameChange(label);
+                            applyRecipientSelection(label, c);
                             setRecipientOpen(false);
                           }}
                         >
@@ -3224,7 +3226,7 @@ function InvoiceDetailPage() {
 
       {toast && <Alert type={toast.type === "success" ? "success" : "error"}>{toast.message}</Alert>}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,520px)]">
         <div className="space-y-4">
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
@@ -3321,7 +3323,7 @@ function InvoiceDetailPage() {
             <div className="text-xs uppercase text-slate-500">Beträge</div>
             {vatSummary.rows.length ? (
               <div className="overflow-x-auto border border-slate-100 rounded-lg">
-                <table className="w-full text-sm min-w-[420px]">
+                <table className="min-w-full text-sm table-auto">
                   <thead className="bg-slate-50 text-xs text-slate-500 uppercase whitespace-nowrap">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">Satz</th>
@@ -4120,7 +4122,7 @@ function FaviconSettingsForm() {
 
 function BackupSettingsPanel() {
   const defaultRetention = { max_count: null as number | null, max_days: null as number | null };
-  const defaultNfs = { enabled: false, server: "", export_path: "", mount_point: "", options: "" };
+  const defaultNfs = { enabled: false, auto_mount: true, server: "", export_path: "", mount_point: "", options: "" };
   const defaultAuto = {
     enabled: false,
     interval_minutes: 1440,
@@ -4136,6 +4138,7 @@ function BackupSettingsPanel() {
     local_path: "",
     nas_path: "",
     default_target: "local",
+    ui_create_target: "local",
     retention: defaultRetention,
     nfs: defaultNfs,
     auto: defaultAuto,
@@ -4158,26 +4161,6 @@ function BackupSettingsPanel() {
   const [busyRestore, setBusyRestore] = useState(false);
   const [busyDelete, setBusyDelete] = useState(false);
   const [busyMount, setBusyMount] = useState(false);
-  const createTargetStorageKey = "backup-create-target";
-
-  const readCreateTarget = () => {
-    if (typeof window === "undefined") return null;
-    try {
-      const stored = window.localStorage.getItem(createTargetStorageKey);
-      return stored === "nas" || stored === "local" ? stored : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const persistCreateTarget = (value: "local" | "nas") => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(createTargetStorageKey, value);
-    } catch {
-      // ignore storage errors
-    }
-  };
 
   const retention = settings.retention || defaultRetention;
   const nfsCfg = settings.nfs || defaultNfs;
@@ -4200,22 +4183,19 @@ function BackupSettingsPanel() {
     try {
       const data = await getBackupSettings();
       const defaultTarget = data.default_target === "nas" ? "nas" : "local";
-      const storedTarget = readCreateTarget();
+      const uiTarget = data.ui_create_target === "nas" ? "nas" : data.ui_create_target === "local" ? "local" : defaultTarget;
       const nasAvailable = !!(data.nas_path || data.nfs?.mount_point || "").trim();
-      const nextTarget = storedTarget || defaultTarget;
-      const resolvedTarget = nextTarget === "nas" && !nasAvailable ? "local" : nextTarget;
+      const resolvedTarget = uiTarget === "nas" && !nasAvailable ? "local" : uiTarget;
       setSettings({
         local_path: data.local_path || "",
         nas_path: data.nas_path || "",
         default_target: defaultTarget,
+        ui_create_target: uiTarget,
         retention: data.retention || defaultRetention,
         nfs: data.nfs || defaultNfs,
         auto: data.auto || { ...defaultAuto, target: defaultTarget },
       });
       setCreateTarget(resolvedTarget);
-      if (!storedTarget || storedTarget !== resolvedTarget) {
-        persistCreateTarget(resolvedTarget);
-      }
     } catch (err: any) {
       const apiErr = err as ApiError;
       setStatus({ type: "error", message: apiErr.message || "Backups-Einstellungen konnten nicht geladen werden." });
@@ -4255,9 +4235,8 @@ function BackupSettingsPanel() {
         auto: { ...autoCfg, interval_minutes: autoHours * 60 },
       });
       setSettings(saved);
-      const nextTarget = saved.default_target === "nas" ? "nas" : "local";
+      const nextTarget = saved.ui_create_target === "nas" ? "nas" : saved.ui_create_target === "local" ? "local" : "local";
       setCreateTarget(nextTarget);
-      persistCreateTarget(nextTarget);
       setStatus({ type: "success", message: "Einstellungen gespeichert." });
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -4301,6 +4280,17 @@ function BackupSettingsPanel() {
       setNfsStatus({ type: "error", message: apiErr.message || "NFS Mount fehlgeschlagen." });
     } finally {
       setBusyMount(false);
+    }
+  };
+
+  const persistCreateTarget = async (nextTarget: "local" | "nas") => {
+    setCreateTarget(nextTarget);
+    setSettings((s) => ({ ...s, ui_create_target: nextTarget }));
+    try {
+      await updateBackupSettings({ ui_create_target: nextTarget });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setListStatus({ type: "error", message: apiErr.message || "Speicherziel konnte nicht gespeichert werden." });
     }
   };
 
@@ -4434,14 +4424,26 @@ function BackupSettingsPanel() {
             <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-slate-800 text-sm">NFS Mount</h4>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={!!nfsCfg.enabled}
-                    onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), enabled: e.target.checked } }))}
-                  />
-                  Aktivieren
-                </label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={!!nfsCfg.enabled}
+                      onChange={(e) => setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), enabled: e.target.checked } }))}
+                    />
+                    Aktivieren
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={nfsCfg.auto_mount !== false}
+                      onChange={(e) =>
+                        setSettings((s) => ({ ...s, nfs: { ...(s.nfs || defaultNfs), auto_mount: e.target.checked } }))
+                      }
+                    />
+                    Auto-Mount
+                  </label>
+                </div>
               </div>
               <div className="grid gap-2 md:grid-cols-2 text-sm">
                 <label className="block">
@@ -4640,7 +4642,6 @@ function BackupSettingsPanel() {
                 value="local"
                 checked={createTarget === "local"}
                 onChange={() => {
-                  setCreateTarget("local");
                   persistCreateTarget("local");
                 }}
               />
@@ -4653,7 +4654,6 @@ function BackupSettingsPanel() {
                 value="nas"
                 checked={createTarget === "nas"}
                 onChange={() => {
-                  setCreateTarget("nas");
                   persistCreateTarget("nas");
                 }}
                 disabled={!nasConfigured}
