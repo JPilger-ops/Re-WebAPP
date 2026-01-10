@@ -4,7 +4,7 @@ import { ApiError, AuthUser, login as apiLogin, logout as apiLogout, me } from "
 type AuthState = {
   user: AuthUser | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<AuthUser>;
+  login: (username: string, password: string, otp?: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthUser | null>;
   error: string | null;
@@ -90,9 +90,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     scheduleIdleTimers();
   }, [scheduleIdleTimers]);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string, otp?: string) => {
     setError(null);
-    const res = await apiLogin(username, password);
+    const res = await apiLogin(username, password, otp);
     const current = await me();
     setUser(current);
     return current;

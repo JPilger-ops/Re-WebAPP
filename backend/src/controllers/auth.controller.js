@@ -2,6 +2,7 @@ import { prisma } from "../utils/prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { getAuthCookieSameSite, getAuthTokenTtlMinutes } from "../utils/networkSettings.js";
+import { generateMfaSecret, verifyMfaToken } from "../utils/mfa.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const isSecureRequest = (req) =>
@@ -167,6 +168,7 @@ export const register = async (req, res) => {
       ...user,
       role_name: roleNameResolved,
       permissions,
+      mfa_enabled: false,
     };
 
     const token = signToken(fullUser);
@@ -181,6 +183,7 @@ export const register = async (req, res) => {
           role_id: fullUser.role_id,
           role_name: fullUser.role_name,
           permissions: fullUser.permissions,
+          mfa_enabled: fullUser.mfa_enabled,
         },
       });
   } catch (err) {
@@ -195,7 +198,7 @@ export const register = async (req, res) => {
  */
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, otp } = req.body;
 
     if (!username || !password) {
       return res
@@ -215,6 +218,8 @@ export const login = async (req, res) => {
         username: true,
         password_hash: true,
         is_active: true,
+        mfa_enabled: true,
+        mfa_secret: true,
         role_id: true,
         roles: {
           select: {
@@ -240,6 +245,20 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: "Login fehlgeschlagen." });
     }
 
+    if (user.mfa_enabled) {
+      if (!user.mfa_secret) {
+        return res.status(500).json({ message: "MFA ist aktiviert, aber nicht korrekt eingerichtet." });
+      }
+      if (!otp) {
+        return res.status(401).json({ message: "MFA erforderlich.", mfa_required: true });
+      }
+      const otpOk = verifyMfaToken(user.mfa_secret, otp);
+      if (!otpOk) {
+        registerFailure(username);
+        return res.status(401).json({ message: "MFA Code ungültig.", mfa_required: true });
+      }
+    }
+
     // Permissions laden
     const permissions = await loadPermissionsForRole(user.role_id);
     const roleName = user.roles?.name || null;
@@ -250,6 +269,7 @@ export const login = async (req, res) => {
       role_id: user.role_id,
       role_name: roleName,
       permissions,
+      mfa_enabled: Boolean(user.mfa_enabled),
     };
 
     const token = signToken(fullUser);
@@ -282,12 +302,22 @@ export const logout = (req, res) => {
  * GET /api/auth/me
  * Aktuellen Benutzer (aus JWT) zurückgeben
  */
-export const me = (req, res) => {
+export const me = async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ message: "Nicht eingeloggt." });
   }
 
   const user = req.user;
+  let mfaEnabled = false;
+  try {
+    const dbUser = await prisma.users.findUnique({
+      where: { id: user.id },
+      select: { mfa_enabled: true },
+    });
+    mfaEnabled = Boolean(dbUser?.mfa_enabled);
+  } catch (err) {
+    console.error("MFA Status konnte nicht geladen werden:", err);
+  }
 
   res.json({
     id: user.id,
@@ -295,6 +325,7 @@ export const me = (req, res) => {
     role_id: user.role_id,
     role_name: user.role_name,
     permissions: user.permissions || [],
+    mfa_enabled: mfaEnabled,
   });
 };
 
@@ -310,6 +341,102 @@ export const verifyCreatePin = (req, res) => {
   }
 
   return res.status(401).json({ message: "Erstell-PIN falsch" });
+};
+
+export const getMfaStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { mfa_enabled: true, mfa_temp_secret: true },
+    });
+    if (!user) return res.status(404).json({ message: "Benutzer nicht gefunden." });
+    return res.json({ enabled: Boolean(user.mfa_enabled), pending: Boolean(user.mfa_temp_secret) });
+  } catch (err) {
+    console.error("MFA Status Fehler:", err);
+    return res.status(500).json({ message: "MFA Status konnte nicht geladen werden." });
+  }
+};
+
+export const startMfaSetup = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { username: true, mfa_enabled: true },
+    });
+    if (!user) return res.status(404).json({ message: "Benutzer nicht gefunden." });
+    if (user.mfa_enabled) {
+      return res.status(409).json({ message: "MFA ist bereits aktiviert." });
+    }
+    const setup = await generateMfaSecret(user.username);
+    await prisma.users.update({
+      where: { id: userId },
+      data: { mfa_temp_secret: setup.secret, mfa_enabled: false },
+    });
+    return res.json(setup);
+  } catch (err) {
+    console.error("MFA Setup Fehler:", err);
+    return res.status(500).json({ message: "MFA Setup fehlgeschlagen." });
+  }
+};
+
+export const verifyMfaSetup = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { code } = req.body || {};
+    if (!code) return res.status(400).json({ message: "MFA Code fehlt." });
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { mfa_enabled: true, mfa_temp_secret: true },
+    });
+    if (!user) return res.status(404).json({ message: "Benutzer nicht gefunden." });
+    if (user.mfa_enabled) {
+      return res.status(409).json({ message: "MFA ist bereits aktiviert." });
+    }
+    if (!user.mfa_temp_secret) {
+      return res.status(400).json({ message: "MFA Setup wurde noch nicht gestartet." });
+    }
+    const ok = verifyMfaToken(user.mfa_temp_secret, code);
+    if (!ok) return res.status(401).json({ message: "MFA Code ungültig." });
+    await prisma.users.update({
+      where: { id: userId },
+      data: { mfa_enabled: true, mfa_secret: user.mfa_temp_secret, mfa_temp_secret: null },
+    });
+    return res.json({ message: "MFA aktiviert." });
+  } catch (err) {
+    console.error("MFA Verify Fehler:", err);
+    return res.status(500).json({ message: "MFA Aktivierung fehlgeschlagen." });
+  }
+};
+
+export const disableMfa = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { password, code } = req.body || {};
+    if (!password) return res.status(400).json({ message: "Passwort erforderlich." });
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { password_hash: true, mfa_enabled: true, mfa_secret: true },
+    });
+    if (!user) return res.status(404).json({ message: "Benutzer nicht gefunden." });
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ message: "Passwort falsch." });
+    if (user.mfa_enabled) {
+      if (!code) return res.status(400).json({ message: "MFA Code erforderlich." });
+      if (!user.mfa_secret || !verifyMfaToken(user.mfa_secret, code)) {
+        return res.status(401).json({ message: "MFA Code ungültig." });
+      }
+    }
+    await prisma.users.update({
+      where: { id: userId },
+      data: { mfa_enabled: false, mfa_secret: null, mfa_temp_secret: null },
+    });
+    return res.json({ message: "MFA deaktiviert." });
+  } catch (err) {
+    console.error("MFA Deaktivierung Fehler:", err);
+    return res.status(500).json({ message: "MFA konnte nicht deaktiviert werden." });
+  }
 };
 
 export const changePassword = async (req, res) => {
