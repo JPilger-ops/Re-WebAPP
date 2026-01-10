@@ -8,6 +8,7 @@ export interface AuthUser {
   role_id?: number | null;
   role_name?: string | null;
   permissions?: string[];
+  mfa_enabled?: boolean;
 }
 
 export interface VersionInfo {
@@ -67,10 +68,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   throw err;
 }
 
-export async function login(username: string, password: string) {
+export async function login(username: string, password: string, otp?: string) {
   return apiFetch<{ message: string; user: AuthUser }>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, otp: otp || undefined }),
   });
 }
 
@@ -89,6 +90,39 @@ export async function changePassword(payload: { currentPassword: string; newPass
       oldPassword: payload.currentPassword,
       newPassword: payload.newPassword,
     }),
+  });
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  pending: boolean;
+}
+
+export interface MfaSetupResponse {
+  secret: string;
+  otpauth_url: string;
+  qr_code: string;
+}
+
+export async function getMfaStatus() {
+  return apiFetch<MfaStatus>("/auth/mfa/status");
+}
+
+export async function startMfaSetup() {
+  return apiFetch<MfaSetupResponse>("/auth/mfa/setup", { method: "POST" });
+}
+
+export async function verifyMfaSetup(code: string) {
+  return apiFetch<{ message: string }>("/auth/mfa/verify", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function disableMfa(payload: { password: string; code?: string }) {
+  return apiFetch<{ message: string }>("/auth/mfa/disable", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

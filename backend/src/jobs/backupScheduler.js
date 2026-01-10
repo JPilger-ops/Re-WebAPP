@@ -10,6 +10,18 @@ const clearTimer = () => {
   }
 };
 
+const autoMountOnStartup = async () => {
+  const cfg = await loadBackupConfig();
+  const nfs = cfg.nfs || {};
+  if (!nfs.enabled || nfs.auto_mount === false) return;
+  try {
+    await ensureNfsMounted(cfg);
+    console.log("[backup] NFS Auto-Mount aktiviert.");
+  } catch (err) {
+    console.error("[backup] NFS Auto-Mount fehlgeschlagen:", err?.message || err);
+  }
+};
+
 const scheduleNext = async () => {
   clearTimer();
   const cfg = await loadBackupConfig();
@@ -59,6 +71,7 @@ export const runAutoBackup = async () => {
 };
 
 export const startBackupScheduler = async () => {
+  await autoMountOnStartup();
   await scheduleNext();
 };
 

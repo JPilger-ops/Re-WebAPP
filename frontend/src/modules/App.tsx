@@ -102,6 +102,10 @@ import {
   uploadFavicon,
   resetFavicon,
   uploadCaCertificate,
+  getMfaStatus,
+  startMfaSetup,
+  verifyMfaSetup,
+  disableMfa,
 } from "./api";
 import { API_BASE } from "./api";
 import { AuthProvider, useAuth } from "./AuthProvider";
@@ -246,6 +250,8 @@ function LoginPage() {
   const { user, login, error, setError } = useAuth();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -269,19 +275,31 @@ function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(username, password);
+      await login(username, password, otp.trim() ? otp.trim() : undefined);
       const params = new URLSearchParams(location.search);
       const returnTo = params.get("returnTo");
       const dest = returnTo || (location.state as any)?.from || "/dashboard";
       navigate(dest, { replace: true });
+      setOtp("");
+      setMfaRequired(false);
     } catch (err: any) {
       const apiErr = err as ApiError;
-      if (apiErr.status === 429) {
+      const mfaFlag = (apiErr as any)?.data?.mfa_required;
+      if (mfaFlag) {
+        setMfaRequired(true);
+        setError(apiErr.message || "MFA Code erforderlich.");
+      } else if (apiErr.status === 429) {
         setError("Zu viele Login-Versuche. Bitte kurz warten und erneut versuchen.");
+        setMfaRequired(false);
+        setOtp("");
       } else if (apiErr.status === 401) {
         setError("Login fehlgeschlagen. Bitte Zugangsdaten prüfen.");
+        setMfaRequired(false);
+        setOtp("");
       } else {
         setError(apiErr.message || "Login fehlgeschlagen.");
+        setMfaRequired(false);
+        setOtp("");
       }
     } finally {
       setSubmitting(false);
@@ -312,6 +330,20 @@ function LoginPage() {
               autoComplete="current-password"
             />
           </div>
+          {mfaRequired && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">MFA Code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                autoComplete="one-time-code"
+              />
+            </div>
+          )}
           <button
             type="submit"
             className="w-full rounded-md bg-blue-600 text-white py-2 font-semibold hover:bg-blue-700 transition disabled:opacity-70"
@@ -5052,6 +5084,20 @@ function SecuritySettingsInfo() {
   const [status, setStatus] = useState<FormStatus>(null);
   const [certPem, setCertPem] = useState("");
   const [certStatus, setCertStatus] = useState<FormStatus>(null);
+  const [mfaStatus, setMfaStatus] = useState<{ enabled: boolean; pending: boolean } | null>(null);
+  const [mfaSetup, setMfaSetup] = useState<{ secret: string; otpauth_url: string; qr_code: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaDisableCode, setMfaDisableCode] = useState("");
+  const [mfaDisablePassword, setMfaDisablePassword] = useState("");
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [mfaStatusMsg, setMfaStatusMsg] = useState<FormStatus>(null);
+
+  useEffect(() => {
+    setMfaStatusMsg(null);
+    getMfaStatus()
+      .then((data) => setMfaStatus(data))
+      .catch((err: ApiError) => setMfaStatusMsg({ type: "error", message: err.message || "MFA Status konnte nicht geladen werden." }));
+  }, []);
 
   const onChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -5097,6 +5143,71 @@ function SecuritySettingsInfo() {
     } catch (err: any) {
       const apiErr = err as ApiError;
       setCertStatus({ type: "error", message: apiErr.message || "Zertifikat konnte nicht gespeichert werden." });
+    }
+  };
+
+  const beginMfaSetup = async () => {
+    setMfaBusy(true);
+    setMfaStatusMsg(null);
+    try {
+      const data = await startMfaSetup();
+      setMfaSetup(data);
+      setMfaCode("");
+      setMfaStatus((prev) => ({ enabled: false, pending: true }));
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setMfaStatusMsg({ type: "error", message: apiErr.message || "MFA Setup fehlgeschlagen." });
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const confirmMfaSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaCode.trim()) {
+      setMfaStatusMsg({ type: "error", message: "MFA Code fehlt." });
+      return;
+    }
+    setMfaBusy(true);
+    setMfaStatusMsg(null);
+    try {
+      await verifyMfaSetup(mfaCode.trim());
+      setMfaSetup(null);
+      setMfaCode("");
+      setMfaStatus({ enabled: true, pending: false });
+      setMfaStatusMsg({ type: "success", message: "MFA aktiviert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setMfaStatusMsg({ type: "error", message: apiErr.message || "MFA Aktivierung fehlgeschlagen." });
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const handleMfaDisable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaDisablePassword.trim()) {
+      setMfaStatusMsg({ type: "error", message: "Passwort erforderlich." });
+      return;
+    }
+    if (mfaStatus?.enabled && !mfaDisableCode.trim()) {
+      setMfaStatusMsg({ type: "error", message: "MFA Code erforderlich." });
+      return;
+    }
+    setMfaBusy(true);
+    setMfaStatusMsg(null);
+    try {
+      await disableMfa({ password: mfaDisablePassword.trim(), code: mfaDisableCode.trim() || undefined });
+      setMfaStatus({ enabled: false, pending: false });
+      setMfaDisablePassword("");
+      setMfaDisableCode("");
+      setMfaSetup(null);
+      setMfaStatusMsg({ type: "success", message: "MFA deaktiviert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setMfaStatusMsg({ type: "error", message: apiErr.message || "MFA konnte nicht deaktiviert werden." });
+    } finally {
+      setMfaBusy(false);
     }
   };
 
@@ -5150,6 +5261,83 @@ function SecuritySettingsInfo() {
             </Button>
           </div>
         </form>
+      </div>
+
+      <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+        <div>
+          <h3 className="text-md font-semibold text-slate-800">Multi-Faktor-Login (TOTP)</h3>
+          <p className="text-sm text-slate-600">Authenticator-App (z.B. Google Authenticator, 1Password) nutzen.</p>
+        </div>
+        <div className="text-sm text-slate-700">
+          Status: {mfaStatus?.enabled ? "aktiv" : "nicht aktiv"}{mfaStatus?.pending && !mfaStatus?.enabled ? " (Setup läuft)" : ""}
+        </div>
+        {mfaStatusMsg && <Alert type={mfaStatusMsg.type === "error" ? "error" : "success"}>{mfaStatusMsg.message}</Alert>}
+
+        {!mfaStatus?.enabled && (
+          <div className="space-y-3">
+            <Button type="button" variant="secondary" onClick={beginMfaSetup} disabled={mfaBusy}>
+              {mfaBusy ? "Starte..." : "MFA einrichten"}
+            </Button>
+            {mfaSetup ? (
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <div className="text-xs text-slate-500">QR-Code scannen</div>
+                  <div className="w-44 h-44 border border-slate-200 rounded-lg bg-white flex items-center justify-center">
+                    <img src={mfaSetup.qr_code} alt="MFA QR Code" className="w-40 h-40" />
+                  </div>
+                  <div className="text-xs text-slate-500">Secret (manuell)</div>
+                  <code className="block text-xs bg-slate-100 border border-slate-200 rounded px-2 py-1 break-all">
+                    {mfaSetup.secret}
+                  </code>
+                </div>
+                <form className="space-y-2" onSubmit={confirmMfaSetup}>
+                  <Field label="MFA Code">
+                    <Input
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="6-stelliger Code"
+                    />
+                  </Field>
+                  <Button type="submit" disabled={mfaBusy}>
+                    {mfaBusy ? "Prüfe..." : "MFA aktivieren"}
+                  </Button>
+                </form>
+              </div>
+            ) : (
+              mfaStatus?.pending && (
+                <div className="text-xs text-slate-500">Setup wurde gestartet. Bitte erneut „MFA einrichten“ klicken, falls du neu beginnen möchtest.</div>
+              )
+            )}
+          </div>
+        )}
+
+        {mfaStatus?.enabled && (
+          <form className="grid gap-3 md:grid-cols-2" onSubmit={handleMfaDisable}>
+            <Field label="Passwort">
+              <Input
+                type="password"
+                value={mfaDisablePassword}
+                onChange={(e) => setMfaDisablePassword(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="MFA Code">
+              <Input
+                value={mfaDisableCode}
+                onChange={(e) => setMfaDisableCode(e.target.value)}
+                inputMode="numeric"
+                placeholder="6-stelliger Code"
+                required
+              />
+            </Field>
+            <div className="md:col-span-2 flex items-center gap-2">
+              <Button type="submit" variant="danger" disabled={mfaBusy}>
+                {mfaBusy ? "Deaktiviere..." : "MFA deaktivieren"}
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
 
       <div className="border border-slate-200 rounded-lg p-4 space-y-3">
