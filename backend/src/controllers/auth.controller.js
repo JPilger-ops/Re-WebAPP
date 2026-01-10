@@ -245,10 +245,21 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: "Login fehlgeschlagen." });
     }
 
-    if (user.mfa_enabled) {
-      if (!user.mfa_secret) {
-        return res.status(500).json({ message: "MFA ist aktiviert, aber nicht korrekt eingerichtet." });
+    let mfaEnabled = Boolean(user.mfa_enabled);
+    if (mfaEnabled && !user.mfa_secret) {
+      console.warn(`[auth] MFA inkonsistent für ${user.username} (${user.id}). Deaktiviere MFA automatisch.`);
+      try {
+        await prisma.users.update({
+          where: { id: user.id },
+          data: { mfa_enabled: false, mfa_secret: null, mfa_temp_secret: null },
+        });
+      } catch (err) {
+        console.error("MFA Auto-Disable fehlgeschlagen:", err);
       }
+      mfaEnabled = false;
+    }
+
+    if (mfaEnabled) {
       if (!otp) {
         return res.status(401).json({ message: "MFA erforderlich.", mfa_required: true });
       }
@@ -269,7 +280,7 @@ export const login = async (req, res) => {
       role_id: user.role_id,
       role_name: roleName,
       permissions,
-      mfa_enabled: Boolean(user.mfa_enabled),
+      mfa_enabled: mfaEnabled,
     };
 
     const token = signToken(fullUser);
