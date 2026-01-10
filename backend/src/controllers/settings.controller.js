@@ -381,11 +381,19 @@ export const resetFaviconHandler = async (_req, res) => {
 export const getNetworkSettingsData = async (_req, res) => {
   try {
     const settings = await getNetworkSettings();
+    const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
+    const appDomain = process.env.APP_DOMAIN || (httpsDisabled ? "http://localhost:3030" : "https://rechnung.intern");
+    const bindHost = process.env.APP_HOST || process.env.APP_BIND_IP || "0.0.0.0";
+    const publicPort = Number(process.env.APP_PUBLIC_PORT || process.env.APP_HTTPS_PORT || process.env.APP_PORT || 3031);
+    const publicUrl = process.env.APP_PUBLIC_URL || appDomain;
     return res.json({
       cors_origins: settings.cors_origins || [],
       trust_proxy: settings.trust_proxy,
       auth_cookie_samesite: settings.auth_cookie_samesite || "lax",
       auth_token_ttl_minutes: settings.auth_token_ttl_minutes || null,
+      bind_host: bindHost,
+      public_port: publicPort,
+      public_url: publicUrl,
       updated_at: settings.updated_at || null,
     });
   } catch (err) {
@@ -404,8 +412,16 @@ export const updateNetworkSettingsData = async (req, res) => {
       auth_cookie_samesite: req.body?.auth_cookie_samesite,
       auth_token_ttl_minutes: req.body?.auth_token_ttl_minutes,
     });
+    const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
+    const appDomain = process.env.APP_DOMAIN || (httpsDisabled ? "http://localhost:3030" : "https://rechnung.intern");
+    const bindHost = process.env.APP_HOST || process.env.APP_BIND_IP || "0.0.0.0";
+    const publicPort = Number(process.env.APP_PUBLIC_PORT || process.env.APP_HTTPS_PORT || process.env.APP_PORT || 3031);
+    const publicUrl = process.env.APP_PUBLIC_URL || appDomain;
     return res.json({
       ...saved,
+      bind_host: bindHost,
+      public_port: publicPort,
+      public_url: publicUrl,
       message: "Netzwerk-Einstellungen gespeichert.",
     });
   } catch (err) {

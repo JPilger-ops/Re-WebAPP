@@ -330,20 +330,25 @@ function LoginPage() {
               autoComplete="current-password"
             />
           </div>
-          {mfaRequired && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">MFA Code</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                autoComplete="one-time-code"
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">MFA Code (optional)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              name="one-time-code"
+              id="one-time-code"
+              className={`w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                mfaRequired ? "border-amber-300 bg-amber-50" : "border-slate-200"
+              }`}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              autoComplete="one-time-code"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <p className="mt-1 text-xs text-slate-500">Nur erforderlich, wenn MFA für dein Konto aktiviert ist.</p>
+          </div>
           <button
             type="submit"
             className="w-full rounded-md bg-blue-600 text-white py-2 font-semibold hover:bg-blue-700 transition disabled:opacity-70"
@@ -2038,32 +2043,13 @@ function InvoiceCreatePage() {
     else formEl?.submit();
   };
 
-  const openPdf = async () => {
+  const openPdf = () => {
     if (!createModal.invoiceId) return;
     const url = `/api/invoices/${createModal.invoiceId}/pdf?mode=inline`;
-    const fetchPdf = async (force = false) => {
-      const res = await fetch(force ? `${url}&force=1` : url, { credentials: "include" });
-      if (res.status === 409) {
-        const data = await res.json().catch(() => ({}));
-        const wants = window.confirm(data?.message || "PDF existiert bereits. Überschreiben?");
-        if (wants) return fetchPdf(true);
-        return null;
-      }
-      if (res.status === 423) {
-        const data = await res.json().catch(() => ({}));
-        alert(data?.message || "PDF ist gesperrt (DATEV).");
-        return null;
-      }
-      if (!res.ok) {
-        alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
-        return null;
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      return blobUrl;
-    };
-    const blobUrl = await fetchPdf(false);
-    if (blobUrl) window.open(blobUrl, "_blank", "noopener,noreferrer");
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      alert("Popup wurde blockiert. Bitte Popups für diese Seite erlauben.");
+    }
   };
 
   return (
@@ -3155,41 +3141,13 @@ function InvoiceDetailPage() {
     }
   };
 
-  const openDetailPdf = async () => {
+  const openDetailPdf = () => {
     if (!detail) return;
-    setPdfBusy(true);
-    try {
-      const hasQuery = pdfUrl.includes("?");
-      const url = `${pdfUrl}${hasQuery ? "&" : "?"}mode=inline`;
-      const res = await fetch(url, { credentials: "include" });
-      if (res.status === 423) {
-        const data = await res.json().catch(() => ({}));
-        alert(data?.message || "PDF ist gesperrt (DATEV).");
-        return;
-      }
-      if (res.status === 410) {
-        const data = await res.json().catch(() => ({}));
-        const wants = window.confirm(data?.message || "PDF ist beschädigt. Neu erstellen?");
-        if (wants) {
-          try {
-            await regenerateInvoicePdf(detail.invoice.id);
-            return openDetailPdf();
-          } catch (err: any) {
-            const apiErr = err as ApiError;
-            alert(apiErr.message || "PDF konnte nicht neu erstellt werden.");
-          }
-        }
-        return;
-      }
-      if (!res.ok) {
-        alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
-        return;
-      }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank", "noopener,noreferrer");
-    } finally {
-      setPdfBusy(false);
+    const hasQuery = pdfUrl.includes("?");
+    const url = `${pdfUrl}${hasQuery ? "&" : "?"}mode=inline`;
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      setToast({ type: "error", message: "Popup wurde blockiert. Bitte Popups für diese Seite erlauben." });
     }
   };
 
@@ -4885,9 +4843,6 @@ function NetworkSettingsForm() {
         .map((o) => o.trim())
         .filter(Boolean);
       const payload: any = { cors_origins: origins, trust_proxy: trustProxy };
-      if (bindHost) payload.bind_host = bindHost;
-      if (publicPort) payload.public_port = Number(publicPort);
-      if (publicUrl) payload.public_url = publicUrl;
       const saved = await updateNetworkSettings(payload);
       setOriginsText((saved.cors_origins || []).join("\n"));
       setTrustProxy(Boolean(saved.trust_proxy));
@@ -4933,6 +4888,17 @@ function NetworkSettingsForm() {
   const formValid = originsValid && hostValid && portValid && publicUrlValid;
   const reachabilityUrl = publicUrlValue || `http://${hostValue || "127.0.0.1"}:${publicPortValue || "3031"}`;
 
+  const InfoButton = ({ text }: { text: string }) => (
+    <button
+      type="button"
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-500 hover:bg-slate-100"
+      title={text}
+      aria-label={text}
+    >
+      i
+    </button>
+  );
+
   const copyReachabilityUrl = async () => {
     try {
       await navigator.clipboard.writeText(reachabilityUrl);
@@ -4963,9 +4929,6 @@ function NetworkSettingsForm() {
           type="button"
           onClick={() => {
             setOriginsText("");
-            setBindHost("");
-            setPublicPort("3031");
-            setPublicUrl("");
             setTrustProxy(true);
             setStatus(null);
           }}
@@ -4978,8 +4941,9 @@ function NetworkSettingsForm() {
           <label className="text-sm text-slate-700 block">
             <span className="font-medium flex items-center gap-2">
               Bind-Adresse (IP oder Host)
-              <span className="text-xs text-slate-500">(z.B. 127.0.0.1 nur lokal, 0.0.0.0 im Netzwerk)</span>
+              <InfoButton text="Legt fest, auf welcher IP der Server lauscht. Wird aus .env/Docker gelesen und nur beim Start angewendet." />
             </span>
+            <span className="text-xs text-slate-500 block">(z.B. 127.0.0.1 nur lokal, 0.0.0.0 im Netzwerk)</span>
             <input
               type="text"
               className="input mt-1"
@@ -4987,14 +4951,16 @@ function NetworkSettingsForm() {
               placeholder="0.0.0.0"
               onChange={(e) => setBindHost(e.target.value)}
               disabled={loading}
+              readOnly
             />
             {!hostValid && <p className="text-xs text-red-600 mt-1">Bitte eine gültige IP oder einen Hostnamen ohne Protokoll angeben.</p>}
           </label>
           <label className="text-sm text-slate-700 block">
             <span className="font-medium flex items-center gap-2">
               Öffentlicher Port
-              <span className="text-xs text-slate-500">(1–65535, Standard 3031)</span>
+              <InfoButton text="Anzeige-Port für Erreichbarkeit. Der echte Listen-Port kommt aus APP_PORT/APP_HTTPS_PORT. Änderung nur per .env/Neustart." />
             </span>
+            <span className="text-xs text-slate-500 block">(1–65535, Standard 3031)</span>
             <input
               type="text"
               className="input mt-1"
@@ -5003,14 +4969,16 @@ function NetworkSettingsForm() {
               disabled={loading}
               inputMode="numeric"
               pattern="[0-9]*"
+              readOnly
             />
             {!portValid && <p className="text-xs text-red-600 mt-1">Port muss zwischen 1 und 65535 liegen.</p>}
           </label>
           <label className="text-sm text-slate-700 block">
             <span className="font-medium flex items-center gap-2">
               Öffentliche URL (optional)
-              <span className="text-xs text-slate-500">z.B. https://rechnung.intern</span>
+              <InfoButton text="Öffentliche Basis-URL für Anzeige/Links. Wird aus APP_PUBLIC_URL/APP_DOMAIN gelesen. Änderung nur per .env/Neustart." />
             </span>
+            <span className="text-xs text-slate-500 block">z.B. https://rechnung.intern</span>
             <input
               type="text"
               className="input mt-1"
@@ -5018,9 +4986,14 @@ function NetworkSettingsForm() {
               onChange={(e) => setPublicUrl(e.target.value)}
               disabled={loading}
               placeholder="https://rechnung.intern"
+              readOnly
             />
             {!publicUrlValid && <p className="text-xs text-red-600 mt-1">Bitte eine gültige http/https URL ohne Pfad angeben.</p>}
           </label>
+          <div className="md:col-span-2 text-xs text-slate-500">
+            Hinweis: Bind-Adresse, Port und öffentliche URL werden aus der Umgebung (.env/Docker) gelesen und
+            erfordern einen Neustart. Änderungen bitte im Wizard oder per .env/Compose vornehmen.
+          </div>
           <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
             <div>
               <div className="font-medium text-slate-800">Erreichbar unter</div>
@@ -5032,7 +5005,10 @@ function NetworkSettingsForm() {
           </div>
         </div>
         <label className="text-sm text-slate-700 block">
-          <span className="font-medium">CORS Origins (eine pro Zeile)</span>
+          <span className="font-medium flex items-center gap-2">
+            CORS Origins (eine pro Zeile)
+            <InfoButton text="Erlaubte Browser-Ursprünge für API-Zugriff. Eine URL pro Zeile, nur http/https ohne Pfad." />
+          </span>
           <textarea
             className="textarea mt-1"
             rows={4}
@@ -5042,15 +5018,18 @@ function NetworkSettingsForm() {
           />
           {!originsValid && <p className="text-xs text-red-600 mt-1">Nur http/https Origins ohne Pfad erlaubt.</p>}
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={trustProxy}
-            onChange={(e) => setTrustProxy(e.target.checked)}
-            disabled={loading}
-          />
-          Trust Proxy aktivieren (empfohlen hinter NPM)
-        </label>
+        <div className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={trustProxy}
+              onChange={(e) => setTrustProxy(e.target.checked)}
+              disabled={loading}
+            />
+            Trust Proxy aktivieren (empfohlen hinter NPM)
+          </label>
+          <InfoButton text="Aktivieren, wenn ein Reverse Proxy davorsteht (z.B. NPM). Nutzt X-Forwarded-* für IP/HTTPS-Erkennung." />
+        </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" type="submit" disabled={saving || loading || !formValid}>
             {saving ? "Speichere ..." : "Speichern"}

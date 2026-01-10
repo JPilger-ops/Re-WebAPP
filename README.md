@@ -2,10 +2,20 @@
 
 Interne Rechnungs- und Verwaltungs-App (Docker Compose: Backend Node/Express/Prisma, Frontend React/Vite, DB Postgres).
 
-## Stack & Ports
-- Backend lauscht intern auf `APP_PORT` (default 3030); extern via Compose auf `APP_BIND_IP:APP_PUBLIC_PORT` (default 0.0.0.0:3031).
-- Branding/Uploads bleiben persistent über `PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH` (Default Logos: `./data/public/logos`, Favicon: `./backend/public/favicon.ico`).
-- Scripts: `./scripts/setup.sh` (legt .env + backend/.env an), `./scripts/build-meta.sh` (BUILD_* setzen + optional build).
+## Überblick
+- Backend: Node/Express/Prisma
+- Frontend: React/Vite
+- Datenbank: Postgres
+
+## Stack, Ports & Pfade
+- Backend intern: `APP_PORT` (Default 3030)
+- Extern via Compose: `APP_BIND_IP:APP_PUBLIC_PORT` (Default 0.0.0.0:3031)
+- Branding/Uploads persistent: `PUBLIC_LOGOS_PATH` / `PUBLIC_FAVICON_PATH`
+  - Default Logos: `./data/public/logos`
+  - Default Favicon: `./backend/public/favicon.ico`
+- Scripts:
+  - `./scripts/setup.sh` (legt `.env` + `backend/.env` an)
+  - `./scripts/build-meta.sh` (setzt `BUILD_*` + optional Build)
 
 ## Voraussetzungen (Ubuntu 22.04)
 ```bash
@@ -49,8 +59,10 @@ docker compose up -d
 docker compose run --rm app npx prisma migrate deploy
 curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version
 ```
-- Für Updates aus Source: `git pull && ./scripts/build-meta.sh && docker compose up -d --build`
-- Branding-Pfade auf persistente Locations zeigen lassen (`PUBLIC_LOGOS_PATH`, `PUBLIC_FAVICON_PATH`, Default `./data/public/...`), ggf. via `./scripts/setup.sh` mit Default-Assets befüllen.
+- Updates aus Source:
+  - `git pull && ./scripts/build-meta.sh && docker compose up -d --build`
+- Branding-Pfade auf persistente Locations zeigen lassen (`PUBLIC_LOGOS_PATH`, `PUBLIC_FAVICON_PATH`, Default `./data/public/...`)
+  - ggf. via `./scripts/setup.sh` mit Default-Assets befüllen
 
 ## Backups
 ```bash
