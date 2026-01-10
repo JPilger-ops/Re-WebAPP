@@ -209,6 +209,9 @@ export interface FaviconSettings {
 export interface NetworkSettings {
   cors_origins: string[];
   trust_proxy: boolean | number;
+  bind_host?: string;
+  public_port?: number | null;
+  public_url?: string | null;
   updated_at?: string | null;
 }
 
