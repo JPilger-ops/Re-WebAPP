@@ -7209,62 +7209,64 @@ function StatsPage() {
             <StatCard title="Schnitt pro Rechnung" value={formatEuro(data.overall.avg_value)} />
           </div>
 
-          <div className="space-y-4">
-            <StatsTable
-              title="Jahre"
-              columns={["Jahr", "Summe", "Netto", "MwSt", "Bezahlt", "Offen", "Gesendet offen", "Ø pro Rechnung", "Anzahl"]}
-              rows={data.byYear.map((b) => [
-                b.year,
-                formatEuro(b.sum_total),
-                formatEuro(b.sum_net),
-                formatEuro(b.sum_tax),
-                formatEuro(b.paid_sum),
-                formatEuro(b.outstanding_sum),
-                formatEuro(b.sent_unpaid_sum || 0),
-                formatEuro(b.avg_value),
-                b.count,
-              ])}
-            />
-            <StatsTable
-              title="Monate"
-              columns={["Monat", "Jahr", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Ø pro Rechnung", "Anzahl"]}
-              rows={(data.byMonth || []).map((m) => {
-                const avg = m.count ? m.sum_total / m.count : 0;
-                return [
-                  m.month,
-                  m.year,
-                  formatEuro(m.sum_total),
-                  formatEuro(m.paid_sum),
-                  formatEuro(m.unpaid_sum),
-                  formatEuro(m.sent_unpaid_sum || 0),
-                  formatEuro(avg),
-                  m.count,
-                ];
-              })}
-              emptyText="Keine Monatsdaten"
-            />
-            <StatsTable
-              title="Top Kunden (Umsatz)"
-              columns={["Kunde", "Summe", "Ø pro Rechnung", "Anzahl"]}
-              rows={(data.topCustomers || []).map((c) => [
-                c.name,
-                formatEuro(c.sum_total),
-                formatEuro(c.count ? c.sum_total / c.count : 0),
-                c.count,
-              ])}
-              emptyText="Keine Kundenstatistik"
-            />
-            <StatsTable
-              title="Top Kategorien (Umsatz)"
-              columns={["Kategorie", "Summe", "Ø pro Rechnung", "Anzahl"]}
-              rows={(data.topCategories || []).map((c) => [
-                c.label,
-                formatEuro(c.sum_total),
-                formatEuro(c.count ? c.sum_total / c.count : 0),
-                c.count,
-              ])}
-              emptyText="Keine Kategorienstatistik"
-            />
+          <div className="relative left-1/2 right-1/2 w-screen -translate-x-1/2 px-4 md:px-6">
+            <div className="mx-auto max-w-7xl space-y-4">
+              <StatsTable
+                title="Jahre"
+                columns={["Jahr", "Summe", "Netto", "MwSt", "Bezahlt", "Offen", "Gesendet offen", "Ø pro Rechnung", "Anzahl"]}
+                rows={data.byYear.map((b) => [
+                  b.year,
+                  formatEuro(b.sum_total),
+                  formatEuro(b.sum_net),
+                  formatEuro(b.sum_tax),
+                  formatEuro(b.paid_sum),
+                  formatEuro(b.outstanding_sum),
+                  formatEuro(b.sent_unpaid_sum || 0),
+                  formatEuro(b.avg_value),
+                  b.count,
+                ])}
+              />
+              <StatsTable
+                title="Monate"
+                columns={["Monat", "Jahr", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Ø pro Rechnung", "Anzahl"]}
+                rows={(data.byMonth || []).map((m) => {
+                  const avg = m.count ? m.sum_total / m.count : 0;
+                  return [
+                    m.month,
+                    m.year,
+                    formatEuro(m.sum_total),
+                    formatEuro(m.paid_sum),
+                    formatEuro(m.unpaid_sum),
+                    formatEuro(m.sent_unpaid_sum || 0),
+                    formatEuro(avg),
+                    m.count,
+                  ];
+                })}
+                emptyText="Keine Monatsdaten"
+              />
+              <StatsTable
+                title="Top Kunden (Umsatz)"
+                columns={["Kunde", "Summe", "Ø pro Rechnung", "Anzahl"]}
+                rows={(data.topCustomers || []).map((c) => [
+                  c.name,
+                  formatEuro(c.sum_total),
+                  formatEuro(c.count ? c.sum_total / c.count : 0),
+                  c.count,
+                ])}
+                emptyText="Keine Kundenstatistik"
+              />
+              <StatsTable
+                title="Top Kategorien (Umsatz)"
+                columns={["Kategorie", "Summe", "Ø pro Rechnung", "Anzahl"]}
+                rows={(data.topCategories || []).map((c) => [
+                  c.label,
+                  formatEuro(c.sum_total),
+                  formatEuro(c.count ? c.sum_total / c.count : 0),
+                  c.count,
+                ])}
+                emptyText="Keine Kategorienstatistik"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -7296,15 +7298,15 @@ function StatsTable({
   emptyText?: string;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-visible">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
       <div className="px-3 py-2 font-semibold text-slate-800 border-b border-slate-200">{title}</div>
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full min-w-max text-sm border-collapse">
         <thead>
           <tr className="text-left border-b border-slate-200 bg-slate-50">
             {columns.map((c, idx) => (
               <th
                 key={c}
-                className={`px-3 py-2 ${idx === 0 ? "text-left" : "text-right"} ${idx === 0 ? "" : "whitespace-nowrap"}`}
+                className={`px-3 py-2 ${idx === 0 ? "text-left" : "text-right"} whitespace-nowrap`}
               >
                 {c}
               </th>
@@ -7314,15 +7316,11 @@ function StatsTable({
         <tbody>
           {rows.map((r, idx) => (
             <tr key={idx} className="border-b border-slate-100">
-              {r.map((v, i) => {
-                const align = i === 0 ? "text-left" : "text-right";
-                const wrap = i === 0 ? "break-words" : "whitespace-nowrap";
-                return (
-                  <td key={i} className={`px-3 py-2 ${align} ${wrap}`}>
-                    {v}
-                  </td>
-                );
-              })}
+              {r.map((v, i) => (
+                <td key={i} className={`px-3 py-2 ${i === 0 ? "text-left" : "text-right"} whitespace-nowrap`}>
+                  {v}
+                </td>
+              ))}
             </tr>
           ))}
           {!rows.length && (
