@@ -26,7 +26,6 @@ export async function getInvoiceHeaderSettings() {
       iban: null,
       bic: null,
       footer_text: null,
-      logo_url: null,
       updated_at: null,
     };
   }
@@ -47,7 +46,7 @@ export async function saveInvoiceHeaderSettings(input = {}) {
     iban: input.iban || null,
     bic: input.bic || null,
     footer_text: input.footer_text || null,
-    logo_url: input.logo_url || null,
+    logo_url: null,
     updated_at: new Date(),
   };
 

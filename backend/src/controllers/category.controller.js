@@ -12,6 +12,38 @@ const logosDir = path.join(PUBLIC_DIR, "logos");
 const MAX_LOGO_SIZE = 1.5 * 1024 * 1024; // 1.5 MB
 const allowedLogoExt = [".png", ".jpg", ".jpeg", ".svg"];
 
+const sanitizeLogoName = (filename) => {
+  const base = String(filename || "").split(/[/\\]/).pop();
+  if (!base) return "";
+  const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, "");
+  if (!cleaned || cleaned.startsWith(".")) return "";
+  return cleaned;
+};
+
+const resolveLogoFilename = async (logoFile) => {
+  await ensureBrandingAssets();
+  const targetDir = ensureLogosDir();
+  const safeName = sanitizeLogoName(logoFile);
+  if (!safeName) {
+    const err = new Error("Logo-Dateiname ist ungueltig.");
+    err.status = 400;
+    throw err;
+  }
+  const ext = path.extname(safeName).toLowerCase();
+  if (!allowedLogoExt.includes(ext)) {
+    const err = new Error("Nur PNG, JPG oder SVG Logos sind erlaubt.");
+    err.status = 400;
+    throw err;
+  }
+  const candidate = path.join(targetDir, safeName);
+  if (!fs.existsSync(candidate)) {
+    const err = new Error("Logo-Datei nicht gefunden. Bitte zuerst hochladen.");
+    err.status = 400;
+    throw err;
+  }
+  return safeName;
+};
+
 const ensureLogosDir = () => {
   try {
     // Basisverzeichnis sicherstellen
@@ -118,6 +150,7 @@ export const createCategory = async (req, res) => {
   }
 
   try {
+    const safeLogo = await resolveLogoFilename(cleanLogo);
     await ensureInvoiceCategoriesTable();
     const result = await db.query(
       `
@@ -125,11 +158,14 @@ export const createCategory = async (req, res) => {
       VALUES ($1, $2, $3)
       RETURNING id, key, label, logo_file
       `,
-      [cleanKey, cleanLabel, cleanLogo]
+      [cleanKey, cleanLabel, safeLogo]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (err?.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
     console.error("Fehler beim Erstellen der Kategorie:", err);
     if (err.code === "23505") {
       return res.status(409).json({ message: "Kategorie-Key existiert bereits." });
@@ -168,6 +204,8 @@ export const updateCategory = async (req, res) => {
         return res.status(404).json({ message: "Kategorie nicht gefunden." });
       }
       finalLogo = logoProvided && cleanLogo === "" ? null : existing.rows[0].logo_file;
+    } else if (cleanLogo) {
+      finalLogo = await resolveLogoFilename(cleanLogo);
     }
 
     const result = await db.query(
@@ -186,6 +224,9 @@ export const updateCategory = async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
+    if (err?.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
     console.error("Fehler beim Aktualisieren der Kategorie:", err);
     if (err.code === "23505") {
       return res.status(409).json({ message: "Kategorie-Key existiert bereits." });

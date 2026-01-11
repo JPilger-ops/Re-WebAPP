@@ -34,12 +34,15 @@ docker --version && docker compose version
 git clone https://github.com/JPilger-ops/Re-WebAPP
 cd Re-WebAPP
 ./scripts/setup.sh
+# backend/.env anpassen (Secrets + initiales Admin-Seed)
+# JWT_SECRET/SESSION_SECRET muessen in Prod gesetzt werden
+# ALLOW_ADMIN_SEED=1 nur fuer den ersten Start
 ./scripts/build-meta.sh            # optional für lokale Builds
 docker compose pull                # zieht APP_IMAGE/APP_IMAGE_TAG (default ghcr.io/jpilger-ops/re-webapp:latest)
 docker compose up -d
 curl http://127.0.0.1:3031/api/version
 ```
-Login: `admin` / `admin` (bitte direkt ändern).
+Login: `admin` / `<DEFAULT_ADMIN_PASSWORD>` (nur wenn `ALLOW_ADMIN_SEED=1` beim ersten Start gesetzt war).
 
 ## Deployment Wizard (empfohlen)
 ```bash
@@ -47,7 +50,8 @@ git clone https://github.com/JPilger-ops/Re-WebAPP /opt/rechnungsapp
 cd /opt/rechnungsapp
 ./scripts/deploy-wizard.sh    # Modus: install oder update
 ```
-- Fragt DB-/Port-/JWT-/Image-Werte ab und spiegelt UI-Assets aus dem Image nach `backend/public` (Branding/Uploads bleiben bestehen).
+- Fragt DB-/Port-/JWT-/SESSION-/Image-Werte ab (APP_CREATE_PIN optional) und spiegelt UI-Assets aus dem Image nach `backend/public` (Branding/Uploads bleiben bestehen).
+- Install: Admin-Seed mit Passwort-Prompt (Default: admin). Update: Secrets werden nur abgefragt, wenn leer/Default.
 - Legt Branding-Pfade persistent unter `shared/public/logos` und `shared/public/favicon.ico` an und erstellt im Update-Modus ein `pg_dump` nach `shared/backups`.
 - Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
 
@@ -63,6 +67,10 @@ curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version
   - `git pull && ./scripts/build-meta.sh && docker compose up -d --build`
 - Branding-Pfade auf persistente Locations zeigen lassen (`PUBLIC_LOGOS_PATH`, `PUBLIC_FAVICON_PATH`, Default `./data/public/...`)
   - ggf. via `./scripts/setup.sh` mit Default-Assets befüllen
+- Admin-Seed (nur initial, danach wieder deaktivieren): `ALLOW_ADMIN_SEED=1` + `DEFAULT_ADMIN_PASSWORD=...` in `backend/.env`
+
+## NFS Auto-Mount (optional)
+- `ALLOW_NFS_MOUNT=1` in `.env` aktivieren, dann wird `docker-compose.nfs.yml` genutzt (privileged Container).
 
 ## Backups
 ```bash

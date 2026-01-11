@@ -4,6 +4,9 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || "admin";
+const ALLOW_ADMIN_SEED = ["1", "true", "yes", "on"].includes(
+  (process.env.ALLOW_ADMIN_SEED || "").toLowerCase()
+);
 const DEFAULT_PERMISSIONS = [
   "invoices.read",
   "invoices.create",
@@ -250,7 +253,11 @@ async function seedNetworkSettings() {
 
 async function main() {
   const adminRoleId = await seedRoles();
-  await seedAdmin(adminRoleId);
+  if (ALLOW_ADMIN_SEED) {
+    await seedAdmin(adminRoleId);
+  } else {
+    console.log("[seed] Admin-Seed übersprungen (ALLOW_ADMIN_SEED!=1).");
+  }
   await seedSmtpSettings();
   await seedInvoiceHeader();
   await seedBank();

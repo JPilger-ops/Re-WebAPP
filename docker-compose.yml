@@ -36,7 +36,7 @@ services:
       DB_PORT: ${DB_PORT:-5432}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
-      HKFORMS_MOCK_ENABLE: "1"
+      HKFORMS_MOCK_ENABLE: ${HKFORMS_MOCK_ENABLE:-0}
       BUILD_SHA: ${BUILD_SHA:-unknown}
       BUILD_TIME: ${BUILD_TIME:-unknown}
       BUILD_NUMBER: ${BUILD_NUMBER:-0}
@@ -60,12 +60,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - apparmor:unconfined
-      - seccomp:unconfined
-    privileged: true
 
 networks:
   appnet:

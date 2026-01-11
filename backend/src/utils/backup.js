@@ -51,6 +51,31 @@ const writeableTest = async (dir) => {
   return resolved;
 };
 
+const extractZipSafe = async (zipPath, targetDir) => {
+  await fs.promises.mkdir(targetDir, { recursive: true });
+  const opened = await unzipper.Open.file(zipPath);
+  for (const entry of opened.files) {
+    const normalized = path.normalize(entry.path).replace(/^(\.\.(\/|\\|$))+/, "");
+    const destPath = path.join(targetDir, normalized);
+    const rel = path.relative(targetDir, destPath);
+    if (rel.startsWith("..") || path.isAbsolute(rel) || entry.path.includes("..")) {
+      throw new Error(`Unsicherer ZIP-Eintrag: ${entry.path}`);
+    }
+    if (entry.type === "Directory") {
+      await fs.promises.mkdir(destPath, { recursive: true });
+      continue;
+    }
+    await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
+    await new Promise((resolve, reject) => {
+      entry
+        .stream()
+        .pipe(fs.createWriteStream(destPath, { mode: 0o600 }))
+        .on("error", reject)
+        .on("close", resolve);
+    });
+  }
+};
+
 const defaultConfig = () => ({
   local_path: DEFAULT_LOCAL_PATH,
   nas_path: DEFAULT_NAS_PATH || null,
@@ -549,12 +574,7 @@ export const restoreBackup = async ({ name, target = "local", restore_db = true,
   const cleanup = async () => fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 
   try {
-    await new Promise((resolve, reject) => {
-      fs.createReadStream(backupPath)
-        .pipe(unzipper.Extract({ path: tmpDir }))
-        .on("error", reject)
-        .on("close", resolve);
-    });
+    await extractZipSafe(backupPath, tmpDir);
 
     const metaPath = path.join(tmpDir, "metadata.json");
     let meta = null;
