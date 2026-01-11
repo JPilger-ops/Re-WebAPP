@@ -263,7 +263,7 @@ export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; al
         createPortal(
           <div
             ref={menuRef}
-            className="fixed min-w-[160px] bg-white border border-slate-200 rounded shadow z-[9999] p-1 text-sm space-y-1"
+            className="fixed w-max bg-white border border-slate-200 rounded shadow z-[9999] p-1 text-sm space-y-1"
             style={{ top: pos.top, left: pos.left, transform }}
             role="menu"
           >
