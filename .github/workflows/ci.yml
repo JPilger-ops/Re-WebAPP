@@ -66,6 +66,10 @@ jobs:
           rm -f backend/.env
           cp backend/.env.example backend/.env
           echo "APP_PORT=3030" >> backend/.env
+          echo "JWT_SECRET=ci_jwt_secret" >> backend/.env
+          echo "SESSION_SECRET=ci_session_secret" >> backend/.env
+          echo "ALLOW_ADMIN_SEED=1" >> backend/.env
+          echo "DEFAULT_ADMIN_PASSWORD=admin" >> backend/.env
           echo "---- .env (CI) ----"
           grep -E "APP_BIND_IP|APP_PUBLIC_PORT|APP_PORT|APP_HOST" .env
 

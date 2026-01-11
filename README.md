@@ -50,7 +50,7 @@ git clone https://github.com/JPilger-ops/Re-WebAPP /opt/rechnungsapp
 cd /opt/rechnungsapp
 ./scripts/deploy-wizard.sh    # Modus: install oder update
 ```
-- Fragt DB-/Port-/JWT-/SESSION-/Image-Werte ab (APP_CREATE_PIN optional) und spiegelt UI-Assets aus dem Image nach `backend/public` (Branding/Uploads bleiben bestehen).
+- Fragt DB-/Port-/JWT-/SESSION-/APP_CREATE_PIN-/Image-Werte ab und spiegelt UI-Assets aus dem Image nach `backend/public` (Branding/Uploads bleiben bestehen).
 - Install: Admin-Seed mit Passwort-Prompt (Default: admin). Update: Secrets werden nur abgefragt, wenn leer/Default.
 - Legt Branding-Pfade persistent unter `shared/public/logos` und `shared/public/favicon.ico` an und erstellt im Update-Modus ein `pg_dump` nach `shared/backups`.
 - Healthcheck: `curl http://127.0.0.1:${APP_PUBLIC_PORT:-3031}/api/version`
