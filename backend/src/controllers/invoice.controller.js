@@ -1916,7 +1916,7 @@ function generateInvoiceHtml(
   </div>
 
   <div class="sender-line">
-    ${[header.company_name, header.address_line1, header.address_line2, [header.zip, header.city].filter(Boolean).join(" "), header.phone ? `Tel: ${header.phone}` : ""]
+    ${[header.company_name, header.address_line1, header.address_line2, [header.zip, header.city].filter(Boolean).join(" ")]
       .filter(Boolean)
       .join(" · ")}
   </div>
@@ -2120,7 +2120,9 @@ export const sendInvoiceEmail = async (req, res) => {
 
   const { to, subject, message, html, include_datev } = req.body || {};
   const email = (to || "").trim();
-  const includeDatev = include_datev === true;
+  const includeDatev = ["1", "true", "yes", "on"].includes(
+    String(include_datev ?? "").toLowerCase()
+  );
   const emailSendDisabled = ["1", "true", "yes"].includes(
     (process.env.EMAIL_SEND_DISABLED || "").toLowerCase()
   );

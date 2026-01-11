@@ -1457,7 +1457,16 @@ function Invoices() {
       setToast({ type: "success", message: res.message || "E-Mail gesendet." });
       setInvoices((prev) =>
         prev.map((inv) =>
-          inv.id === sendModal.id ? { ...inv, status_sent: true, status_sent_at: new Date().toISOString() } : inv
+          inv.id === sendModal.id
+            ? {
+                ...inv,
+                status_sent: true,
+                status_sent_at: new Date().toISOString(),
+                ...(sendModal.includeDatev
+                  ? { datev_export_status: "SENT", datev_exported_at: new Date().toISOString(), datev_export_error: null }
+                  : {}),
+              }
+            : inv
         )
       );
       setSendModal({ open: false });
@@ -3145,10 +3154,17 @@ function InvoiceDetailPage() {
     if (!detail) return;
     const hasQuery = pdfUrl.includes("?");
     const url = `${pdfUrl}${hasQuery ? "&" : "?"}mode=inline`;
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) {
       setToast({ type: "error", message: "Popup wurde blockiert. Bitte Popups für diese Seite erlauben." });
+      return;
     }
+    try {
+      popup.opener = null;
+    } catch {
+      // ignore
+    }
+    popup.location.href = url;
   };
 
   if (loading) {
@@ -7267,11 +7283,11 @@ function StatsTable({
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
       <div className="px-3 py-2 font-semibold text-slate-800 border-b border-slate-200">{title}</div>
-      <table className="w-full text-sm">
+      <table className="w-full min-w-max text-sm">
         <thead>
           <tr className="text-left border-b border-slate-200 bg-slate-50">
             {columns.map((c) => (
-              <th key={c} className="px-3 py-2">
+              <th key={c} className="px-3 py-2 whitespace-nowrap">
                 {c}
               </th>
             ))}
@@ -7281,7 +7297,7 @@ function StatsTable({
           {rows.map((r, idx) => (
             <tr key={idx} className="border-b border-slate-100">
               {r.map((v, i) => (
-                <td key={i} className="px-3 py-2">
+                <td key={i} className="px-3 py-2 whitespace-nowrap">
                   {v}
                 </td>
               ))}

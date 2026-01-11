@@ -273,10 +273,14 @@ else
 fi
 
 if [[ "${MODE,,}" == "install" ]]; then
-  info "Backend-Env (JWT_SECRET/SESSION_SECRET erforderlich; APP_CREATE_PIN optional)"
+  info "Backend-Env (JWT_SECRET/SESSION_SECRET erforderlich; APP_CREATE_PIN erforderlich)"
   set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
   set_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET" "$(prompt_required "SESSION_SECRET" "${SESSION_SECRET_VAL:-}")"
-  set_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN" "$(prompt "APP_CREATE_PIN (optional, leer=Registrierung aus)" "${APP_CREATE_PIN_VAL:-}")"
+  APP_CREATE_PIN_DEFAULT="${APP_CREATE_PIN_VAL:-}"
+  if [[ -z "${APP_CREATE_PIN_DEFAULT}" || "${APP_CREATE_PIN_DEFAULT}" == "change_me_strong" ]]; then
+    APP_CREATE_PIN_DEFAULT=""
+  fi
+  set_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN" "$(prompt_required "APP_CREATE_PIN (erforderlich)" "${APP_CREATE_PIN_DEFAULT}")"
 else
   info "Update-Modus: backend/.env bleibt unverändert (Secrets werden nur geprüft, falls leer/Default)."
   JWT_SECRET_CHECK="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
@@ -286,6 +290,10 @@ else
   SESSION_SECRET_CHECK="$(current_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET")"
   if [[ -z "${SESSION_SECRET_CHECK}" || "${SESSION_SECRET_CHECK}" == "change_me_session" || "${SESSION_SECRET_CHECK}" == "change_me" ]]; then
     set_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET" "$(prompt_required "SESSION_SECRET" "${SESSION_SECRET_CHECK:-}")"
+  fi
+  APP_CREATE_PIN_CHECK="$(current_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN")"
+  if [[ -z "${APP_CREATE_PIN_CHECK}" || "${APP_CREATE_PIN_CHECK}" == "change_me_strong" ]]; then
+    set_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN" "$(prompt_required "APP_CREATE_PIN (erforderlich)" "")"
   fi
 fi
 
