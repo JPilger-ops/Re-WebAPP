@@ -243,7 +243,7 @@ export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; al
       <button
         ref={buttonRef}
         type="button"
-        className="cursor-pointer select-none h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 motion-safe transition"
+        className="cursor-pointer select-none h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
         aria-label="Weitere Aktionen"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -263,8 +263,8 @@ export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; al
         createPortal(
           <div
             ref={menuRef}
-            className="fixed min-w-[160px] bg-white border border-slate-200 rounded shadow z-[9999] p-1 text-sm space-y-1 motion-safe transition"
-            style={{ top: pos.top, left: pos.left, transform, animation: "menuIn 140ms ease" }}
+            className="fixed min-w-[160px] bg-white border border-slate-200 rounded shadow z-[9999] p-1 text-sm space-y-1"
+            style={{ top: pos.top, left: pos.left, transform }}
             role="menu"
           >
             {items.map((item, idx) => (

@@ -7209,7 +7209,7 @@ function StatsPage() {
             <StatCard title="Schnitt pro Rechnung" value={formatEuro(data.overall.avg_value)} />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 xl:grid-cols-2">
             <StatsTable
               title="Jahre"
               columns={["Jahr", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Anzahl"]}
@@ -7237,7 +7237,7 @@ function StatsPage() {
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 xl:grid-cols-2">
             <StatsTable
               title="Top Kunden (Umsatz)"
               columns={["Kunde", "Summe", "Anzahl"]}
