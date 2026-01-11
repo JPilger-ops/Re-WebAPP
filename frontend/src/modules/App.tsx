@@ -7209,45 +7209,63 @@ function StatsPage() {
             <StatCard title="Schnitt pro Rechnung" value={formatEuro(data.overall.avg_value)} />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             <StatsTable
               title="Jahre"
-              columns={["Jahr", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Anzahl"]}
+              columns={["Jahr", "Summe", "Netto", "MwSt", "Bezahlt", "Offen", "Gesendet offen", "Ø pro Rechnung", "Anzahl"]}
               rows={data.byYear.map((b) => [
                 b.year,
                 formatEuro(b.sum_total),
+                formatEuro(b.sum_net),
+                formatEuro(b.sum_tax),
                 formatEuro(b.paid_sum),
                 formatEuro(b.outstanding_sum),
                 formatEuro(b.sent_unpaid_sum || 0),
+                formatEuro(b.avg_value),
                 b.count,
               ])}
             />
             <StatsTable
               title="Monate"
-              columns={["Monat", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Anzahl"]}
-              rows={(data.byMonth || []).map((m) => [
-                `${m.month}.${m.year}`,
-                formatEuro(m.sum_total),
-                formatEuro(m.paid_sum),
-                formatEuro(m.unpaid_sum),
-                formatEuro(m.sent_unpaid_sum || 0),
-                m.count,
-              ])}
+              columns={["Monat", "Jahr", "Summe", "Bezahlt", "Offen", "Gesendet offen", "Ø pro Rechnung", "Anzahl"]}
+              rows={(data.byMonth || []).map((m) => {
+                const avg = m.count ? m.sum_total / m.count : 0;
+                return [
+                  m.month,
+                  m.year,
+                  formatEuro(m.sum_total),
+                  formatEuro(m.paid_sum),
+                  formatEuro(m.unpaid_sum),
+                  formatEuro(m.sent_unpaid_sum || 0),
+                  formatEuro(avg),
+                  m.count,
+                ];
+              })}
               emptyText="Keine Monatsdaten"
             />
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             <StatsTable
               title="Top Kunden (Umsatz)"
-              columns={["Kunde", "Summe", "Anzahl"]}
-              rows={(data.topCustomers || []).map((c) => [c.name, formatEuro(c.sum_total), c.count])}
+              columns={["Kunde", "Summe", "Ø pro Rechnung", "Anzahl"]}
+              rows={(data.topCustomers || []).map((c) => [
+                c.name,
+                formatEuro(c.sum_total),
+                formatEuro(c.count ? c.sum_total / c.count : 0),
+                c.count,
+              ])}
               emptyText="Keine Kundenstatistik"
             />
             <StatsTable
               title="Top Kategorien (Umsatz)"
-              columns={["Kategorie", "Summe", "Anzahl"]}
-              rows={(data.topCategories || []).map((c) => [c.label, formatEuro(c.sum_total), c.count])}
+              columns={["Kategorie", "Summe", "Ø pro Rechnung", "Anzahl"]}
+              rows={(data.topCategories || []).map((c) => [
+                c.label,
+                formatEuro(c.sum_total),
+                formatEuro(c.count ? c.sum_total / c.count : 0),
+                c.count,
+              ])}
               emptyText="Keine Kategorienstatistik"
             />
           </div>
@@ -7281,13 +7299,13 @@ function StatsTable({
   emptyText?: string;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto overflow-y-visible">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-visible">
       <div className="px-3 py-2 font-semibold text-slate-800 border-b border-slate-200">{title}</div>
-      <table className="w-full min-w-max text-sm">
+      <table className="w-full text-sm">
         <thead>
           <tr className="text-left border-b border-slate-200 bg-slate-50">
             {columns.map((c) => (
-              <th key={c} className="px-3 py-2 whitespace-nowrap">
+              <th key={c} className="px-3 py-2">
                 {c}
               </th>
             ))}
@@ -7297,7 +7315,7 @@ function StatsTable({
           {rows.map((r, idx) => (
             <tr key={idx} className="border-b border-slate-100">
               {r.map((v, i) => (
-                <td key={i} className="px-3 py-2 whitespace-nowrap">
+                <td key={i} className="px-3 py-2">
                   {v}
                 </td>
               ))}
