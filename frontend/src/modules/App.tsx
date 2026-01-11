@@ -932,7 +932,7 @@ function Customers() {
       )}
 
       {!loading && filtered.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-visible">
           <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 flex items-center">
             <div className="flex-1">Kunde</div>
             <div className="w-12 text-right">…</div>
@@ -3328,7 +3328,7 @@ function InvoiceDetailPage() {
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
             <div className="text-xs uppercase text-slate-500">Beträge</div>
             {vatSummary.rows.length ? (
-              <div className="overflow-x-auto border border-slate-100 rounded-lg">
+              <div className="overflow-x-auto overflow-y-visible border border-slate-100 rounded-lg">
                 <table className="min-w-full text-sm table-auto">
                   <thead className="bg-slate-50 text-xs text-slate-500 uppercase whitespace-nowrap">
                     <tr>
@@ -4715,8 +4715,8 @@ function BackupSettingsPanel() {
           <EmptyState title="Keine Backups gefunden" description="Lege ein erstes Backup an." />
         )}
         {!listLoading && backups.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto overflow-y-visible">
+            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-visible">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
                   <th className="text-left px-3 py-2">Datei</th>
@@ -6145,7 +6145,7 @@ function ApiKeysSection() {
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-visible">
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="text-left border-b border-slate-200">
@@ -6299,7 +6299,7 @@ function AdminUsers() {
       )}
 
       {!loading && (
-        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+        <div className="overflow-x-auto overflow-y-visible bg-white border border-slate-200 rounded-lg shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-slate-200 bg-slate-50">
@@ -6563,7 +6563,7 @@ function AdminRoles() {
       )}
 
       {!loading && (
-        <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg shadow-sm">
+        <div className="overflow-x-auto overflow-y-visible bg-white border border-slate-200 rounded-lg shadow-sm">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-slate-200 bg-slate-50">
@@ -7281,7 +7281,7 @@ function StatsTable({
   emptyText?: string;
 }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-x-auto overflow-y-visible">
       <div className="px-3 py-2 font-semibold text-slate-800 border-b border-slate-200">{title}</div>
       <table className="w-full min-w-max text-sm">
         <thead>
