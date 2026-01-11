@@ -7301,11 +7301,14 @@ function StatsTable({
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-visible">
       <div className="px-3 py-2 font-semibold text-slate-800 border-b border-slate-200">{title}</div>
-      <table className="w-full text-sm">
+      <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="text-left border-b border-slate-200 bg-slate-50">
-            {columns.map((c) => (
-              <th key={c} className="px-3 py-2">
+            {columns.map((c, idx) => (
+              <th
+                key={c}
+                className={`px-3 py-2 ${idx === 0 ? "text-left" : "text-right"} ${idx === 0 ? "" : "whitespace-nowrap"}`}
+              >
                 {c}
               </th>
             ))}
@@ -7314,11 +7317,15 @@ function StatsTable({
         <tbody>
           {rows.map((r, idx) => (
             <tr key={idx} className="border-b border-slate-100">
-              {r.map((v, i) => (
-                <td key={i} className="px-3 py-2">
-                  {v}
-                </td>
-              ))}
+              {r.map((v, i) => {
+                const align = i === 0 ? "text-left" : "text-right";
+                const wrap = i === 0 ? "break-words" : "whitespace-nowrap";
+                return (
+                  <td key={i} className={`px-3 py-2 ${align} ${wrap}`}>
+                    {v}
+                  </td>
+                );
+              })}
             </tr>
           ))}
           {!rows.length && (
