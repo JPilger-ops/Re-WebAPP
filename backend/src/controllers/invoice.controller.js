@@ -2181,7 +2181,7 @@ export const sendInvoiceEmail = async (req, res) => {
 
     const recipients = buildDatevRecipients(email, datevEmail, includeDatev);
     const finalRecipients = redirectTo
-      ? { to: redirectTo, includeDatev: false }
+      ? { to: redirectTo, includeDatev: recipients.includeDatev, bcc: recipients.bcc }
       : recipients;
 
     let mailSent = false;
