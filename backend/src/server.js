@@ -57,6 +57,19 @@ app.use((req, res, next) => {
 });
 
 const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "true").toLowerCase());
+const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
+const permissionsPolicyHeader = [
+  "accelerometer=()",
+  "camera=()",
+  "geolocation=()",
+  "gyroscope=()",
+  "magnetometer=()",
+  "microphone=()",
+  "payment=()",
+  "usb=()",
+  "clipboard-write=(self)",
+  "fullscreen=(self)",
+].join(", ");
 
 const allowedOrigins = (
   process.env.CORS_ORIGINS ||
@@ -120,6 +133,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   hsts: httpsDisabled ? false : undefined, // disable HSTS when running HTTP behind proxy
 }));
+app.use((req, res, next) => {
+  res.setHeader("Permissions-Policy", permissionsPolicyHeader);
+  next();
+});
 if ((process.env.NODE_ENV || "development") !== "production") {
   app.use(morgan("dev"));
 }
@@ -150,7 +167,9 @@ app.use("/api/roles", roleRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/customers", authRequired, customerRoutes);
 app.use("/api/stats", authRequired, statsRoutes);
-app.use("/api/testdb", authRequired, testRoutes);
+if (!isProd) {
+  app.use("/api/testdb", authRequired, testRoutes);
+}
 app.use("/api/categories", categoryRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/backups", backupRoutes);
@@ -158,7 +177,6 @@ app.use("/api/version", versionRoutes);
 
 // DEV-only HKForms Mock (bypass auth), can be enabled in prod via HKFORMS_MOCK_ENABLE=1 for tests
 const enableHkformsMock =
-  (process.env.NODE_ENV || "development") !== "production" ||
   ["1", "true", "yes"].includes((process.env.HKFORMS_MOCK_ENABLE || "").toLowerCase());
 if (enableHkformsMock) {
   let hkformsLog = [];

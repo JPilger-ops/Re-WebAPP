@@ -18,7 +18,7 @@ import {
   getInvoiceStatusByReservation,
   updateInvoiceStatusByReservation
 } from "../controllers/invoice.controller.js";
-import { authRequired, requireRole, requireHkformsToken } from "../middleware/auth.middleware.js";
+import { authRequired, requireRole, requireHkformsToken, requirePermission } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
@@ -30,22 +30,22 @@ router.post("/by-reservation/:reservationId/status", requireHkformsToken, update
 router.use(authRequired);
 
 // Status-Routen
-router.post("/:id/status/sent", markSent);
-router.post("/:id/status/paid", markPaid);
-router.post("/bulk-cancel", bulkCancelInvoices);
-router.get("/:id/email-preview", getInvoiceEmailPreview);
-router.post("/:id/send-email", sendInvoiceEmail);
-router.post("/:id/datev-export", exportInvoiceToDatev);
+router.post("/:id/status/sent", requirePermission("invoices.update"), markSent);
+router.post("/:id/status/paid", requirePermission("invoices.update"), markPaid);
+router.post("/bulk-cancel", requirePermission("invoices.update"), bulkCancelInvoices);
+router.get("/:id/email-preview", requirePermission("invoices.export"), getInvoiceEmailPreview);
+router.post("/:id/send-email", requirePermission("invoices.export"), sendInvoiceEmail);
+router.post("/:id/datev-export", requirePermission("invoices.export"), exportInvoiceToDatev);
 
 // Standard-Routen
-router.get("/next-number", getNextInvoiceNumber);
-router.get("/recent", getRecentInvoices);
-router.get("/", getAllInvoices);     
-router.get("/:id", getInvoiceById);
-router.get("/:id/pdf", getInvoicePdf);
+router.get("/next-number", requirePermission("invoices.create"), getNextInvoiceNumber);
+router.get("/recent", requirePermission("invoices.read"), getRecentInvoices);
+router.get("/", requirePermission("invoices.read"), getAllInvoices);     
+router.get("/:id", requirePermission("invoices.read"), getInvoiceById);
+router.get("/:id/pdf", requirePermission("invoices.read"), getInvoicePdf);
 router.post("/:id/pdf/regenerate", requireRole("admin"), regenerateInvoicePdf);
-router.put("/:id", updateInvoice);
-router.post("/", createInvoice);
+router.put("/:id", requirePermission("invoices.update"), updateInvoice);
+router.post("/", requirePermission("invoices.create"), createInvoice);
 
 // Löschen
 router.delete("/:id", requireRole("admin"), deleteInvoice);

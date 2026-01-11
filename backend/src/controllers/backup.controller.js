@@ -99,9 +99,18 @@ export const updateBackupSettings = async (req, res) => {
     const next = await saveBackupConfig(updates);
     await testBackupPath(next.local_path);
     if (next.nas_path) {
-      await testBackupPath(next.nas_path).catch((err) => {
-        console.warn("[backup] NAS Pfad nicht beschreibbar:", err?.message || err);
-      });
+      const usesNas =
+        next.nfs?.enabled ||
+        next.default_target === "nas" ||
+        next.ui_create_target === "nas" ||
+        next.auto?.target === "nas";
+      if (usesNas) {
+        await testBackupPath(next.nas_path);
+      } else {
+        await testBackupPath(next.nas_path).catch((err) => {
+          console.warn("[backup] NAS Pfad nicht beschreibbar:", err?.message || err);
+        });
+      }
     }
     await reloadBackupScheduler();
     res.json(next);

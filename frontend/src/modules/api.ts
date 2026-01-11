@@ -155,7 +155,6 @@ export interface InvoiceHeaderSettings {
   iban: string | null;
   bic: string | null;
   footer_text: string | null;
-  logo_url: string | null;
   updated_at?: string | null;
 }
 

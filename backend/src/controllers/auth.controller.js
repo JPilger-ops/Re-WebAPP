@@ -103,6 +103,8 @@ async function loadPermissionsForRole(roleId) {
 export const register = async (req, res) => {
   try {
     const { username, password, role, createPin } = req.body;
+    const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
+    const expectedCreatePin = process.env.APP_CREATE_PIN;
 
     if (!username || !password) {
       return res
@@ -110,9 +112,13 @@ export const register = async (req, res) => {
         .json({ message: "Benutzername und Passwort sind erforderlich." });
     }
 
+    if (isProd && !expectedCreatePin) {
+      return res.status(503).json({ message: "Registrierung ist deaktiviert. APP_CREATE_PIN fehlt." });
+    }
+
     // Create-PIN-Check (falls gesetzt)
-    if (process.env.APP_CREATE_PIN) {
-      if (!createPin || createPin !== process.env.APP_CREATE_PIN) {
+    if (expectedCreatePin) {
+      if (!createPin || createPin !== expectedCreatePin) {
         return res
           .status(403)
           .json({ message: "Ungültiger Erstell-PIN." });
@@ -120,7 +126,7 @@ export const register = async (req, res) => {
     }
 
     // Rolle auflösen
-    const roleName = role || "user";
+    const roleName = isProd ? "user" : (role || "user");
     const roleRes = await prisma.roles.findUnique({
       where: { name: roleName }
     });

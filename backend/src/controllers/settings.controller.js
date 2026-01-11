@@ -194,14 +194,33 @@ export const getPdfSettingsData = async (_req, res) => {
 
 export const updatePdfSettingsData = async (req, res) => {
   try {
-    const path = (req.body?.storage_path || "").trim();
-    const archive = (req.body?.archive_path || "").trim();
-    const trash = (req.body?.trash_path || "").trim();
-    const saved = await savePdfSettings({ storage_path: path, archive_path: archive, trash_path: trash });
+    const storageInput = (req.body?.storage_path || "").trim();
+    const archiveInput = (req.body?.archive_path || "").trim();
+    const trashInput = (req.body?.trash_path || "").trim();
+
+    const defaultStorage = process.env.PDF_STORAGE_PATH || "/app/pdfs";
+    const effectiveStorage = storageInput || defaultStorage;
+    const effectiveArchive = archiveInput || effectiveStorage;
+    const effectiveTrash = trashInput || path.join(effectiveStorage, "trash");
+
+    await testPdfPathWritable(effectiveStorage);
+    if (effectiveArchive && effectiveArchive !== effectiveStorage) {
+      await testPdfPathWritable(effectiveArchive);
+    }
+    if (effectiveTrash) {
+      await testPdfPathWritable(effectiveTrash);
+    }
+
+    const saved = await savePdfSettings({
+      storage_path: storageInput,
+      archive_path: archiveInput,
+      trash_path: trashInput
+    });
     return res.json({ ...saved, message: "PDF-Einstellungen gespeichert." });
   } catch (err) {
     console.error("PDF-Einstellungen speichern fehlgeschlagen:", err);
-    return res.status(500).json({ message: "PDF-Einstellungen konnten nicht gespeichert werden." });
+    const message = err?.message || "PDF-Einstellungen konnten nicht gespeichert werden.";
+    return res.status(400).json({ message });
   }
 };
 
@@ -638,7 +657,6 @@ export const updateInvoiceHeaderData = async (req, res) => {
       iban: req.body?.iban?.trim() || null,
       bic: req.body?.bic?.trim() || null,
       footer_text: req.body?.footer_text?.trim() || null,
-      logo_url: req.body?.logo_url?.trim() || null,
     });
     return res.json({ message: "Briefkopf-Einstellungen gespeichert.", ...saved });
   } catch (err) {

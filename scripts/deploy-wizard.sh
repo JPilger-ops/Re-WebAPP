@@ -165,9 +165,11 @@ if [[ "${MODE,,}" == "install" ]]; then
   set_env_value "${ENV_FILE}" "APP_HTTPS_DISABLE" "$(prompt "APP_HTTPS_DISABLE" "${APP_HTTPS_DISABLE_VAL:-true}")"
   set_env_value "${ENV_FILE}" "APP_DATA_PATH" "$(prompt "APP_DATA_PATH (Container, persistente Daten)" "${APP_DATA_PATH_VAL:-/app/data}")"
   set_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH" "$(prompt "BACKUP_LOCAL_PATH (Container, Ziel für lokale Backups)" "${BACKUP_LOCAL_PATH_VAL:-/app/data/backups}")"
-  set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-1}"
+  set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "$(prompt "ALLOW_NFS_MOUNT (0/1)" "${ALLOW_NFS_MOUNT_VAL:-0}")"
 else
-  info "Update-Modus: .env bleibt unverändert (keine Prompts)."
+  info "Update-Modus: nur ALLOW_NFS_MOUNT abfragen (sonst keine Prompts)."
+  ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
+  set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "$(prompt "ALLOW_NFS_MOUNT (0/1)" "${ALLOW_NFS_MOUNT_VAL:-0}")"
 fi
 
 # DB-Datenpfad für docker compose (Standard: shared/data/db)
@@ -188,7 +190,7 @@ BACKUP_LOCAL_PATH_VAL="$(current_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH")"
 [ -z "${BACKUP_LOCAL_PATH_VAL}" ] && BACKUP_LOCAL_PATH_VAL="${APP_DATA_PATH_VAL}/backups"
 set_env_value "${ENV_FILE}" "BACKUP_LOCAL_PATH" "${BACKUP_LOCAL_PATH_VAL}"
 ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
-set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-1}"
+set_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT" "${ALLOW_NFS_MOUNT_VAL:-0}"
 
 # Image-Einstellungen (Install: fragen und setzen; Update: Tag/Repo wählbar)
 APP_IMAGE_VAL="$(current_env_value "${ENV_FILE}" "APP_IMAGE")"
@@ -240,6 +242,8 @@ chmod -R 777 "${HOST_PDF_BASE}" "${HOST_PDF_ARCHIVE}" "${HOST_PDF_TRASH}" "${HOS
 
 BACKEND_ENV_FILE="${RELEASE_DIR}/backend/.env"
 JWT_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
+SESSION_SECRET_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET")"
+APP_CREATE_PIN_VAL="$(current_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN")"
 
 # DB-Settings zwischen .env (Compose/DB) und backend/.env (App) synchron halten,
 # damit keine "password authentication failed" durch abweichende Werte entstehen.
@@ -259,11 +263,30 @@ if ! grep -q "^COMPOSE_PROJECT_NAME=" .env 2>/dev/null; then
   echo "COMPOSE_PROJECT_NAME=${PROJECT_NAME}" >> .env
 fi
 
-if [[ "${MODE,,}" == "install" ]]; then
-  info "Backend-Env (JWT_SECRET wird benötigt; andere Keys später in der UI konfigurierbar)"
-  set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
+# Compose-File-Auswahl: NFS benötigt Privilegien (docker-compose.nfs.yml)
+ALLOW_NFS_MOUNT_VAL="$(current_env_value "${ENV_FILE}" "ALLOW_NFS_MOUNT")"
+if [[ "${ALLOW_NFS_MOUNT_VAL,,}" == "1" || "${ALLOW_NFS_MOUNT_VAL,,}" == "true" || "${ALLOW_NFS_MOUNT_VAL,,}" == "yes" ]]; then
+  export COMPOSE_FILE="docker-compose.yml:docker-compose.nfs.yml"
+  info "NFS-Mount aktiv: verwende docker-compose.nfs.yml (privileged)."
 else
-  info "Update-Modus: backend/.env bleibt unverändert (kein JWT_SECRET Prompt)."
+  export COMPOSE_FILE="docker-compose.yml"
+fi
+
+if [[ "${MODE,,}" == "install" ]]; then
+  info "Backend-Env (JWT_SECRET/SESSION_SECRET erforderlich; APP_CREATE_PIN optional)"
+  set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_VAL:-}")"
+  set_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET" "$(prompt_required "SESSION_SECRET" "${SESSION_SECRET_VAL:-}")"
+  set_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN" "$(prompt "APP_CREATE_PIN (optional, leer=Registrierung aus)" "${APP_CREATE_PIN_VAL:-}")"
+else
+  info "Update-Modus: backend/.env bleibt unverändert (Secrets werden nur geprüft, falls leer/Default)."
+  JWT_SECRET_CHECK="$(current_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET")"
+  if [[ -z "${JWT_SECRET_CHECK}" || "${JWT_SECRET_CHECK}" == "change_me_jwt" || "${JWT_SECRET_CHECK}" == "dev-secret-change-me" ]]; then
+    set_env_value "${BACKEND_ENV_FILE}" "JWT_SECRET" "$(prompt_required "JWT_SECRET" "${JWT_SECRET_CHECK:-}")"
+  fi
+  SESSION_SECRET_CHECK="$(current_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET")"
+  if [[ -z "${SESSION_SECRET_CHECK}" || "${SESSION_SECRET_CHECK}" == "change_me_session" || "${SESSION_SECRET_CHECK}" == "change_me" ]]; then
+    set_env_value "${BACKEND_ENV_FILE}" "SESSION_SECRET" "$(prompt_required "SESSION_SECRET" "${SESSION_SECRET_CHECK:-}")"
+  fi
 fi
 
 section "Schritt 3: Build & Deploy"
@@ -315,8 +338,9 @@ if [[ "${MODE,,}" == "update" ]]; then
 fi
 RUN_SEED="$(prompt "Admin-Seed ausführen (legt admin/admin an, ändert kein bestehendes PW)" "${RUN_SEED_DEFAULT}")"
 if [[ "${RUN_SEED,,}" == "ja" || "${RUN_SEED,,}" == "y" ]]; then
-  info "Admin-User sicherstellen (admin / admin, bitte später ändern)"
-  DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-admin}" docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma db seed
+  ADMIN_PASSWORD="$(prompt "Admin Passwort (Standard: admin)" "admin")"
+  info "Admin-User sicherstellen (admin / ${ADMIN_PASSWORD}, bitte später ändern)"
+  ALLOW_ADMIN_SEED=1 DEFAULT_ADMIN_PASSWORD="${ADMIN_PASSWORD}" docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma db seed
 else
   info "Admin-Seed übersprungen (bestehende Benutzer bleiben unverändert)"
 fi

@@ -139,6 +139,39 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const ALLOWED_LOGO_EXT = [".png", ".jpg", ".jpeg", ".svg"];
+
+const sanitizeLogoName = (filename) => {
+  const base = String(filename || "").split(/[/\\]/).pop();
+  if (!base) return "";
+  const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, "");
+  if (!cleaned || cleaned.startsWith(".")) return "";
+  const ext = path.extname(cleaned).toLowerCase();
+  if (!ALLOWED_LOGO_EXT.includes(ext)) return "";
+  return cleaned;
+};
+
+const ALLOWED_INVOICE_TAGS = new Set(["br", "b", "strong", "i", "em", "u", "ul", "ol", "li", "p", "span"]);
+
+const sanitizeInvoiceHtml = (value) => {
+  const raw = String(value ?? "");
+  const parts = raw.split(/(<[^>]+>)/g);
+  return parts
+    .map((part) => {
+      if (!part.startsWith("<") || !part.endsWith(">")) {
+        return escapeHtml(part);
+      }
+      const match = part.match(/^<\/?\s*([a-z0-9]+)\s*\/?>$/i);
+      if (!match) return "";
+      const tag = match[1].toLowerCase();
+      if (!ALLOWED_INVOICE_TAGS.has(tag)) return "";
+      if (part.startsWith("</")) return `</${tag}>`;
+      if (tag === "br") return "<br>";
+      return `<${tag}>`;
+    })
+    .join("");
+};
+
 const stripHtmlToText = (html) => {
   if (!html) return "";
   return html
@@ -1415,12 +1448,18 @@ async function ensureInvoicePdf(id) {
 
     let logoBase64ForInvoice = null;
     if (categoryLogo) {
-      const categoryLogoPath = path.join(PUBLIC_ROOT, "logos", categoryLogo);
+      const safeLogo = sanitizeLogoName(categoryLogo);
+      if (!safeLogo) {
+        const error = new Error(`Kategorie-Logo ist ungültig: ${categoryLogo}. Bitte Logo neu hochladen.`);
+        error.code = "LOGO_NOT_FOUND";
+        throw error;
+      }
+      const categoryLogoPath = path.join(PUBLIC_ROOT, "logos", safeLogo);
       if (fs.existsSync(categoryLogoPath)) {
         logoBase64ForInvoice = fs.readFileSync(categoryLogoPath, "base64");
         console.log("Kategorie-Logo geladen:", categoryLogoPath);
       } else {
-        const error = new Error(`Kategorie-Logo fehlt oder wurde gelöscht: ${categoryLogo}. Bitte Logo neu hochladen oder Kategorie ohne Logo speichern.`);
+        const error = new Error(`Kategorie-Logo fehlt oder wurde gelöscht: ${safeLogo}. Bitte Logo neu hochladen oder Kategorie ohne Logo speichern.`);
         error.code = "LOGO_NOT_FOUND";
         error.logo_path = categoryLogoPath;
         throw error;
@@ -1459,7 +1498,7 @@ async function ensureInvoicePdf(id) {
 
         return `
           <tr>
-            <td>${item.description}</td>
+            <td>${sanitizeInvoiceHtml(item.description)}</td>
             <td style="text-align:right;"><span class="amount">${q}</span></td>
             <td style="text-align:right;"><span class="amount">${up} €</span></td>
             <td style="text-align:right;"><span class="amount">${total} €</span></td>
@@ -1515,7 +1554,6 @@ async function ensureInvoicePdf(id) {
       phone: headerSettings?.phone || "",
       vat_id: headerSettings?.vat_id || "",
       footer_text: headerSettings?.footer_text || "",
-      logo_url: headerSettings?.logo_url || null,
       bank_name: headerSettings?.bank_name || bankSettings.bank_name || "",
       iban: headerSettings?.iban || bankSettings.iban || "",
       bic: headerSettings?.bic || bankSettings.bic || "",
@@ -1557,8 +1595,6 @@ async function ensureInvoicePdf(id) {
         "--disable-dev-shm-usage",
         "--disable-gpu",
         "--no-zygote",
-        "--allow-file-access-from-files",
-        "--disable-web-security",
         "--disable-features=IsolateOrigins,site-per-process"
       ]
     });
@@ -1566,6 +1602,16 @@ async function ensureInvoicePdf(id) {
     const page = await browser.newPage();
     console.log(`[PDF] Page erstellt für Invoice ${id}`);
     await page.setDefaultNavigationTimeout(30000);
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const url = request.url();
+      if (url === "about:blank" || url.startsWith("data:") || url.startsWith("blob:")) {
+        request.continue();
+      } else {
+        request.abort();
+      }
+    });
 
     // HTML (debug optional auf Platte) – schreibe in ein beschreibbares temp-Verzeichnis
     if (!fs.existsSync(pdfDir)) fs.mkdirSync(pdfDir, { recursive: true });
@@ -1655,7 +1701,7 @@ function generateInvoiceHtml(
     phone: headerSettings?.phone || "",
     vat_id: headerSettings?.vat_id || "",
     footer_text: headerSettings?.footer_text || "",
-    logo_url: headerSettings?.logo_url || null,
+    logo_url: null,
   };
 
   const vatId = header.vat_id || taxSettings?.vat_id || "";
@@ -1860,9 +1906,7 @@ function generateInvoiceHtml(
 
   <div class="brand-box">
     ${
-      header.logo_url
-        ? `<img src="${header.logo_url}" alt="Logo" />`
-        : logoBase64ForInvoice
+      logoBase64ForInvoice
         ? `<img src="data:image/png;base64,${logoBase64ForInvoice}" alt="Logo" />`
         : ""
     }
@@ -1961,7 +2005,7 @@ function generateInvoiceHtml(
       }
       Bank: ${bankDisplay.bank_name} · IBAN: ${bankDisplay.iban} · BIC: ${bankDisplay.bic}<br>
       Kontoinhaber: ${bankDisplay.account_holder}<br>
-      ${header.footer_text || ""}
+      ${sanitizeInvoiceHtml(header.footer_text || "")}
     </div>
 
 </div>

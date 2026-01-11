@@ -5777,7 +5777,6 @@ function InvoiceSettingsForm() {
     bic: string;
     tax_number: string;
     footer_text: string;
-    logo_url: string;
   }>({
     company_name: "",
     address_line1: "",
@@ -5793,7 +5792,6 @@ function InvoiceSettingsForm() {
     bic: "",
     tax_number: "",
     footer_text: "",
-    logo_url: "",
   });
 
   useEffect(() => {
@@ -5816,7 +5814,6 @@ function InvoiceSettingsForm() {
           bic: bank.bic || header.bic || "",
           tax_number: tax.tax_number || "",
           footer_text: header.footer_text || "",
-          logo_url: header.logo_url || "",
         });
       })
       .catch((err: ApiError) =>
@@ -5844,7 +5841,6 @@ function InvoiceSettingsForm() {
           iban: form.iban || null,
           bic: form.bic || null,
           footer_text: form.footer_text || null,
-          logo_url: form.logo_url || null,
         }),
         updateBankSettings({
           account_holder: form.account_holder,
@@ -5968,13 +5964,6 @@ function InvoiceSettingsForm() {
           <input
             value={form.tax_number}
             onChange={(e) => setForm((f) => ({ ...f, tax_number: e.target.value }))}
-            className="input"
-          />
-        </Field>
-        <Field label="Logo URL (optional)">
-          <input
-            value={form.logo_url}
-            onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
             className="input"
           />
         </Field>

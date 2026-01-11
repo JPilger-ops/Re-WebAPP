@@ -16,6 +16,7 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 import app from "./server.js";
 
 const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
+const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
 const appDomain = process.env.APP_DOMAIN || (httpsDisabled ? "http://localhost:3030" : "https://rechnung.intern");
 const port = Number(process.env.APP_PORT || process.env.APP_HTTPS_PORT || 3030);
 const bindHost = process.env.APP_HOST || process.env.APP_BIND_IP || "0.0.0.0";
@@ -24,9 +25,46 @@ const trustProxyEnv = (process.env.TRUST_PROXY || "1");
 const corsOrigins = (process.env.CORS_ORIGINS || "https://rechnung.intern");
 const publicUrl = process.env.APP_PUBLIC_URL || appDomain;
 
+const enforceProdSecrets = () => {
+  if (!isProd) return;
+  const errors = [];
+  const warnings = [];
+
+  const requireSecret = (key, value, forbidden = []) => {
+    if (!value) {
+      errors.push(`${key} fehlt.`);
+      return;
+    }
+    if (forbidden.includes(value)) {
+      errors.push(`${key} nutzt einen Standardwert.`);
+    }
+  };
+
+  requireSecret("JWT_SECRET", process.env.JWT_SECRET, ["change_me_jwt", "dev-secret-change-me"]);
+  requireSecret("SESSION_SECRET", process.env.SESSION_SECRET, ["change_me_session", "change_me"]);
+
+  const createPin = process.env.APP_CREATE_PIN || "";
+  if (!createPin) {
+    warnings.push("APP_CREATE_PIN fehlt (Registrierung ist deaktiviert).");
+  } else if (createPin === "change_me_strong") {
+    warnings.push("APP_CREATE_PIN nutzt den Beispielwert.");
+  }
+
+  if (warnings.length) {
+    warnings.forEach((msg) => console.warn("[security warning]", msg));
+  }
+  if (errors.length) {
+    console.error("[security] Unsichere Prod-Konfiguration:");
+    errors.forEach((msg) => console.error(`- ${msg}`));
+    process.exit(1);
+  }
+};
+
 console.log("[config] httpsDisabled:", httpsDisabled, "| listen:", `${bindHost}:${port}`, "| publicPort:", publicPort, "| trustProxy:", trustProxyEnv);
 console.log("[config] CORS_ORIGINS:", corsOrigins);
 console.log("[config] APP_PUBLIC_URL:", publicUrl);
+
+enforceProdSecrets();
 
 if (httpsDisabled) {
   http.createServer(app).listen(port, bindHost, () => {
