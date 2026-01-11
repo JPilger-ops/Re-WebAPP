@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink as RouterNavLink } from "react-router-dom";
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -188,51 +189,106 @@ type MoreMenuItem = {
 };
 
 export function MoreMenu({ items, align = "right" }: { items: MoreMenuItem[]; align?: "left" | "right" }) {
-  const closeMenu = (el: HTMLElement | null) => {
-    const details = el?.closest("details") as HTMLDetailsElement | null;
-    if (details) details.open = false;
-  };
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const transform = useMemo(
+    () => (align === "right" ? "translateX(-100%)" : "translateX(0)"),
+    [align]
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + 8,
+        left: align === "right" ? rect.right : rect.left,
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open, align]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("touchstart", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("touchstart", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   return (
-    <details className="relative inline-block">
-      <summary
-        className="cursor-pointer list-none select-none h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 motion-safe transition"
-        role="button"
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="cursor-pointer select-none h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 motion-safe transition"
         aria-label="Weitere Aktionen"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            const details = (e.currentTarget as HTMLElement).closest("details") as HTMLDetailsElement | null;
-            if (details) details.open = !details.open;
+            setOpen((v) => !v);
+          } else if (e.key === "Escape") {
+            setOpen(false);
           }
         }}
       >
         <span className="text-lg leading-none">⋮</span>
-      </summary>
-      <div
-        className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 min-w-[160px] bg-white border border-slate-200 rounded shadow z-20 p-1 text-sm space-y-1 motion-safe transition`}
-        style={{ animation: "menuIn 140ms ease" }}
-      >
-        {items.map((item, idx) => (
-          <button
-            key={idx}
-            className={`w-full inline-flex items-center gap-2 text-left px-2 py-1 rounded hover:bg-slate-100 ${
-              item.danger ? "text-red-600" : ""
-            } ${item.disabled ? "opacity-60 cursor-not-allowed" : ""}`}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (item.disabled) return;
-              closeMenu(e.currentTarget);
-              item.onClick();
-            }}
-            disabled={item.disabled}
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="fixed min-w-[160px] bg-white border border-slate-200 rounded shadow z-[9999] p-1 text-sm space-y-1 motion-safe transition"
+            style={{ top: pos.top, left: pos.left, transform, animation: "menuIn 140ms ease" }}
+            role="menu"
           >
-            {item.icon}
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
-    </details>
+            {items.map((item, idx) => (
+              <button
+                key={idx}
+                className={`w-full inline-flex items-center gap-2 text-left px-2 py-1 rounded hover:bg-slate-100 ${
+                  item.danger ? "text-red-600" : ""
+                } ${item.disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (item.disabled) return;
+                  setOpen(false);
+                  item.onClick();
+                }}
+                disabled={item.disabled}
+                role="menuitem"
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+    </div>
   );
 }
