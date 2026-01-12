@@ -1474,6 +1474,7 @@ async function ensureInvoicePdf(id) {
         quantity: true,
         unit_price_gross: true,
         line_total_gross: true,
+        vat_key: true,
       },
     });
 
@@ -1487,20 +1488,27 @@ async function ensureInvoicePdf(id) {
     const headerSettings = await getInvoiceHeaderSettings();
     console.log(`[PDF] ${items.length} Positionen + Bank-Settings geladen für Invoice ${id}`);
 
-    const formattedDate =
-      invoice.date ? new Date(invoice.date).toLocaleDateString("de-DE") : "";
+    const formattedDate = invoice.date
+      ? new Date(invoice.date).toLocaleDateString("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })
+      : "";
 
     const itemsRowsHtml = items
       .map((item) => {
         const q = formatNumberDe(item.quantity);
         const up = formatCurrencyDe(item.unit_price_gross);
         const total = formatCurrencyDe(item.line_total_gross);
+        const vatLabel = item.vat_key === 1 ? "19%" : item.vat_key === 2 ? "7%" : "0%";
 
         return `
           <tr>
             <td>${sanitizeInvoiceHtml(item.description)}</td>
             <td style="text-align:right;"><span class="amount">${q}</span></td>
             <td style="text-align:right;"><span class="amount">${up} €</span></td>
+            <td style="text-align:right;"><span class="amount">${vatLabel}</span></td>
             <td style="text-align:right;"><span class="amount">${total} €</span></td>
           </tr>
         `;
@@ -1681,7 +1689,7 @@ function generateInvoiceHtml(
 ) {
   const formatIban = (iban) => {
     if (!iban) return "-";
-    return iban.replace(/(.{4})/g, "$1 ").trim();
+    return iban.replace(/\s+/g, "").replace(/(.{4})/g, "$1 ").trim();
   };
 
   const bankDisplay = {
@@ -1816,10 +1824,11 @@ function generateInvoiceHtml(
     display: inline-block;
   }
 
-  th:nth-child(1), td:nth-child(1) { width: 50%; text-align: left; }
+  th:nth-child(1), td:nth-child(1) { width: 45%; text-align: left; }
   th:nth-child(2), td:nth-child(2) { width: 10%; text-align: right; }
-  th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }
-  th:nth-child(4), td:nth-child(4) { width: 20%; text-align: right; }
+  th:nth-child(3), td:nth-child(3) { width: 15%; text-align: right; }
+  th:nth-child(4), td:nth-child(4) { width: 10%; text-align: right; }
+  th:nth-child(5), td:nth-child(5) { width: 20%; text-align: right; }
 
   .totals-wrapper {
     width: 55mm;
@@ -1945,6 +1954,7 @@ function generateInvoiceHtml(
           <th>Beschreibung</th>
           <th>Menge</th>
           <th>Einzelpreis</th>
+          <th>MwSt</th>
           <th>Gesamt</th>
         </tr>
       </thead>
