@@ -296,6 +296,8 @@ else
     set_env_value "${BACKEND_ENV_FILE}" "APP_CREATE_PIN" "$(prompt_required "APP_CREATE_PIN (erforderlich)" "")"
   fi
 fi
+# Admin-Seed darf nie dauerhaft aktiv bleiben (nur temporär per -e gesetzt).
+set_env_value "${BACKEND_ENV_FILE}" "ALLOW_ADMIN_SEED" "0"
 
 section "Schritt 3: Build & Deploy"
 info "Schreibe Build-Metadaten in .env (ohne Build)"
@@ -348,7 +350,10 @@ RUN_SEED="$(prompt "Admin-Seed ausführen (legt admin/admin an, ändert kein bes
 if [[ "${RUN_SEED,,}" == "ja" || "${RUN_SEED,,}" == "y" ]]; then
   ADMIN_PASSWORD="$(prompt "Admin Passwort (Standard: admin)" "admin")"
   info "Admin-User sicherstellen (admin / ${ADMIN_PASSWORD}, bitte später ändern)"
-  ALLOW_ADMIN_SEED=1 DEFAULT_ADMIN_PASSWORD="${ADMIN_PASSWORD}" docker compose --project-name "${PROJECT_NAME}" run --rm app npx prisma db seed
+  docker compose --project-name "${PROJECT_NAME}" run --rm \
+    -e ALLOW_ADMIN_SEED=1 \
+    -e DEFAULT_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
+    app npx prisma db seed
 else
   info "Admin-Seed übersprungen (bestehende Benutzer bleiben unverändert)"
 fi

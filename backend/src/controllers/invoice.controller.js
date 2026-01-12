@@ -605,7 +605,7 @@ if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
-    if (unitPrice === null || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+    if (unitPrice === null || !Number.isFinite(unitPrice)) {
       return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
@@ -850,7 +850,7 @@ export const updateInvoice = async (req, res) => {
     if (quantity === null || !Number.isFinite(quantity) || quantity <= 0) {
       return res.status(400).json({ message: `Menge fehlt oder ist ungültig in Position ${i + 1}.` });
     }
-    if (unitPrice === null || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+    if (unitPrice === null || !Number.isFinite(unitPrice)) {
       return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
     }
     if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
