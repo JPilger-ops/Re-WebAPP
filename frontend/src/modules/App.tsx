@@ -2548,11 +2548,10 @@ function InvoiceFormModal({
           !i.description.trim() ||
           !Number.isFinite(i.quantity) ||
           i.quantity <= 0 ||
-          !Number.isFinite(i.unit_price_gross) ||
-          i.unit_price_gross <= 0
+          !Number.isFinite(i.unit_price_gross)
       )
     ) {
-      setError("Bitte alle Positionen ausfüllen (Beschreibung, Menge > 0, Preis > 0).");
+      setError("Bitte alle Positionen ausfüllen (Beschreibung, Menge > 0, Preis gesetzt).");
       return;
     }
     if (form.b2b && !form.ust_id.trim()) {
