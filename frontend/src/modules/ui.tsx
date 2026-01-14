@@ -128,13 +128,13 @@ export function Modal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4 py-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[min(92vw,800px)] max-h-[calc(100vh-3rem)] border border-slate-200 overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
           <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-700 rounded-full p-1">✕</button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-4 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
