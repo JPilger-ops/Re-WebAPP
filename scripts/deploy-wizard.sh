@@ -367,8 +367,36 @@ ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 if command -v curl >/dev/null 2>&1; then
   PORT="$(grep -m1 "^APP_PUBLIC_PORT=" .env | cut -d= -f2-)"
   PORT="${PORT:-3031}"
-  info "Healthcheck: http://127.0.0.1:${PORT}/api/version"
-  curl -fsS "http://127.0.0.1:${PORT}/api/version" || warn "Healthcheck fehlgeschlagen (ggf. Port/Proxy prüfen)."
+  HTTPS_DISABLE_RAW="$(grep -h -m1 "^APP_HTTPS_DISABLE=" .env backend/.env 2>/dev/null | cut -d= -f2- | tr -d '\r')"
+  HTTPS_DISABLE="${HTTPS_DISABLE_RAW,,}"
+  PROTO="http"
+  CURL_ARGS="-fsS"
+  if [[ "${HTTPS_DISABLE}" != "true" && "${HTTPS_DISABLE}" != "1" && "${HTTPS_DISABLE}" != "yes" ]]; then
+    PROTO="https"
+    CURL_ARGS="-fsSk"
+  fi
+  URL_PRIMARY="${PROTO}://127.0.0.1:${PORT}/api/version"
+  URL_FALLBACK="http://127.0.0.1:${PORT}/api/version"
+  if [[ "${PROTO}" == "http" ]]; then
+    URL_FALLBACK="https://127.0.0.1:${PORT}/api/version"
+  fi
+
+  info "Healthcheck: ${URL_PRIMARY}"
+  HEALTH_OK=""
+  for _ in {1..10}; do
+    if curl ${CURL_ARGS} "${URL_PRIMARY}" >/dev/null; then
+      HEALTH_OK="yes"
+      break
+    fi
+    sleep 2
+  done
+  if [[ -z "${HEALTH_OK}" ]]; then
+    if curl -fsSk "${URL_FALLBACK}" >/dev/null; then
+      warn "Healthcheck ok via ${URL_FALLBACK}. Prüfe APP_HTTPS_DISABLE/Port."
+    else
+      warn "Healthcheck fehlgeschlagen (ggf. Port/Proxy prüfen)."
+    fi
+  fi
 fi
 
 info "Fertig. Nutze ${CURRENT_LINK} für nachfolgende Kommandos. Modus: ${MODE}"
