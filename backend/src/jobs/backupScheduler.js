@@ -48,11 +48,13 @@ export const runAutoBackup = async () => {
     return;
   }
   try {
-    if (auto.target === "nas" && cfg?.nfs?.auto_mount !== false) {
+    const resolvedTarget =
+      auto.target === "nas" ? "nas" : auto.target === "local" ? "local" : cfg.default_target === "nas" ? "nas" : "local";
+    if (resolvedTarget === "nas" && cfg?.nfs?.auto_mount !== false) {
       await ensureNfsMounted(cfg);
     }
     await createBackup({
-      target: auto.target === "nas" ? "nas" : "local",
+      target: resolvedTarget === "nas" ? "nas" : "local",
       include_db: Boolean(auto.include_db),
       include_files: Boolean(auto.include_files),
       include_env: Boolean(auto.include_env),

@@ -43,14 +43,12 @@ function clearFailures(username) {
 const buildCookieOptions = (req) => {
   const secureCookie = isSecureRequest(req);
   const sameSite = getAuthCookieSameSite() || "lax";
-  const ttlMinutes = getAuthTokenTtlMinutes();
 
   return {
     httpOnly: true,
     sameSite,
     secure: secureCookie,
     path: "/",
-    maxAge: ttlMinutes * 60 * 1000,
     domain: process.env.COOKIE_DOMAIN || undefined,
   };
 };
