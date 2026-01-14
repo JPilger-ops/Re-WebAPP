@@ -60,6 +60,7 @@ Nächste Schritte:
    - Auf deinem Server: setze APP_BIND_IP=192.200.255.225 und APP_PUBLIC_PORT=3031 (Host-Port)
    - Standard (CI/Local): APP_BIND_IP=0.0.0.0, APP_PUBLIC_PORT=3031
 4) Healthcheck: curl http://${APP_BIND_IP:-127.0.0.1}:${APP_PUBLIC_PORT:-3031}/api/version
+   - Falls APP_HTTPS_DISABLE nicht true ist: curl -k https://${APP_BIND_IP:-127.0.0.1}:${APP_PUBLIC_PORT:-3031}/api/version
 EOF
 
   success "Setup-Skript fertig."
