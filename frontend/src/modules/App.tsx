@@ -162,6 +162,47 @@ function extractBuildNumber(info: VersionInfo | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+type InvoiceMenuAction = {
+  onClick?: () => void;
+  label?: string;
+  disabled?: boolean;
+  danger?: boolean;
+};
+
+type InvoiceMenuActions = {
+  open?: InvoiceMenuAction;
+  edit?: InvoiceMenuAction;
+  pdf?: InvoiceMenuAction;
+  preview?: InvoiceMenuAction;
+  send?: InvoiceMenuAction;
+  datev?: InvoiceMenuAction;
+  markSent?: InvoiceMenuAction;
+  markPaid?: InvoiceMenuAction;
+  remove?: InvoiceMenuAction;
+};
+
+const buildInvoiceMenuItems = (actions: InvoiceMenuActions) => {
+  const noop = () => {};
+  const pick = (action: InvoiceMenuAction | undefined, label: string, danger = false) => ({
+    label: action?.label || label,
+    onClick: action?.onClick || noop,
+    danger: action?.danger ?? danger,
+    disabled: action?.disabled ?? !action?.onClick,
+  });
+
+  return [
+    pick(actions.open, "Öffnen"),
+    pick(actions.edit, "Bearbeiten"),
+    pick(actions.pdf, "PDF öffnen"),
+    pick(actions.preview, "E-Mail Vorschau"),
+    pick(actions.send, "E-Mail senden"),
+    pick(actions.datev, "DATEV Export"),
+    pick(actions.markSent, "Als gesendet markieren"),
+    pick(actions.markPaid, "Als bezahlt markieren"),
+    pick(actions.remove, "Löschen", true),
+  ];
+};
+
 function formatVersionBadge(info: VersionInfo | null) {
   if (!info) return null;
   const buildNumber = extractBuildNumber(info);
@@ -649,8 +690,11 @@ function Dashboard() {
   const [recentStatus, setRecentStatus] = useState<FormStatus>(null);
   const [recentLoading, setRecentLoading] = useState(true);
   const [preview, setPreview] = useState<{ open: boolean; html: string; text: string; subject: string } | null>(null);
+  const [toast, setToast] = useState<FormStatus>(null);
+  const [sendModal, setSendModal] = useState<{ open: boolean; id?: number; to?: string; subject?: string; message?: string; includeDatev?: boolean }>({ open: false });
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  useEffect(() => {
+  const loadRecent = useCallback(() => {
     setRecentStatus(null);
     setRecentLoading(true);
     listRecentInvoices(10)
@@ -659,6 +703,10 @@ function Dashboard() {
       .finally(() => setRecentLoading(false));
   }, []);
 
+  useEffect(() => {
+    loadRecent();
+  }, [loadRecent]);
+
   const statusLabel = (inv: RecentInvoice) => {
     if (inv.status_paid_at) return { text: "bezahlt", tone: "green" as const };
     if (inv.status_sent) return { text: "gesendet", tone: "blue" as const };
@@ -666,6 +714,7 @@ function Dashboard() {
   };
 
   const openInvoice = (id: number) => navigate(`/invoices/${id}`);
+  const editInvoice = (id: number) => navigate(`/invoices?edit=${id}`);
   const formatAmount = (value: any) => {
     const num = Number(value);
     return Number.isFinite(num)
@@ -677,12 +726,114 @@ function Dashboard() {
     window.open(`/api/invoices/${id}/pdf?mode=inline`, "_blank");
   };
 
-  const regeneratePdf = async (id: number) => {
+  const openSend = async (id: number) => {
+    setBusyId(id);
     try {
-      await regenerateInvoicePdf(id);
-      openPdf(id);
+      const data = await getInvoice(id);
+      setSendModal({ open: true, id, to: data.invoice.recipient.email || "" });
+    } catch {
+      setSendModal({ open: true, id, to: "" });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onSendEmail = async () => {
+    if (!sendModal.id) return;
+    if (!sendModal.to || !sendModal.to.trim()) {
+      setToast({ type: "error", message: "Bitte Empfänger-E-Mail angeben." });
+      return;
+    }
+    setBusyId(sendModal.id);
+    setToast(null);
+    try {
+      const res = await sendInvoiceEmailApi(sendModal.id, {
+        to: sendModal.to.trim(),
+        subject: sendModal.subject || undefined,
+        message: sendModal.message || undefined,
+        include_datev: sendModal.includeDatev,
+      });
+      setToast({ type: "success", message: res.message || "E-Mail gesendet." });
+      setRecent((prev) =>
+        prev.map((inv) =>
+          inv.id === sendModal.id
+            ? { ...inv, status_sent: true, status_sent_at: new Date().toISOString() }
+            : inv
+        )
+      );
+      setSendModal({ open: false });
     } catch (err: any) {
-      alert((err as ApiError)?.message || "PDF konnte nicht neu erstellt werden.");
+      const apiErr = err as ApiError;
+      let msg = apiErr.message || "E-Mail konnte nicht gesendet werden.";
+      if (apiErr.status === 400 && msg.toLowerCase().includes("smtp")) {
+        msg = "E-Mail Versand ist nicht konfiguriert (SMTP). Bitte Einstellungen prüfen.";
+      }
+      setToast({ type: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onDatevExport = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      const res = await exportInvoiceDatev(id);
+      setToast({ type: "success", message: res.message || "DATEV Export gestartet." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "DATEV Export fehlgeschlagen." });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const markAsSent = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      await markInvoiceSent(id);
+      setRecent((prev) =>
+        prev.map((inv) => (inv.id === id ? { ...inv, status_sent: true, status_sent_at: new Date().toISOString() } : inv))
+      );
+      setToast({ type: "success", message: "Als gesendet markiert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Konnte nicht markieren." });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const markAsPaid = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      await markInvoicePaid(id);
+      setRecent((prev) =>
+        prev.map((inv) => (inv.id === id ? { ...inv, status_paid_at: new Date().toISOString() } : inv))
+      );
+      setToast({ type: "success", message: "Als bezahlt markiert." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Konnte nicht markieren." });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onDelete = async (id: number) => {
+    setBusyId(id);
+    setToast(null);
+    try {
+      await deleteInvoice(id);
+      setRecent((prev) => prev.filter((inv) => inv.id !== id));
+      setToast({ type: "success", message: "Rechnung gelöscht." });
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Rechnung konnte nicht gelöscht werden." });
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -698,19 +849,17 @@ function Dashboard() {
 
   const actionMenu = (inv: RecentInvoice) => (
     <MoreMenu
-      items={[
-        { label: "Öffnen", onClick: () => openInvoice(inv.id) },
-        { label: "PDF öffnen", onClick: () => openPdf(inv.id) },
-        { label: "E-Mail Vorschau", onClick: () => previewEmail(inv.id) },
-        ...(user?.role_name === "admin"
-          ? [
-              {
-                label: "PDF neu erstellen",
-                onClick: () => regeneratePdf(inv.id),
-              },
-            ]
-          : []),
-      ]}
+      items={buildInvoiceMenuItems({
+        open: { onClick: () => openInvoice(inv.id) },
+        edit: { onClick: () => editInvoice(inv.id) },
+        pdf: { onClick: () => openPdf(inv.id) },
+        preview: { onClick: () => previewEmail(inv.id) },
+        send: { onClick: () => openSend(inv.id), disabled: busyId === inv.id },
+        datev: { onClick: () => onDatevExport(inv.id), disabled: busyId === inv.id },
+        markSent: { onClick: () => markAsSent(inv.id), disabled: busyId === inv.id || Boolean(inv.status_sent) },
+        markPaid: { onClick: () => markAsPaid(inv.id), disabled: busyId === inv.id || Boolean(inv.status_paid_at) },
+        remove: { onClick: () => onDelete(inv.id), danger: true, disabled: busyId === inv.id },
+      })}
     />
   );
 
@@ -797,6 +946,8 @@ function Dashboard() {
         )}
       </div>
 
+      {toast && <Alert type={toast.type === "success" ? "success" : toast.type}>{toast.message}</Alert>}
+
       {preview?.open && (
         <Modal title={preview.subject || "E-Mail Vorschau"} onClose={() => setPreview(null)}>
           <div className="space-y-3">
@@ -816,6 +967,52 @@ function Dashboard() {
               <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap text-sm bg-white">
                 {preview.text || "(leer)"}
               </pre>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {sendModal.open && (
+        <Modal title="Rechnung per E-Mail senden" onClose={() => setSendModal({ open: false })}>
+          <div className="space-y-3">
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Empfänger</span>
+              <Input
+                value={sendModal.to || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, to: e.target.value }))}
+                placeholder="kunde@example.com"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Betreff (optional)</span>
+              <Input
+                value={sendModal.subject || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, subject: e.target.value }))}
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Nachricht (optional)</span>
+              <Textarea
+                value={sendModal.message || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, message: e.target.value }))}
+                className="min-h-[100px]"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={sendModal.includeDatev || false}
+                onChange={(e) => setSendModal((s) => ({ ...s, includeDatev: e.target.checked }))}
+              />
+              <span>DATEV-Adresse (falls hinterlegt) einbeziehen</span>
+            </label>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setSendModal({ open: false })}>
+                Abbrechen
+              </Button>
+              <Button onClick={onSendEmail} disabled={busyId === sendModal.id}>
+                {busyId === sendModal.id ? "Sendet..." : "Senden"}
+              </Button>
             </div>
           </div>
         </Modal>
@@ -1320,6 +1517,14 @@ function Invoices() {
   }, [filtered]);
 
   useEffect(() => {
+    const editParam = searchParams.get("edit");
+    const editId = editParam ? Number(editParam) : NaN;
+    if (Number.isFinite(editId) && editId > 0) {
+      setModal({ mode: "edit", id: editId });
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
     if (statusFilter !== "active") params.set("status", statusFilter);
@@ -1799,21 +2004,21 @@ function Invoices() {
                         </td>
                         <td className="px-3 py-3 w-14 text-right align-top">
                           <MoreMenu
-                            items={[
-                              { label: "Öffnen", onClick: () => navigate(`/invoices/${inv.id}`) },
-                              { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", id: inv.id }) },
-                              {
+                            items={buildInvoiceMenuItems({
+                              open: { onClick: () => navigate(`/invoices/${inv.id}`) },
+                              edit: { onClick: () => setModal({ mode: "edit", id: inv.id }) },
+                              pdf: {
                                 label: pdfBusyId === inv.id ? "PDF …" : "PDF öffnen",
                                 onClick: () => handlePdfOpen(inv.id),
                                 disabled: pdfBusyId === inv.id,
                               },
-                              { label: "E-Mail Vorschau", onClick: () => loadPreview(inv.id) },
-                              { label: "E-Mail senden", onClick: () => openSend(inv.id, inv.recipient_email || "") },
-                              { label: "DATEV Export", onClick: () => onDatevExport(inv.id), disabled: isCanceled },
-                              { label: "Als gesendet markieren", onClick: () => markAsSent(inv.id), disabled: isCanceled },
-                              { label: "Als bezahlt markieren", onClick: () => markAsPaid(inv.id), disabled: isCanceled },
-                              { label: "Löschen", danger: true, onClick: () => onDelete(inv.id) },
-                            ]}
+                              preview: { onClick: () => loadPreview(inv.id) },
+                              send: { onClick: () => openSend(inv.id, inv.recipient_email || "") },
+                              datev: { onClick: () => onDatevExport(inv.id), disabled: isCanceled },
+                              markSent: { onClick: () => markAsSent(inv.id), disabled: isCanceled },
+                              markPaid: { onClick: () => markAsPaid(inv.id), disabled: isCanceled },
+                              remove: { onClick: () => onDelete(inv.id), danger: true },
+                            })}
                           />
                         </td>
                       </tr>
@@ -2532,6 +2737,10 @@ function InvoiceFormModal({
       setError("Rechnungsdatum fehlt.");
       return;
     }
+    if (!form.category_key || !form.category_key.trim()) {
+      setError("Kategorie ist erforderlich.");
+      return;
+    }
     const normalizedItems = items.map((i) => ({
       ...i,
       quantity: parseNumberValue(i.quantity),
@@ -2740,12 +2949,15 @@ function InvoiceFormModal({
               />
             </label>
             <label className="text-sm text-slate-700 space-y-1">
-              <span className="font-medium">Kategorie</span>
+              <span className="font-medium">Kategorie *</span>
               <Select
                 value={form.category_key}
                 onChange={(e) => setForm((f) => ({ ...f, category_key: e.target.value }))}
+                required
               >
-                <option value="">– Keine –</option>
+                <option value="" disabled>
+                  Bitte wählen
+                </option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.key}>
                     {c.label}
@@ -2919,7 +3131,7 @@ function InvoiceDetailPage() {
   const [sentBusy, setSentBusy] = useState(false);
   const [paidBusy, setPaidBusy] = useState(false);
   const [preview, setPreview] = useState<{ loading: boolean; data: any | null; error: string | null }>({ loading: false, data: null, error: null });
-  const [sendModal, setSendModal] = useState<{ open: boolean; to?: string }>({ open: false });
+  const [sendModal, setSendModal] = useState<{ open: boolean; to?: string; subject?: string; message?: string; includeDatev?: boolean }>({ open: false });
   const [pdfBusy, setPdfBusy] = useState(false);
   const [confirmPdfRegenerate, setConfirmPdfRegenerate] = useState(false);
   const inv = detail?.invoice;
@@ -3107,7 +3319,12 @@ function InvoiceDetailPage() {
     setBusy(true);
     setToast(null);
     try {
-      const res = await sendInvoiceEmailApi(detail.invoice.id, { to: sendModal.to.trim() });
+      const res = await sendInvoiceEmailApi(detail.invoice.id, {
+        to: sendModal.to.trim(),
+        subject: sendModal.subject || undefined,
+        message: sendModal.message || undefined,
+        include_datev: sendModal.includeDatev,
+      });
       setToast({ type: "success", message: res.message || "E-Mail gesendet." });
       setDetail((prev) =>
         prev
@@ -3144,6 +3361,27 @@ function InvoiceDetailPage() {
     } catch (err: any) {
       const apiErr = err as ApiError;
       setToast({ type: "error", message: apiErr.message || "DATEV Export fehlgeschlagen." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editInvoice = () => {
+    if (!detail) return;
+    navigate(`/invoices?edit=${detail.invoice.id}`);
+  };
+
+  const onDelete = async () => {
+    if (!detail) return;
+    setBusy(true);
+    setToast(null);
+    try {
+      await deleteInvoice(detail.invoice.id);
+      setToast({ type: "success", message: "Rechnung gelöscht." });
+      navigate("/invoices");
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setToast({ type: "error", message: apiErr.message || "Rechnung konnte nicht gelöscht werden." });
     } finally {
       setBusy(false);
     }
@@ -3215,16 +3453,17 @@ function InvoiceDetailPage() {
             {inv.status_paid_at ? "Bezahlt" : paidBusy ? "Markiere..." : "Als bezahlt markieren"}
           </Button>
           <MoreMenu
-            items={[
-              {
-                label: pdfBusy ? "PDF …" : "PDF öffnen",
-                onClick: openDetailPdf,
-                disabled: pdfBusy,
-              },
-              { label: "E-Mail Vorschau", onClick: loadPreview },
-              { label: "E-Mail senden", onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
-              { label: "DATEV Export", onClick: onDatevExport, disabled: isCanceled },
-            ]}
+            items={buildInvoiceMenuItems({
+              open: { onClick: () => navigate(`/invoices/${inv.id}`) },
+              edit: { onClick: editInvoice },
+              pdf: { label: pdfBusy ? "PDF …" : "PDF öffnen", onClick: openDetailPdf, disabled: pdfBusy },
+              preview: { onClick: loadPreview },
+              send: { onClick: () => setSendModal({ open: true, to: inv.recipient.email || "" }) },
+              datev: { onClick: onDatevExport, disabled: isCanceled },
+              markSent: { onClick: onMarkSent, disabled: isCanceled || Boolean(inv.status_sent) },
+              markPaid: { onClick: onMarkPaid, disabled: isCanceled || Boolean(inv.status_paid_at) },
+              remove: { onClick: onDelete, danger: true },
+            })}
           />
         </div>
       </div>
@@ -3475,6 +3714,29 @@ function InvoiceDetailPage() {
                 onChange={(e) => setSendModal((s) => ({ ...s, to: e.target.value }))}
                 placeholder="kunde@example.com"
               />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Betreff (optional)</span>
+              <Input
+                value={sendModal.subject || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, subject: e.target.value }))}
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              <span className="font-medium">Nachricht (optional)</span>
+              <Textarea
+                value={sendModal.message || ""}
+                onChange={(e) => setSendModal((s) => ({ ...s, message: e.target.value }))}
+                className="min-h-[100px]"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={sendModal.includeDatev || false}
+                onChange={(e) => setSendModal((s) => ({ ...s, includeDatev: e.target.checked }))}
+              />
+              <span>DATEV-Adresse (falls hinterlegt) einbeziehen</span>
             </label>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="secondary" onClick={() => setSendModal({ open: false })}>
@@ -4189,6 +4451,8 @@ function BackupSettingsPanel() {
       const data = await getBackupSettings();
       const defaultTarget = data.default_target === "nas" ? "nas" : "local";
       const uiTarget = data.ui_create_target === "nas" ? "nas" : data.ui_create_target === "local" ? "local" : defaultTarget;
+      const autoTarget =
+        data.auto?.target === "nas" ? "nas" : data.auto?.target === "local" ? "local" : defaultTarget;
       const nasAvailable = !!(data.nas_path || data.nfs?.mount_point || "").trim();
       const resolvedTarget = uiTarget === "nas" && !nasAvailable ? "local" : uiTarget;
       setSettings({
@@ -4198,7 +4462,7 @@ function BackupSettingsPanel() {
         ui_create_target: uiTarget,
         retention: data.retention || defaultRetention,
         nfs: data.nfs || defaultNfs,
-        auto: data.auto || { ...defaultAuto, target: defaultTarget },
+        auto: { ...defaultAuto, ...(data.auto || {}), target: autoTarget },
       });
       setCreateTarget(resolvedTarget);
     } catch (err: any) {
@@ -4408,7 +4672,13 @@ function BackupSettingsPanel() {
                   name="defaultTarget"
                   value="local"
                   checked={settings.default_target !== "nas"}
-                  onChange={() => setSettings((s) => ({ ...s, default_target: "local" }))}
+                  onChange={() =>
+                    setSettings((s) => ({
+                      ...s,
+                      default_target: "local",
+                      auto: { ...(s.auto || defaultAuto), target: "local" },
+                    }))
+                  }
                   disabled={loading}
                 />
                 Standard: Lokaler Pfad
@@ -4419,7 +4689,13 @@ function BackupSettingsPanel() {
                   name="defaultTarget"
                   value="nas"
                   checked={settings.default_target === "nas"}
-                  onChange={() => setSettings((s) => ({ ...s, default_target: "nas" }))}
+                  onChange={() =>
+                    setSettings((s) => ({
+                      ...s,
+                      default_target: "nas",
+                      auto: { ...(s.auto || defaultAuto), target: "nas" },
+                    }))
+                  }
                   disabled={loading}
                 />
                 Standard: NAS (falls gesetzt)

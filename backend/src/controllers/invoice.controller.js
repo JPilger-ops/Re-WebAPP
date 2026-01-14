@@ -413,14 +413,28 @@ const buildEmailContent = (row, bankSettings = {}, headerSettings = {}, globalTe
     placeholders["{{company_name}}"] || "Ihr Team",
   ].join("\n");
 
-  const useSubjectTpl = row.tpl_subject || globalTemplate?.subject_template || null;
-  const useTextTpl = row.tpl_body_text || globalTemplate?.body_text_template || null;
+  const hasCategoryTemplate =
+    Boolean(row.category_key) &&
+    ((row.tpl_subject !== null && row.tpl_subject !== undefined) ||
+      (row.tpl_body_text !== null && row.tpl_body_text !== undefined));
+  const useSubjectTpl =
+    row.tpl_subject !== null && row.tpl_subject !== undefined
+      ? row.tpl_subject
+      : hasCategoryTemplate
+      ? null
+      : globalTemplate?.subject_template || null;
+  const useTextTpl =
+    row.tpl_body_text !== null && row.tpl_body_text !== undefined
+      ? row.tpl_body_text
+      : hasCategoryTemplate
+      ? null
+      : globalTemplate?.body_text_template || null;
 
   const subject = useSubjectTpl
     ? replacePlaceholders(useSubjectTpl, placeholders, false) || fallbackSubject
     : fallbackSubject;
 
-  const textTemplate = useTextTpl || defaultBody;
+  const textTemplate = useTextTpl ?? defaultBody;
   const renderedText = replacePlaceholders(textTemplate, placeholders, false) || defaultBody;
   const bodyText = renderedText;
   const bodyHtml = renderTextAsHtml(bodyText);
@@ -429,7 +443,7 @@ const buildEmailContent = (row, bankSettings = {}, headerSettings = {}, globalTe
     subject,
     bodyHtml,
     bodyText,
-    templateUsed: Boolean(row.tpl_subject || row.tpl_body_text || globalTemplate),
+    templateUsed: Boolean(hasCategoryTemplate || (!hasCategoryTemplate && globalTemplate)),
     category: {
       id: row.category_id,
       key: row.category_key,
@@ -584,6 +598,10 @@ if (invoice.b2b) {
   }
 }
 
+if (!invoice.category || invoice.category.trim() === "") {
+  return res.status(400).json({ message: "Kategorie ist erforderlich." });
+}
+
 // --- Positionen prüfen ---
 if (!Array.isArray(items) || items.length === 0) {
   return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
@@ -650,12 +668,21 @@ if (!Array.isArray(items) || items.length === 0) {
 
     // Leere Strings auf null mappen
     const invoiceDate = invoice.date && invoice.date.trim() !== "" ? new Date(invoice.date) : null;
-    const category    = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
+    const category    = invoice.category.trim();
     const reservationRequestId = invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
 
     const isB2B  = invoice.b2b === true;
     const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
+
+    await ensureInvoiceCategoriesTable();
+    const categoryRow = await prisma.invoice_categories.findUnique({
+      where: { key: category },
+      select: { id: true },
+    });
+    if (!categoryRow) {
+      return res.status(400).json({ message: "Kategorie nicht gefunden." });
+    }
 
     // Rechnungsnummer bestimmen/prüfen (außerhalb der Transaktion, um doppelte Antworten zu vermeiden)
     let invoiceNumber = (invoice.invoice_number || "").toString().trim();
@@ -833,6 +860,9 @@ export const updateInvoice = async (req, res) => {
   if (invoice.b2b && (!invoice.ust_id || invoice.ust_id.trim() === "")) {
     return res.status(400).json({ message: "Für B2B ist eine USt-ID erforderlich." });
   }
+  if (!invoice.category || invoice.category.trim() === "") {
+    return res.status(400).json({ message: "Kategorie ist erforderlich." });
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
@@ -887,13 +917,22 @@ export const updateInvoice = async (req, res) => {
 
     const totals = calculateTotals(normalizedItems);
     const invoiceDate = parseDateInput(invoice.date, "date");
-    const category = invoice.category && invoice.category.trim() !== "" ? invoice.category.trim() : null;
+    const category = invoice.category.trim();
     const reservationRequestId =
       invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference =
       invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : existing.external_reference || null;
     const isB2B = invoice.b2b === true;
     const ustId = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
+
+    await ensureInvoiceCategoriesTable();
+    const categoryRow = await prisma.invoice_categories.findUnique({
+      where: { key: category },
+      select: { id: true },
+    });
+    if (!categoryRow) {
+      return res.status(400).json({ message: "Kategorie nicht gefunden." });
+    }
 
     let invoiceNumber = (invoice.invoice_number || "").toString().trim();
     if (invoiceNumber !== existing.invoice_number) {
