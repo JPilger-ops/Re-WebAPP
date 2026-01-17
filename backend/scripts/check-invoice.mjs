@@ -42,6 +42,62 @@ const fetchJson = async (url, opts = {}) => {
   return { res, data };
 };
 
+const allowedLogoExt = new Set([".png", ".jpg", ".jpeg", ".svg"]);
+const defaultCategoryKey = "default";
+
+const pickLogoFile = () => {
+  const logosDir = path.join(rootDir, "public", "logos");
+  if (!fs.existsSync(logosDir)) return null;
+  const files = fs
+    .readdirSync(logosDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => allowedLogoExt.has(path.extname(name).toLowerCase()))
+    .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
+  if (!files.length) return null;
+  if (files.includes("RE-WebAPP.png")) return "RE-WebAPP.png";
+  return files[0];
+};
+
+const ensureCategory = async (cookie, key = defaultCategoryKey, label = "Standard") => {
+  const { res: listRes, data: listData } = await fetchJson(`${baseUrl}/api/categories`, {
+    headers: { Cookie: cookie },
+  });
+  if (listRes.status === 200 && Array.isArray(listData)) {
+    const exists = listData.some((cat) => cat?.key === key);
+    if (exists) {
+      log(`Category OK: ${key}`);
+      return;
+    }
+  } else {
+    log(`Category list unavailable (${listRes.status}). Will attempt create.`);
+  }
+
+  const logoFile = pickLogoFile();
+  if (!logoFile) {
+    throw new Error("No logo file found for category creation.");
+  }
+
+  const { res: createRes, data: createData } = await fetchJson(`${baseUrl}/api/categories`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: cookie,
+    },
+    body: JSON.stringify({ key, label, logo_file: logoFile }),
+  });
+
+  if (createRes.status === 201) {
+    log(`Category created: ${key}`);
+    return;
+  }
+  if (createRes.status === 409) {
+    log(`Category exists: ${key}`);
+    return;
+  }
+  throw new Error(`Category create failed (${createRes.status}): ${JSON.stringify(createData)}`);
+};
+
 (async () => {
   log(`Base URL: ${baseUrl}`);
 
@@ -59,6 +115,8 @@ const fetchJson = async (url, opts = {}) => {
   const cookie = setCookie.split(";")[0];
   log("Login OK");
 
+  await ensureCategory(cookie);
+
   const invoiceNumber = `CHK${Date.now()}`;
   const createBody = {
     recipient: {
@@ -72,7 +130,7 @@ const fetchJson = async (url, opts = {}) => {
     invoice: {
       invoice_number: invoiceNumber,
       date: new Date().toISOString().slice(0, 10),
-      category: "default",
+      category: defaultCategoryKey,
       b2b: false,
     },
     items: [

@@ -689,7 +689,7 @@ function Dashboard() {
   const [recent, setRecent] = useState<RecentInvoice[]>([]);
   const [recentStatus, setRecentStatus] = useState<FormStatus>(null);
   const [recentLoading, setRecentLoading] = useState(true);
-  const [preview, setPreview] = useState<{ open: boolean; html: string; text: string; subject: string } | null>(null);
+  const [preview, setPreview] = useState<{ open: boolean; text: string; subject: string } | null>(null);
   const [toast, setToast] = useState<FormStatus>(null);
   const [sendModal, setSendModal] = useState<{ open: boolean; id?: number; to?: string; subject?: string; message?: string; includeDatev?: boolean }>({ open: false });
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -840,7 +840,7 @@ function Dashboard() {
   const previewEmail = async (id: number) => {
     try {
       const data = await getInvoiceEmailPreview(id);
-      setPreview({ open: true, html: data.body_html || "", text: data.body_text || "", subject: data.subject });
+      setPreview({ open: true, text: data.body_text || "", subject: data.subject });
     } catch (err: any) {
       const apiErr = err as ApiError;
       alert(apiErr.message || "E-Mail-Vorschau konnte nicht geladen werden.");
@@ -956,14 +956,7 @@ function Dashboard() {
               <div className="text-sm">{preview.subject}</div>
             </div>
             <div>
-              <div className="font-semibold">HTML</div>
-              <div
-                className="border border-slate-200 rounded p-3 prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: preview.html || "<em>(leer)</em>" }}
-              />
-            </div>
-            <div>
-              <div className="font-semibold">Text</div>
+              <div className="font-semibold">Vorschau</div>
               <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap text-sm bg-white">
                 {preview.text || "(leer)"}
               </pre>
@@ -2110,15 +2103,10 @@ function Invoices() {
                 <div>{preview.data.subject}</div>
               </div>
               <div>
-                <div className="font-semibold">HTML</div>
-                <div
-                  className="border border-slate-200 rounded p-3 prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: preview.data.body_html || "<em>(leer)</em>" }}
-                />
-              </div>
-              <div>
-                <div className="font-semibold">Text</div>
-                <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap">{preview.data.body_text}</pre>
+                <div className="font-semibold">Vorschau</div>
+                <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap">
+                  {preview.data.body_text || "(leer)"}
+                </pre>
               </div>
               <div className="text-xs text-slate-600">
                 Von: {preview.data.from || "n/a"} | SMTP: {preview.data.smtp_ready ? "konfiguriert" : "fehlt"}
@@ -3689,15 +3677,10 @@ function InvoiceDetailPage() {
                 <div>{preview.data.subject}</div>
               </div>
               <div>
-                <div className="font-semibold">HTML</div>
-                <div
-                  className="border border-slate-200 rounded p-3 prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: preview.data.body_html || "<em>(leer)</em>" }}
-                />
-              </div>
-              <div>
-                <div className="font-semibold">Text</div>
-                <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap">{preview.data.body_text}</pre>
+                <div className="font-semibold">Vorschau</div>
+                <pre className="border border-slate-200 rounded p-3 whitespace-pre-wrap">
+                  {preview.data.body_text || "(leer)"}
+                </pre>
               </div>
             </div>
           )}
