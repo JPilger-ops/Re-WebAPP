@@ -1333,12 +1333,8 @@ function Categories() {
           onClose={() => setModal(null)}
           onSaved={(cat) => {
             setModal(null);
-            if (modal.mode === "edit") {
-              setCategories((prev) => prev.map((c) => (c.id === cat.id ? cat : c)));
-            } else {
-              setCategories((prev) => [...prev, cat]);
-            }
             setToast({ type: "success", message: "Kategorie gespeichert." });
+            load();
           }}
           onError={(msg) => setToast({ type: "error", message: msg })}
         />
@@ -3781,7 +3777,7 @@ function CategoryFormModal({
         getCategoryEmailApi(category.id).catch(() => null),
         listCategoryLogos().catch(() => []),
       ]).then(([tpl, mail, logos]) => {
-        if (tpl) setTemplate({ subject: tpl.subject || "", body_text: tpl.body_text || "" });
+        setTemplate({ subject: tpl?.subject || "", body_text: tpl?.body_text || "" });
         if (mail) {
           setEmail({
             email_address: mail.email_address || "",
@@ -3796,6 +3792,7 @@ function CategoryFormModal({
         if (logos?.length) setAvailableLogos(logos);
       });
     } else {
+      setTemplate({ subject: "", body_text: "" });
       listCategoryLogos().then((l) => setAvailableLogos(l)).catch(() => {});
     }
   }, [category, mode]);
