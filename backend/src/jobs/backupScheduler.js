@@ -50,11 +50,24 @@ export const runAutoBackup = async () => {
   try {
     const resolvedTarget =
       auto.target === "nas" ? "nas" : auto.target === "local" ? "local" : cfg.default_target === "nas" ? "nas" : "local";
-    if (resolvedTarget === "nas" && cfg?.nfs?.auto_mount !== false) {
-      await ensureNfsMounted(cfg);
+    let effectiveTarget = resolvedTarget;
+    if (resolvedTarget === "nas") {
+      const nasPath = (cfg?.nas_path || "").trim();
+      if (!nasPath) {
+        console.warn("[backup] NAS-Pfad fehlt, Auto-Backup nutzt lokalen Speicher.");
+        effectiveTarget = "local";
+      } else if (cfg?.nfs?.auto_mount !== false) {
+        try {
+          await ensureNfsMounted(cfg);
+        } catch (err) {
+          console.error("[backup] nfs mount failed:", err?.message || err);
+          console.warn("[backup] Auto-Backup nutzt lokalen Speicher als Fallback.");
+          effectiveTarget = "local";
+        }
+      }
     }
     await createBackup({
-      target: resolvedTarget === "nas" ? "nas" : "local",
+      target: effectiveTarget === "nas" ? "nas" : "local",
       include_db: Boolean(auto.include_db),
       include_files: Boolean(auto.include_files),
       include_env: Boolean(auto.include_env),

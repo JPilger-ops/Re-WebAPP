@@ -44,8 +44,18 @@ const fetchJson = async (url, opts = {}) => {
 
 const allowedLogoExt = new Set([".png", ".jpg", ".jpeg", ".svg"]);
 const defaultCategoryKey = "default";
+const defaultLogoName = "RE-WebAPP.png";
+const fallbackLogoName = "ci-logo.png";
+const fallbackLogoDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2gAAAABJRU5ErkJggg==";
 
-const pickLogoFile = () => {
+const pickPreferredLogo = (files) => {
+  if (!Array.isArray(files) || files.length === 0) return null;
+  if (files.includes(defaultLogoName)) return defaultLogoName;
+  return files[0];
+};
+
+const pickLogoFileFromDisk = () => {
   const logosDir = path.join(rootDir, "public", "logos");
   if (!fs.existsSync(logosDir)) return null;
   const files = fs
@@ -54,9 +64,33 @@ const pickLogoFile = () => {
     .map((entry) => entry.name)
     .filter((name) => allowedLogoExt.has(path.extname(name).toLowerCase()))
     .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }));
-  if (!files.length) return null;
-  if (files.includes("RE-WebAPP.png")) return "RE-WebAPP.png";
-  return files[0];
+  return pickPreferredLogo(files);
+};
+
+const ensureLogoFile = async (cookie) => {
+  const localLogo = pickLogoFileFromDisk();
+  if (localLogo) return localLogo;
+
+  const { res: listRes, data: listData } = await fetchJson(`${baseUrl}/api/categories/logos`, {
+    headers: { Cookie: cookie },
+  });
+  if (listRes.status === 200 && Array.isArray(listData) && listData.length) {
+    return pickPreferredLogo(listData);
+  }
+
+  const { res: uploadRes, data: uploadData } = await fetchJson(`${baseUrl}/api/categories/logo`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: cookie,
+    },
+    body: JSON.stringify({ filename: fallbackLogoName, dataUrl: fallbackLogoDataUrl }),
+  });
+
+  if (uploadRes.status !== 200) {
+    throw new Error(`Logo upload failed (${uploadRes.status}): ${JSON.stringify(uploadData)}`);
+  }
+  return uploadData?.filename || fallbackLogoName;
 };
 
 const ensureCategory = async (cookie, key = defaultCategoryKey, label = "Standard") => {
@@ -73,10 +107,7 @@ const ensureCategory = async (cookie, key = defaultCategoryKey, label = "Standar
     log(`Category list unavailable (${listRes.status}). Will attempt create.`);
   }
 
-  const logoFile = pickLogoFile();
-  if (!logoFile) {
-    throw new Error("No logo file found for category creation.");
-  }
+  const logoFile = await ensureLogoFile(cookie);
 
   const { res: createRes, data: createData } = await fetchJson(`${baseUrl}/api/categories`, {
     method: "POST",
