@@ -26,9 +26,25 @@ const globalForPrisma = globalThis;
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
-    log: ["error", "warn"],
+    log: [
+      { emit: "event", level: "error" },
+      { emit: "event", level: "warn" },
+    ],
   });
 
 if (!globalForPrisma.prisma) {
+  prisma.$on("error", (event) => {
+    const msg = event?.message || "";
+    if (msg.includes("terminating connection due to administrator command") || msg.includes("E57P01")) {
+      console.warn("[prisma] connection terminated by admin command; will recover on next request.");
+      return;
+    }
+    console.error("[prisma] error:", msg);
+  });
+
+  prisma.$on("warn", (event) => {
+    console.warn("[prisma] warn:", event?.message || event);
+  });
+
   globalForPrisma.prisma = prisma;
 }
