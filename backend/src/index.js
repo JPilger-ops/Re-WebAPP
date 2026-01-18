@@ -14,6 +14,7 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 
 // --- EXPRESS APP IMPORTIEREN ---
 import app from "./server.js";
+import { prisma } from "./utils/prisma.js";
 
 const httpsDisabled = ["true", "1", "yes"].includes((process.env.APP_HTTPS_DISABLE || "").toLowerCase());
 const isProd = (process.env.NODE_ENV || "").toLowerCase() === "production";
@@ -66,8 +67,34 @@ console.log("[config] APP_PUBLIC_URL:", publicUrl);
 
 enforceProdSecrets();
 
+let server = null;
+
+const shutdown = (signal) => {
+  console.warn(`[shutdown] ${signal} received, closing server...`);
+  const forceTimer = setTimeout(() => {
+    console.warn("[shutdown] forced exit.");
+    process.exit(0);
+  }, 5000);
+  forceTimer.unref();
+
+  const closeServer = () =>
+    new Promise((resolve) => {
+      if (!server || !server.listening) return resolve();
+      server.close(() => resolve());
+    });
+
+  closeServer()
+    .then(() => prisma.$disconnect())
+    .catch((err) => console.error("[shutdown] error during cleanup:", err))
+    .finally(() => process.exit(0));
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 if (httpsDisabled) {
-  http.createServer(app).listen(port, bindHost, () => {
+  server = http.createServer(app);
+  server.listen(port, bindHost, () => {
     console.log(`HTTP Server läuft auf ${bindHost}:${port} (public: ${publicUrl})`);
   });
 } else {
@@ -91,7 +118,8 @@ if (httpsDisabled) {
   };
 
   // --- HTTPS SERVER STARTEN ---
-  https.createServer(httpsOptions, app).listen(httpsPort, bindHost, () => {
+  server = https.createServer(httpsOptions, app);
+  server.listen(httpsPort, bindHost, () => {
     console.log(`HTTPS Server läuft auf ${bindHost}:${httpsPort} (public: ${publicUrl})`);
   });
 }
