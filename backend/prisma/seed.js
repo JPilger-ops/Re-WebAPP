@@ -28,6 +28,7 @@ const DEFAULT_PERMISSIONS = [
   "roles.update",
   "roles.delete",
   "settings.general",
+  "settings.security",
   "categories.read",
   "categories.write",
   "categories.delete",

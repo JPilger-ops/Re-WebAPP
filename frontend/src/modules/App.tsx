@@ -134,6 +134,7 @@ const PERMISSION_OPTIONS: { key: string; label: string }[] = [
   { key: "roles.update", label: "Rollen bearbeiten" },
   { key: "roles.delete", label: "Rollen löschen" },
   { key: "settings.general", label: "Einstellungen ändern" },
+  { key: "settings.security", label: "Sicherheit verwalten" },
   { key: "categories.read", label: "Kategorien lesen" },
   { key: "categories.write", label: "Kategorien bearbeiten" },
   { key: "categories.delete", label: "Kategorien löschen" },
@@ -503,6 +504,10 @@ function ProtectedLayout() {
 function Shell() {
   const { user, logout, idleWarning, resetIdleTimer, idleMsRemaining } = useAuth();
   const isAdmin = user?.role_name === "admin";
+  const canAccessSecurity =
+    isAdmin ||
+    (user?.permissions || []).includes("settings.security") ||
+    (user?.permissions || []).includes("settings.general");
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -549,6 +554,8 @@ function Shell() {
           { to: "/admin/users", label: "Admin: Benutzer" },
           { to: "/admin/roles", label: "Admin: Rollen & Rechte" },
         ]
+      : canAccessSecurity
+      ? [{ to: "/settings", label: "Sicherheit" }]
       : []),
   ];
 
@@ -4022,19 +4029,25 @@ function AdminSettings() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const versionDetail = useMemo(() => formatVersionDetail(versionInfo), [versionInfo]);
   const isAdminUser = user?.role_name === "admin";
+  const canAccessSecurity =
+    isAdminUser ||
+    (user?.permissions || []).includes("settings.security") ||
+    (user?.permissions || []).includes("settings.general");
 
-  const tabs = [
-    { key: "pdf", label: "PDF" },
-    { key: "branding", label: "Branding" },
-    { key: "mail", label: "Mail / SMTP" },
-    { key: "email_templates", label: "E-Mail Vorlagen" },
-    { key: "invoices", label: "Rechnungen" },
-    { key: "datev", label: "DATEV" },
-    { key: "hkforms", label: "Forms-Sync" },
-    { key: "backups", label: "Backups" },
-    { key: "network", label: "Netzwerk" },
-    { key: "security", label: "Sicherheit" },
-  ];
+  const tabs = isAdminUser
+    ? [
+        { key: "pdf", label: "PDF" },
+        { key: "branding", label: "Branding" },
+        { key: "mail", label: "Mail / SMTP" },
+        { key: "email_templates", label: "E-Mail Vorlagen" },
+        { key: "invoices", label: "Rechnungen" },
+        { key: "datev", label: "DATEV" },
+        { key: "hkforms", label: "Forms-Sync" },
+        { key: "backups", label: "Backups" },
+        { key: "network", label: "Netzwerk" },
+        { key: "security", label: "Sicherheit" },
+      ]
+    : [{ key: "security", label: "Sicherheit" }];
 
   const [active, setActive] = useState(tabs[0].key);
   useEffect(() => {
@@ -4042,6 +4055,11 @@ function AdminSettings() {
       .then(setVersionInfo)
       .catch(() => setVersionInfo(null));
   }, []);
+  useEffect(() => {
+    if (!tabs.find((t) => t.key === active)) {
+      setActive(tabs[0].key);
+    }
+  }, [active, tabs]);
   const activeContent = (key: string) => {
     switch (key) {
       case "pdf":
@@ -4068,7 +4086,7 @@ function AdminSettings() {
       case "network":
         return <NetworkSettingsForm />;
       case "security":
-        return <SecuritySettingsInfo />;
+        return <SecuritySettingsInfo isAdmin={isAdminUser} />;
       default:
         return null;
     }
@@ -4083,9 +4101,9 @@ function AdminSettings() {
         </p>
       </header>
 
-      {!isAdminUser ? (
+      {!isAdminUser && !canAccessSecurity ? (
         <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4">
-          Keine Berechtigung. Nur Admins können die Einstellungen bearbeiten.
+          Keine Berechtigung.
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-col md:flex-row gap-4">
@@ -5326,7 +5344,7 @@ function NetworkSettingsForm() {
   );
 }
 
-function SecuritySettingsInfo() {
+function SecuritySettingsInfo({ isAdmin }: { isAdmin: boolean }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -5590,31 +5608,33 @@ function SecuritySettingsInfo() {
         )}
       </div>
 
-      <div className="border border-slate-200 rounded-lg p-4 space-y-3">
-        <div>
-          <h3 className="text-md font-semibold text-slate-800">Zertifikate</h3>
-          <p className="text-sm text-slate-600">CA-Zertifikat hinterlegen oder herunterladen.</p>
-        </div>
-        {certStatus && <Alert type={certStatus.type === "error" ? "error" : "success"}>{certStatus.message}</Alert>}
-        <form className="space-y-3" onSubmit={onUploadCert}>
-          <Field label="PEM-Inhalt">
-            <Textarea
-              value={certPem}
-              onChange={(e) => setCertPem(e.target.value)}
-              placeholder="-----BEGIN CERTIFICATE-----"
-              className="min-h-[140px]"
-            />
-          </Field>
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" variant="primary" disabled={!certPem.trim()}>
-              Speichern
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => window.open("/api/settings/ca-cert", "_blank")}>
-              Zertifikat herunterladen
-            </Button>
+      {isAdmin && (
+        <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+          <div>
+            <h3 className="text-md font-semibold text-slate-800">Zertifikate</h3>
+            <p className="text-sm text-slate-600">CA-Zertifikat hinterlegen oder herunterladen.</p>
           </div>
-        </form>
-      </div>
+          {certStatus && <Alert type={certStatus.type === "error" ? "error" : "success"}>{certStatus.message}</Alert>}
+          <form className="space-y-3" onSubmit={onUploadCert}>
+            <Field label="PEM-Inhalt">
+              <Textarea
+                value={certPem}
+                onChange={(e) => setCertPem(e.target.value)}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                className="min-h-[140px]"
+              />
+            </Field>
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" variant="primary" disabled={!certPem.trim()}>
+                Speichern
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => window.open("/api/settings/ca-cert", "_blank")}>
+                Zertifikat herunterladen
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
