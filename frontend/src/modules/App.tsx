@@ -508,6 +508,12 @@ function Shell() {
     isAdmin ||
     (user?.permissions || []).includes("settings.security") ||
     (user?.permissions || []).includes("settings.general");
+  const canAccessCategories =
+    isAdmin ||
+    (user?.permissions || []).includes("categories.read") ||
+    (user?.permissions || []).includes("categories.write") ||
+    (user?.permissions || []).includes("categories.delete") ||
+    (user?.permissions || []).includes("settings.general");
   const hasStats = isAdmin || (user?.permissions || []).includes("stats.view");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -554,9 +560,10 @@ function Shell() {
           { to: "/admin/users", label: "Admin: Benutzer" },
           { to: "/admin/roles", label: "Admin: Rollen & Rechte" },
         ]
-      : canAccessSecurity
-      ? [{ to: "/settings", label: "Sicherheit" }]
-      : []),
+      : [
+          ...(canAccessCategories ? [{ to: "/categories", label: "Kategorien" }] : []),
+          ...(canAccessSecurity ? [{ to: "/settings", label: "Sicherheit" }] : []),
+        ]),
   ];
 
   return (
@@ -1197,6 +1204,21 @@ function Customers() {
 }
 
 function Categories() {
+  const { user } = useAuth();
+  const isAdmin = user?.role_name === "admin";
+  const perms = user?.permissions || [];
+  const canRead =
+    isAdmin ||
+    perms.includes("categories.read") ||
+    perms.includes("settings.general");
+  const canWrite =
+    isAdmin ||
+    perms.includes("categories.write") ||
+    perms.includes("settings.general");
+  const canDelete =
+    isAdmin ||
+    perms.includes("categories.delete") ||
+    perms.includes("settings.general");
   const [categories, setCategories] = useState<Category[]>([]);
   const [logos, setLogos] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -1229,8 +1251,12 @@ function Categories() {
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    if (canRead) load();
+  }, [canRead]);
+
+  if (!canRead) {
+    return <Alert type="error">Keine Berechtigung.</Alert>;
+  }
 
   const filtered = applyFilter(categories, search);
 
@@ -1257,7 +1283,7 @@ function Categories() {
           <h1 className="text-2xl font-bold">Kategorien</h1>
           <p className="text-slate-600 text-sm">Logos, Templates und SMTP pro Kategorie verwalten.</p>
         </div>
-        <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>
+        {canWrite && <Button onClick={() => setModal({ mode: "create" })}>Neu</Button>}
       </div>
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -1286,7 +1312,15 @@ function Categories() {
 
       {!loading && filtered.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2">
-          {filtered.map((cat) => (
+          {filtered.map((cat) => {
+            const menuItems = [];
+            if (canWrite) {
+              menuItems.push({ label: "Bearbeiten", onClick: () => setModal({ mode: "edit", category: cat }) });
+            }
+            if (canDelete) {
+              menuItems.push({ label: "Löschen", danger: true, onClick: () => setConfirmId(cat.id) });
+            }
+            return (
             <div key={cat.id} className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -1306,12 +1340,7 @@ function Categories() {
                     <div className="text-xs text-slate-500">{cat.key}</div>
                   </div>
                 </div>
-                <MoreMenu
-                  items={[
-                    { label: "Bearbeiten", onClick: () => setModal({ mode: "edit", category: cat }) },
-                    { label: "Löschen", danger: true, onClick: () => setConfirmId(cat.id) },
-                  ]}
-                />
+                {menuItems.length > 0 && <MoreMenu items={menuItems} />}
               </div>
               {cat.template && (
                 <div className="mt-3 text-xs text-slate-600">
@@ -1326,7 +1355,7 @@ function Categories() {
                 </div>
               )}
             </div>
-          ))}
+          )})}
         </div>
       )}
 
