@@ -29,6 +29,15 @@ router.post("/by-reservation/:reservationId/status", requireHkformsToken, update
 // Ab hier: reguläre App-API mit JWT
 router.use(authRequired);
 
+// erlaubt Zugriff, wenn mindestens eine der angegebenen Permissions vorhanden ist
+const requireAnyPermission = (...perms) => (req, res, next) => {
+  const userPerms = req.user?.permissions || [];
+  if (perms.some((perm) => userPerms.includes(perm))) {
+    return next();
+  }
+  return res.status(403).json({ message: "Keine Berechtigung." });
+};
+
 // Status-Routen
 router.post("/:id/status/sent", requirePermission("invoices.update"), markSent);
 router.post("/:id/status/paid", requirePermission("invoices.update"), markPaid);
@@ -42,7 +51,7 @@ router.get("/next-number", requirePermission("invoices.create"), getNextInvoiceN
 router.get("/recent", requirePermission("invoices.read"), getRecentInvoices);
 router.get("/", requirePermission("invoices.read"), getAllInvoices);     
 router.get("/:id", requirePermission("invoices.read"), getInvoiceById);
-router.get("/:id/pdf", requirePermission("invoices.read"), getInvoicePdf);
+router.get("/:id/pdf", requireAnyPermission("invoices.read", "invoices.create"), getInvoicePdf);
 router.post("/:id/pdf/regenerate", requireRole("admin"), regenerateInvoicePdf);
 router.put("/:id", requirePermission("invoices.update"), updateInvoice);
 router.post("/", requirePermission("invoices.create"), createInvoice);
