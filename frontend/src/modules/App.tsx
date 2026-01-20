@@ -290,7 +290,7 @@ export function App() {
 
 function LoginPage() {
   const { user, login, error, setError } = useAuth();
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -352,34 +352,38 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4 bg-slate-50">
       <div className="card w-full max-w-md p-8">
         <h1 className="text-2xl font-bold mb-6 text-slate-900">RechnungsAPP – Login</h1>
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" onSubmit={handleSubmit} autoComplete="on">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Benutzername</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-username">Benutzername</label>
             <input
               className="w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              id="login-username"
+              name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Passwort</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-password">Passwort</label>
             <input
               type="password"
               className="w-full rounded-md border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              id="login-password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">MFA Code (optional)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-otp">MFA Code (optional)</label>
             <input
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
               name="one-time-code"
-              id="one-time-code"
+              id="login-otp"
               className={`w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 mfaRequired ? "border-amber-300 bg-amber-50" : "border-slate-200"
               }`}
@@ -3062,7 +3066,6 @@ function InvoiceFormModal({
                 >
                   <option value={1}>19% MwSt</option>
                   <option value={2}>7% MwSt</option>
-                  <option value={0}>0%</option>
                 </select>
                 {items.length > 1 && (
                   <Button
