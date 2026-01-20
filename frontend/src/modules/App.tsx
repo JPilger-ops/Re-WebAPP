@@ -1396,6 +1396,8 @@ function Categories() {
 function Invoices() {
   type InvoiceStatusFilter = "active" | "all" | "open" | "sent" | "paid" | "canceled";
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role_name === "admin";
   const [searchParams, setSearchParams] = useSearchParams();
   const statusParam = searchParams.get("status") as InvoiceStatusFilter | null;
   const allowedStatuses: InvoiceStatusFilter[] = ["active", "all", "open", "sent", "paid", "canceled"];
@@ -2103,6 +2105,10 @@ function Invoices() {
           }}
           onSubmitSuccess={async (invoiceId, invNumber) => {
             setCreateProgress({ open: true, status: "submitting", invoiceId, invoiceNumber: invNumber, error: null });
+            if (!isAdmin) {
+              setCreateProgress({ open: true, status: "success", invoiceId, invoiceNumber: invNumber, error: null });
+              return;
+            }
             try {
               await regenerateInvoicePdf(invoiceId);
               setCreateProgress({ open: true, status: "success", invoiceId, invoiceNumber: invNumber, error: null });
@@ -2260,6 +2266,8 @@ function Invoices() {
 
 function InvoiceCreatePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role_name === "admin";
   const [toast, setToast] = useState<FormStatus>(null);
   const [createModal, setCreateModal] = useState<{
     open: boolean;
@@ -2314,6 +2322,17 @@ function InvoiceCreatePage() {
             pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
             error: null,
           });
+          if (!isAdmin) {
+            setCreateModal({
+              open: true,
+              status: "success",
+              invoiceId: id,
+              invoiceNumber: num,
+              pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
+              error: null,
+            });
+            return;
+          }
           try {
             await regenerateInvoicePdf(id);
             setCreateModal({
