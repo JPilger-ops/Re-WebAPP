@@ -12,6 +12,7 @@ const DEFAULT_PERMISSIONS = [
   "invoices.create",
   "invoices.update",
   "invoices.export",
+  "invoices.regenerate",
   "invoices.delete",
   "stats.view",
   "customers.read",
