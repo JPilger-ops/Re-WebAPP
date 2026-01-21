@@ -52,7 +52,7 @@ router.get("/recent", requirePermission("invoices.read"), getRecentInvoices);
 router.get("/", requirePermission("invoices.read"), getAllInvoices);     
 router.get("/:id", requirePermission("invoices.read"), getInvoiceById);
 router.get("/:id/pdf", requireAnyPermission("invoices.read", "invoices.create"), getInvoicePdf);
-router.post("/:id/pdf/regenerate", requireRole("admin"), regenerateInvoicePdf);
+router.post("/:id/pdf/regenerate", requirePermission("invoices.regenerate"), regenerateInvoicePdf);
 router.put("/:id", requirePermission("invoices.update"), updateInvoice);
 router.post("/", requirePermission("invoices.create"), createInvoice);
 

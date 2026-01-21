@@ -118,6 +118,7 @@ const PERMISSION_OPTIONS: { key: string; label: string }[] = [
   { key: "invoices.create", label: "Rechnungen erstellen" },
   { key: "invoices.update", label: "Rechnungen bearbeiten" },
   { key: "invoices.export", label: "Rechnungen exportieren" },
+  { key: "invoices.regenerate", label: "PDF neu erstellen" },
   { key: "invoices.delete", label: "Rechnungen löschen" },
   { key: "stats.view", label: "Statistiken ansehen" },
   { key: "customers.read", label: "Kunden lesen" },
@@ -1398,6 +1399,8 @@ function Invoices() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role_name === "admin";
+  const perms = user?.permissions || [];
+  const canRegenerate = isAdmin || perms.includes("invoices.regenerate");
   const [searchParams, setSearchParams] = useSearchParams();
   const statusParam = searchParams.get("status") as InvoiceStatusFilter | null;
   const allowedStatuses: InvoiceStatusFilter[] = ["active", "all", "open", "sent", "paid", "canceled"];
@@ -1748,6 +1751,10 @@ function Invoices() {
         const data = await res.json().catch(() => ({}));
         const wants = window.confirm(data?.message || "PDF ist beschädigt. Neu erstellen?");
         if (wants) {
+          if (!canRegenerate) {
+            alert("Keine Berechtigung.");
+            return;
+          }
           try {
             await regenerateInvoicePdf(id);
             return handlePdfOpen(id, false);
@@ -2105,7 +2112,7 @@ function Invoices() {
           }}
           onSubmitSuccess={async (invoiceId, invNumber) => {
             setCreateProgress({ open: true, status: "submitting", invoiceId, invoiceNumber: invNumber, error: null });
-            if (!isAdmin) {
+            if (!canRegenerate) {
               setCreateProgress({ open: true, status: "success", invoiceId, invoiceNumber: invNumber, error: null });
               return;
             }
@@ -2268,6 +2275,8 @@ function InvoiceCreatePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role_name === "admin";
+  const perms = user?.permissions || [];
+  const canRegenerate = isAdmin || perms.includes("invoices.regenerate");
   const [toast, setToast] = useState<FormStatus>(null);
   const [createModal, setCreateModal] = useState<{
     open: boolean;
@@ -2313,21 +2322,21 @@ function InvoiceCreatePage() {
         onSaved={(id, num) => {
           setToast({ type: "success", message: `Rechnung ${num} erstellt.` });
         }}
-        onSubmitSuccess={async (id, num) => {
-          setCreateModal({
-            open: true,
-            status: "submitting",
-            invoiceId: id,
-            invoiceNumber: num,
-            pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
-            error: null,
-          });
-          if (!isAdmin) {
+          onSubmitSuccess={async (id, num) => {
             setCreateModal({
               open: true,
-              status: "success",
+              status: "submitting",
               invoiceId: id,
               invoiceNumber: num,
+              pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
+              error: null,
+            });
+            if (!canRegenerate) {
+              setCreateModal({
+                open: true,
+                status: "success",
+                invoiceId: id,
+                invoiceNumber: num,
               pdfUrl: `/api/invoices/${id}/pdf?mode=inline`,
               error: null,
             });
@@ -3165,6 +3174,10 @@ function InvoiceFormModal({
 function InvoiceDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role_name === "admin";
+  const perms = user?.permissions || [];
+  const canRegenerate = isAdmin || perms.includes("invoices.regenerate");
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -3685,16 +3698,18 @@ function InvoiceDetailPage() {
                 <Button variant="secondary" onClick={openDetailPdf} disabled={pdfBusy}>
                   {pdfBusy ? "Öffne..." : "PDF öffnen"}
                 </Button>
-                <Button variant="ghost" onClick={() => setConfirmPdfRegenerate(true)} disabled={pdfBusy || isCanceled}>
-                  {pdfBusy ? "Bitte warten..." : "PDF neu erstellen"}
-                </Button>
+                {canRegenerate && (
+                  <Button variant="ghost" onClick={() => setConfirmPdfRegenerate(true)} disabled={pdfBusy || isCanceled}>
+                    {pdfBusy ? "Bitte warten..." : "PDF neu erstellen"}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {confirmPdfRegenerate && (
+      {confirmPdfRegenerate && canRegenerate && (
         <Modal title="PDF neu erstellen" onClose={() => setConfirmPdfRegenerate(false)}>
           <div className="space-y-3 text-sm text-slate-700">
             <p>Möchtest du das PDF wirklich neu erstellen? Die bestehende Datei wird überschrieben bzw. in den Trash verschoben.</p>
