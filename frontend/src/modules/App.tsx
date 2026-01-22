@@ -318,7 +318,16 @@ function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(username, password, otp.trim() ? otp.trim() : undefined);
+      const formEl = e.currentTarget as HTMLFormElement;
+      const formData = new FormData(formEl);
+      const formUsername = String(formData.get("username") || "").trim();
+      const formPassword = String(formData.get("password") || "");
+      const formOtp = String(formData.get("one-time-code") || "").trim();
+      await login(
+        formUsername || username,
+        formPassword || password,
+        formOtp ? formOtp : otp.trim() ? otp.trim() : undefined
+      );
       const params = new URLSearchParams(location.search);
       const returnTo = params.get("returnTo");
       const dest = returnTo || (location.state as any)?.from || "/dashboard";
@@ -353,7 +362,7 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4 bg-slate-50">
       <div className="card w-full max-w-md p-8">
         <h1 className="text-2xl font-bold mb-6 text-slate-900">RechnungsAPP – Login</h1>
-        <form className="space-y-4" onSubmit={handleSubmit} autoComplete="on">
+        <form className="space-y-4" onSubmit={handleSubmit} autoComplete="on" method="post">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="login-username">Benutzername</label>
             <input
@@ -363,6 +372,9 @@ function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </div>
           <div>
