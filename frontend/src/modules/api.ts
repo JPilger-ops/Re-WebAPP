@@ -654,6 +654,8 @@ export interface InvoiceDetail {
     vat_7?: number | null;
     gross_7?: number | null;
     gross_total?: number | null;
+    created_at?: string | null;
+    created_by?: { id: number; username: string } | null;
     b2b?: boolean | null;
     ust_id?: string | null;
     canceled_at?: string | null;
@@ -676,6 +678,15 @@ export interface InvoiceItem {
   unit_price_gross: number;
   vat_key: number;
   line_total_gross?: number;
+}
+
+export interface InvoiceItemLibrary {
+  id: number;
+  description: string;
+  default_quantity: number;
+  unit_price_gross: number;
+  vat_key: number;
+  last_used_at?: string | null;
 }
 
 export interface RecentInvoice {
@@ -716,6 +727,14 @@ export async function listRecentInvoices(limit = 10) {
 
 export async function getInvoice(id: number) {
   return apiFetch<InvoiceDetail>(`/invoices/${id}`);
+}
+
+export async function listInvoiceItemLibrary(params?: { q?: string; limit?: number }) {
+  const qs: string[] = [];
+  if (params?.q) qs.push(`q=${encodeURIComponent(params.q)}`);
+  if (params?.limit) qs.push(`limit=${encodeURIComponent(String(params.limit))}`);
+  const query = qs.length ? `?${qs.join("&")}` : "";
+  return apiFetch<InvoiceItemLibrary[]>(`/invoices/items/library${query}`);
 }
 
 export async function getNextInvoiceNumber() {

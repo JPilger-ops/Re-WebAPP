@@ -131,6 +131,41 @@ const parseDecimalInput = (value) => {
   const num = Number(normalized);
   return Number.isFinite(num) ? num : null;
 };
+
+const upsertInvoiceItemLibrary = async (tx, items) => {
+  if (!Array.isArray(items) || !items.length) return;
+  const now = new Date();
+  for (const item of items) {
+    const description = (item.description || "").trim();
+    if (!description) continue;
+    const unitPrice = Number(item.unit_price_gross);
+    const vatKey = Number(item.vat_key);
+    const quantity = Number(item.quantity);
+    await tx.invoice_item_library.upsert({
+      where: {
+        description_unit_price_gross_vat_key: {
+          description,
+          unit_price_gross: unitPrice,
+          vat_key: vatKey,
+        },
+      },
+      update: {
+        default_quantity: Number.isFinite(quantity) ? quantity : 1,
+        updated_at: now,
+        last_used_at: now,
+      },
+      create: {
+        description,
+        default_quantity: Number.isFinite(quantity) ? quantity : 1,
+        unit_price_gross: unitPrice,
+        vat_key: vatKey,
+        created_at: now,
+        updated_at: now,
+        last_used_at: now,
+      },
+    });
+  }
+};
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -555,6 +590,7 @@ const computeNextInvoiceNumber = async () => {
  */
 export const createInvoice = async (req, res) => {
   const { recipient, invoice, items } = req.body;
+  const creatorId = req.user?.id ? Number(req.user.id) : null;
 
   // ---------------------------------------------------------
 // 🔍 DETAILLIERTE VALIDIERUNG ALLER FELDER
@@ -783,6 +819,7 @@ if (!Array.isArray(items) || items.length === 0) {
           category,
           reservation_request_id: reservationRequestId,
           external_reference: externalReference,
+          created_by_user_id: creatorId,
           b2b: isB2B,
           ust_id: ustId,
           net_19: totals.net_19,
@@ -810,6 +847,8 @@ if (!Array.isArray(items) || items.length === 0) {
           data: itemsData,
         });
       }
+
+      await upsertInvoiceItemLibrary(tx, normalizedItems);
 
       return invoiceRow.id;
     });
@@ -1022,6 +1061,8 @@ export const updateInvoice = async (req, res) => {
         });
       }
 
+      await upsertInvoiceItemLibrary(tx, normalizedItems);
+
       await tx.invoices.update({
         where: { id },
         data: {
@@ -1199,7 +1240,12 @@ export const getInvoiceById = async (req, res) => {
 
     const invoiceRow = await prisma.invoices.findUnique({
       where: { id },
-      include: { recipients: true },
+      include: {
+        recipients: true,
+        created_by_user: {
+          select: { id: true, username: true },
+        },
+      },
     });
 
     if (!invoiceRow) {
@@ -1227,6 +1273,10 @@ export const getInvoiceById = async (req, res) => {
       vat_7: invoiceRow.vat_7,
       gross_7: invoiceRow.gross_7,
       gross_total: invoiceRow.gross_total,
+      created_at: invoiceRow.created_at,
+      created_by: invoiceRow.created_by_user
+        ? { id: invoiceRow.created_by_user.id, username: invoiceRow.created_by_user.username }
+        : null,
       canceled_at: invoiceRow.canceled_at,
       cancel_reason: invoiceRow.cancel_reason,
       recipient: {
@@ -2850,5 +2900,52 @@ export const getNextInvoiceNumber = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Fehler beim Ermitteln der Rechnungsnummer" });
+  }
+};
+
+/**
+ * GET /api/invoices/items/library
+ * Globale Positions-Bibliothek (Autocomplete)
+ */
+export const listInvoiceItemLibrary = async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const limitRaw = Number(req.query.limit || 20);
+    const take = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 20;
+    const where = q
+      ? { description: { contains: q, mode: "insensitive" } }
+      : {};
+
+    const rows = await prisma.invoice_item_library.findMany({
+      where,
+      orderBy: [
+        { last_used_at: "desc" },
+        { updated_at: "desc" },
+        { description: "asc" },
+      ],
+      take,
+      select: {
+        id: true,
+        description: true,
+        default_quantity: true,
+        unit_price_gross: true,
+        vat_key: true,
+        last_used_at: true,
+      },
+    });
+
+    const mapped = rows.map((row) => ({
+      id: row.id,
+      description: row.description,
+      default_quantity: toNumber(row.default_quantity) ?? 1,
+      unit_price_gross: toNumber(row.unit_price_gross),
+      vat_key: row.vat_key,
+      last_used_at: row.last_used_at,
+    }));
+
+    return res.json(mapped);
+  } catch (err) {
+    console.error("Fehler beim Laden der Positions-Bibliothek:", err);
+    return res.status(500).json({ message: "Positions-Bibliothek konnte nicht geladen werden." });
   }
 };

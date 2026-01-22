@@ -13,6 +13,7 @@ import {
   markPaid,
   exportInvoiceToDatev,
   regenerateInvoicePdf,
+  listInvoiceItemLibrary,
   deleteInvoice,         // ⬅️ NEU
   bulkCancelInvoices,
   getInvoiceStatusByReservation,
@@ -48,6 +49,7 @@ router.post("/:id/datev-export", requirePermission("invoices.export"), exportInv
 
 // Standard-Routen
 router.get("/next-number", requirePermission("invoices.create"), getNextInvoiceNumber);
+router.get("/items/library", requireAnyPermission("invoices.create", "invoices.update"), listInvoiceItemLibrary);
 router.get("/recent", requirePermission("invoices.read"), getRecentInvoices);
 router.get("/", requirePermission("invoices.read"), getAllInvoices);     
 router.get("/:id", requirePermission("invoices.read"), getInvoiceById);

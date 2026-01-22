@@ -19,6 +19,7 @@ import {
   Role,
   BackupSettings,
   BackupSummary,
+  InvoiceItemLibrary,
   getInvoiceHeader,
   getSmtpSettings,
   getNetworkSettings,
@@ -61,6 +62,7 @@ import {
   testPdfPath,
   listInvoices,
   getInvoice,
+  listInvoiceItemLibrary,
   getNextInvoiceNumber,
   createInvoice,
   updateInvoice,
@@ -2617,6 +2619,11 @@ function InvoiceFormModal({
   const [error, setError] = useState<string | null>(null);
   const [recipientOpen, setRecipientOpen] = useState(false);
   const recipientBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [itemSuggestIdx, setItemSuggestIdx] = useState<number | null>(null);
+  const [itemSuggestQuery, setItemSuggestQuery] = useState("");
+  const [itemSuggestLoading, setItemSuggestLoading] = useState(false);
+  const [itemSuggestions, setItemSuggestions] = useState<InvoiceItemLibrary[]>([]);
+  const itemSuggestBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const close = onClose || (() => {});
   const handleCancel = () => {
     if (onCancel) onCancel();
@@ -2733,6 +2740,32 @@ function InvoiceFormModal({
     return list.filter((c) => (c.name || "").trim().toLowerCase().includes(needle)).slice(0, 8);
   }, [customers, form.name]);
 
+  useEffect(() => {
+    if (itemSuggestIdx === null) {
+      setItemSuggestions([]);
+      setItemSuggestLoading(false);
+      return;
+    }
+    const query = itemSuggestQuery.trim();
+    if (query.length < 2) {
+      setItemSuggestions([]);
+      setItemSuggestLoading(false);
+      return;
+    }
+    setItemSuggestLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await listInvoiceItemLibrary({ q: query, limit: 8 });
+        setItemSuggestions(data);
+      } catch {
+        setItemSuggestions([]);
+      } finally {
+        setItemSuggestLoading(false);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [itemSuggestIdx, itemSuggestQuery]);
+
   const openRecipientSuggestions = () => {
     if (recipientBlurTimer.current) {
       clearTimeout(recipientBlurTimer.current);
@@ -2744,6 +2777,41 @@ function InvoiceFormModal({
   const closeRecipientSuggestions = () => {
     if (recipientBlurTimer.current) clearTimeout(recipientBlurTimer.current);
     recipientBlurTimer.current = setTimeout(() => setRecipientOpen(false), 120);
+  };
+
+  const openItemSuggestions = (idx: number, query: string) => {
+    if (itemSuggestBlurTimer.current) {
+      clearTimeout(itemSuggestBlurTimer.current);
+      itemSuggestBlurTimer.current = null;
+    }
+    setItemSuggestIdx(idx);
+    setItemSuggestQuery(query);
+  };
+
+  const closeItemSuggestions = () => {
+    if (itemSuggestBlurTimer.current) clearTimeout(itemSuggestBlurTimer.current);
+    itemSuggestBlurTimer.current = setTimeout(() => {
+      setItemSuggestIdx(null);
+    }, 120);
+  };
+
+  const applyItemSuggestion = (idx: number, suggestion: InvoiceItemLibrary) => {
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i === idx
+          ? {
+              ...it,
+              description: suggestion.description,
+              quantity: Number.isFinite(suggestion.default_quantity) ? suggestion.default_quantity : 1,
+              unit_price_gross: suggestion.unit_price_gross,
+              unit_price_input: String(suggestion.unit_price_gross),
+              vat_key: suggestion.vat_key,
+            }
+          : it
+      )
+    );
+    setItemSuggestIdx(null);
+    setItemSuggestions([]);
   };
 
   const applyRecipientSelection = (value: string, match: Customer | null) => {
@@ -3069,12 +3137,53 @@ function InvoiceFormModal({
         <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
           {items.map((item, idx) => (
             <div key={idx} className="grid md:grid-cols-4 gap-3 items-start border border-slate-200 rounded-md p-3">
-              <input
-                className="input md:col-span-2"
-                placeholder="Beschreibung"
-                value={item.description}
-                onChange={(e) => updateItem(idx, "description", e.target.value)}
-              />
+              <div className="relative md:col-span-2">
+                <input
+                  className="input w-full"
+                  placeholder="Beschreibung"
+                  value={item.description}
+                  onChange={(e) => {
+                    updateItem(idx, "description", e.target.value);
+                    openItemSuggestions(idx, e.target.value);
+                  }}
+                  onFocus={() => openItemSuggestions(idx, item.description)}
+                  onBlur={closeItemSuggestions}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setItemSuggestIdx(null);
+                  }}
+                  autoComplete="off"
+                />
+                {itemSuggestIdx === idx && itemSuggestQuery.trim().length >= 2 && (
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-auto">
+                    {itemSuggestLoading && (
+                      <div className="px-3 py-2 text-xs text-slate-500">Lade Vorschläge ...</div>
+                    )}
+                    {!itemSuggestLoading && itemSuggestions.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-slate-500">Keine Treffer</div>
+                    )}
+                    {!itemSuggestLoading &&
+                      itemSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-slate-100"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyItemSuggestion(idx, suggestion)}
+                        >
+                          <div className="font-medium">{suggestion.description}</div>
+                          <div className="text-xs text-slate-500">
+                            {Number(suggestion.default_quantity || 1).toLocaleString("de-DE")} ×{" "}
+                            {Number(suggestion.unit_price_gross).toLocaleString("de-DE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            € · {suggestion.vat_key === 1 ? "19%" : "7%"}
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
               <input
                 className="input"
                 type="number"
@@ -3236,6 +3345,8 @@ function InvoiceDetailPage() {
       ? `${pdfLocation.slice(0, 28)}…${pdfLocation.slice(-18)}`
       : pdfLocation || "–";
   const items = detail?.items ?? [];
+  const createdByLabel = inv?.created_by?.username || "–";
+  const createdAtLabel = inv?.created_at ? new Date(inv.created_at).toLocaleString() : "–";
 
   const vatSummary = useMemo(() => {
     if (!inv) {
@@ -3620,6 +3731,12 @@ function InvoiceDetailPage() {
                   : "Offen"}
               </span>
             </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-1 text-sm text-slate-700">
+            <div className="text-xs uppercase text-slate-500">Erstellt</div>
+            <div className="font-semibold text-slate-900">{createdByLabel}</div>
+            <div className="text-xs text-slate-500">am {createdAtLabel}</div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4 space-y-2">
