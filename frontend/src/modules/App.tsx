@@ -3134,7 +3134,7 @@ function InvoiceFormModal({
             Position hinzufügen
           </Button>
         </div>
-        <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+        <div className="space-y-3">
           {items.map((item, idx) => (
             <div key={idx} className="grid md:grid-cols-4 gap-3 items-start border border-slate-200 rounded-md p-3">
               <div className="relative md:col-span-2">

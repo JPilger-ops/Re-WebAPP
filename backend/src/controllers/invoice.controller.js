@@ -853,6 +853,13 @@ if (!Array.isArray(items) || items.length === 0) {
       return invoiceRow.id;
     });
 
+    try {
+      await ensureInvoicePdf(txResult);
+    } catch (pdfErr) {
+      console.error("Fehler bei der PDF-Erstellung nach Create:", pdfErr);
+      return res.status(500).json({ message: "Rechnung erstellt, PDF konnte nicht erzeugt werden." });
+    }
+
     return res.status(201).json({
       message: "Rechnung erfolgreich erstellt",
       invoice_id: txResult,
