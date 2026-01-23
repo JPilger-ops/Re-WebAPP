@@ -207,6 +207,23 @@ const buildInvoiceMenuItems = (actions: InvoiceMenuActions) => {
   ];
 };
 
+const openInNewTab = (url: string, onBlocked?: () => void) => {
+  const popup = window.open(url, "_blank", "noopener,noreferrer");
+  if (popup) {
+    try {
+      popup.opener = null;
+    } catch {
+      // ignore
+    }
+    return;
+  }
+  setTimeout(() => {
+    if (document.visibilityState === "visible" && document.hasFocus()) {
+      onBlocked?.();
+    }
+  }, 300);
+};
+
 function formatVersionBadge(info: VersionInfo | null) {
   if (!info) return null;
   const buildNumber = extractBuildNumber(info);
@@ -2315,10 +2332,9 @@ function InvoiceCreatePage() {
   const openPdf = () => {
     if (!createModal.invoiceId) return;
     const url = `/api/invoices/${createModal.invoiceId}/pdf?mode=inline`;
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
+    openInNewTab(url, () => {
       alert("Popup wurde blockiert. Bitte Popups für diese Seite erlauben.");
-    }
+    });
   };
 
   return (
@@ -3569,17 +3585,9 @@ function InvoiceDetailPage() {
     if (!detail) return;
     const hasQuery = pdfUrl.includes("?");
     const url = `${pdfUrl}${hasQuery ? "&" : "?"}mode=inline`;
-    const popup = window.open("about:blank", "_blank");
-    if (!popup) {
+    openInNewTab(url, () => {
       setToast({ type: "error", message: "Popup wurde blockiert. Bitte Popups für diese Seite erlauben." });
-      return;
-    }
-    try {
-      popup.opener = null;
-    } catch {
-      // ignore
-    }
-    popup.location.href = url;
+    });
   };
 
   if (loading) {
