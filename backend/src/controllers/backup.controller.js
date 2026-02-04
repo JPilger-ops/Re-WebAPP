@@ -79,8 +79,9 @@ export const updateBackupSettings = async (req, res) => {
   const { local_path, nas_path, default_target, retention, auto, nfs, ui_create_target } = req.body || {};
   try {
     const nfsConfig = nfs ? normalizeNfs(nfs) : undefined;
+    const rawNas = typeof nas_path === "string" ? nas_path.trim() : nas_path;
     const resolvedNas =
-      nas_path ? assertAbsolute(nas_path, "NAS Pfad") : nas_path === "" ? null : undefined;
+      rawNas === null ? null : rawNas ? assertAbsolute(rawNas, "NAS Pfad") : undefined;
     const uiTarget = ui_create_target === "nas" ? "nas" : ui_create_target === "local" ? "local" : undefined;
     const defaultTarget = default_target === "nas" ? "nas" : default_target === "local" ? "local" : undefined;
     const updates = {
