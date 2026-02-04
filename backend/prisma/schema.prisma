@@ -103,6 +103,7 @@ model invoice_item_library {
 model invoices {
   id                     Int             @id @default(autoincrement())
   invoice_number         String          @db.VarChar(50)
+  customer_number        String?         @db.VarChar(50)
   date                   DateTime        @db.Date
   recipient_id           Int?
   category               String?         @db.VarChar(50)

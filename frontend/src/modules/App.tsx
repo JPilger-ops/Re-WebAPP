@@ -2634,6 +2634,7 @@ function InvoiceFormModal({
     ust_id: "",
     category_key: "",
     reservation_request_id: "",
+    customer_number: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2692,7 +2693,7 @@ function InvoiceFormModal({
         const nextVal = (nextNr as any).next || (nextNr as any).next_number || "";
         setForm((f) => ({ ...f, invoice_number: nextVal || f.invoice_number }));
       }
-      if (mode === "edit" && id) {
+        if (mode === "edit" && id) {
         const data = await getInvoice(id);
         setForm({
           recipient_id: data.invoice.recipient.id ? String(data.invoice.recipient.id) : "",
@@ -2708,6 +2709,7 @@ function InvoiceFormModal({
           ust_id: data.invoice.ust_id || "",
           category_key: data.invoice.category || "",
           reservation_request_id: data.invoice.reservation_request_id || "",
+          customer_number: data.invoice.customer_number || "",
         });
         setItems(
           data.items.map((i) => ({
@@ -2941,6 +2943,7 @@ function InvoiceFormModal({
           ust_id: form.ust_id.trim() || null,
           category: form.category_key || null,
           reservation_request_id: form.reservation_request_id.trim() || null,
+          customer_number: form.customer_number.trim() || null,
         },
         items: normalizedItems.map((i) => ({
           description: i.description.trim(),
@@ -3126,6 +3129,16 @@ function InvoiceFormModal({
                 placeholder="Reservation Request ID"
               />
               <span className="text-xs text-slate-500">Für Forms-Sync / Reservation Request.</span>
+            </label>
+            <label className="text-sm text-slate-700 space-y-1">
+              <span className="font-medium">Kundennummer (optional)</span>
+              <Input
+                value={form.customer_number}
+                onChange={(e) => setForm((f) => ({ ...f, customer_number: e.target.value }))}
+                placeholder="Kundennummer"
+                maxLength={50}
+              />
+              <span className="text-xs text-slate-500">Wird nur im PDF angezeigt.</span>
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
               <input
