@@ -327,6 +327,7 @@ const shapeInvoiceListRow = (invoice, recipient, category) => {
     recipient_email: recipient?.email || null,
     category_id: category?.id || null,
     category_label: category?.label || null,
+    customer_number: invoice.customer_number || null,
     datev_export_status: invoice.datev_export_status || null,
     datev_exported_at: invoice.datev_exported_at || null,
     datev_export_error: invoice.datev_export_error || null,
@@ -563,18 +564,18 @@ function calculateTotals(items) {
 // -------------------------------------------------------------
 const computeNextInvoiceNumber = async () => {
   const now = new Date();
-  const year = now.getFullYear();
+  const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const prefix = `${year}${month}`;
 
   const last = await prisma.invoices.findFirst({
-    where: { invoice_number: { startsWith: prefix } },
+    where: { invoice_number: { startsWith: year } },
     orderBy: { invoice_number: "desc" },
     select: { invoice_number: true },
   });
 
   let nextRunningNumber = 1;
-  if (last?.invoice_number) {
+  if (last?.invoice_number && last.invoice_number.startsWith(year)) {
     const lastSuffix = last.invoice_number.substring(6);
     const lastInt = parseInt(lastSuffix, 10) || 0;
     nextRunningNumber = lastInt + 1;
@@ -707,6 +708,7 @@ if (!Array.isArray(items) || items.length === 0) {
     const category    = invoice.category.trim();
     const reservationRequestId = invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
+    const customerNumber = invoice.customer_number && invoice.customer_number.trim() !== "" ? invoice.customer_number.trim() : null;
 
     const isB2B  = invoice.b2b === true;
     const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
@@ -814,6 +816,7 @@ if (!Array.isArray(items) || items.length === 0) {
       const invoiceRow = await tx.invoices.create({
         data: {
           invoice_number: invoiceNumber,
+          customer_number: customerNumber,
           date: invoiceDate,
           recipient_id: recipientRow.id,
           category,
@@ -968,6 +971,8 @@ export const updateInvoice = async (req, res) => {
       invoice.reservation_request_id && invoice.reservation_request_id.trim() !== "" ? invoice.reservation_request_id.trim() : null;
     const externalReference =
       invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : existing.external_reference || null;
+    const customerNumber =
+      invoice.customer_number && invoice.customer_number.trim() !== "" ? invoice.customer_number.trim() : null;
     const isB2B = invoice.b2b === true;
     const ustId = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
@@ -1074,6 +1079,7 @@ export const updateInvoice = async (req, res) => {
         where: { id },
         data: {
           invoice_number: invoiceNumber,
+          customer_number: customerNumber,
           date: invoiceDate,
           recipient_id: recipientRow.id,
           category,
@@ -1259,9 +1265,10 @@ export const getInvoiceById = async (req, res) => {
       return res.status(404).json({ message: "Rechnung nicht gefunden" });
     }
 
-    const invoice = normalizeInvoiceDecimals({
-      id: invoiceRow.id,
-      invoice_number: invoiceRow.invoice_number,
+      const invoice = normalizeInvoiceDecimals({
+        id: invoiceRow.id,
+        invoice_number: invoiceRow.invoice_number,
+        customer_number: invoiceRow.customer_number,
       date: invoiceRow.date,
       category: invoiceRow.category,
       reservation_request_id: invoiceRow.reservation_request_id,
@@ -2036,6 +2043,7 @@ function generateInvoiceHtml(
   <div class="content">
 
     <div class="meta">
+      ${invoice.customer_number ? `<div><strong>Kundennr:</strong> ${escapeHtml(invoice.customer_number)}</div>` : ""}
       <div><strong>Rechnungsnr:</strong> ${invoice.invoice_number}</div>
       <div><strong>Datum:</strong> ${formattedDate}</div>
       ${invoice.b2b && invoice.ust_id ? `<div><strong>USt-ID Kunde:</strong> ${invoice.ust_id}</div>` : ""}

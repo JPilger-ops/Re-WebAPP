@@ -636,6 +636,7 @@ export interface InvoiceDetail {
   invoice: {
     id: number;
     invoice_number: string;
+    customer_number?: string | null;
     date: string;
     category: string | null;
     reservation_request_id?: string | null;
