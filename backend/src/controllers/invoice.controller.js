@@ -1532,6 +1532,7 @@ async function ensureInvoicePdf(id) {
 
     const invoice = {
       invoice_number: invoiceRow.invoice_number,
+      customer_number: invoiceRow.customer_number || null,
       date: invoiceRow.date,
       b2b: invoiceRow.b2b === true,
       ust_id: invoiceRow.ust_id || null,
