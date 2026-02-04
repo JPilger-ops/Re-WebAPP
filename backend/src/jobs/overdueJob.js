@@ -28,11 +28,10 @@ async function markOverdueAndSync() {
       WITH due AS (
         SELECT id, invoice_number, reservation_request_id
         FROM invoices
-        WHERE reservation_request_id IS NOT NULL
-          AND status_sent = true
-          AND status_paid_at IS NULL
+        WHERE status_paid_at IS NULL
+          AND canceled_at IS NULL
           AND (overdue_since IS NULL)
-          AND status_sent_at <= NOW() - $1::interval
+          AND COALESCE(status_sent_at, date) <= NOW() - $1::interval
         LIMIT 50
       )
       UPDATE invoices i
@@ -45,20 +44,22 @@ async function markOverdueAndSync() {
   );
 
   for (const row of candidates.rows || []) {
-    try {
-      const firstItem = await fetchFirstItemDescription(row.id);
-      await sendHkformsStatus({
-        reservationId: row.reservation_request_id,
-        payload: {
-          status: "OVERDUE",
-          reference: row.invoice_number,
-          overdueSince: row.overdue_since,
-          firstItem: firstItem || null,
-        },
-        endpoint: "invoices",
-      });
-    } catch (err) {
-      console.warn("[overdue-job] Sync error:", err?.message || err);
+    if (row.reservation_request_id) {
+      try {
+        const firstItem = await fetchFirstItemDescription(row.id);
+        await sendHkformsStatus({
+          reservationId: row.reservation_request_id,
+          payload: {
+            status: "OVERDUE",
+            reference: row.invoice_number,
+            overdueSince: row.overdue_since,
+            firstItem: firstItem || null,
+          },
+          endpoint: "invoices",
+        });
+      } catch (err) {
+        console.warn("[overdue-job] Sync error:", err?.message || err);
+      }
     }
   }
 }
