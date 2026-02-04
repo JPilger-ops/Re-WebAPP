@@ -1800,9 +1800,14 @@ function Invoices() {
         alert(`PDF konnte nicht geladen werden (Status ${res.status}).`);
         return;
       }
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      try {
+        res.body?.cancel();
+      } catch {
+        // ignore
+      }
+      openInNewTab(url, () => {
+        setToast({ type: "error", message: "Popup wurde blockiert. Bitte Popups für diese Seite erlauben." });
+      });
     } finally {
       setPdfBusyId(null);
     }
