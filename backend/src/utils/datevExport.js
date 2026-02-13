@@ -24,7 +24,9 @@ export const buildDatevMailSubject = (invoiceNumber) =>
 export function buildDatevMailBody(row = {}, bankSettings = {}) {
   const recipient = row.recipient_name || row.recipient || "Kunde";
   const invoiceDate = formatDateDe(row.date);
-  const amountValue = row.b2b ? n(row.net_19) + n(row.net_7) : n(row.gross_total);
+  const amountValue = row.b2b
+    ? n(row.gross_total) - (n(row.vat_19) + n(row.vat_7))
+    : n(row.gross_total);
   const amountDisplay = amountValue.toLocaleString("de-DE", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,

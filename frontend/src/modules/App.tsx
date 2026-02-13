@@ -3211,7 +3211,7 @@ function InvoiceFormModal({
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}{" "}
-                            € · {suggestion.vat_key === 1 ? "19%" : "7%"}
+                            € · {suggestion.vat_key === 1 ? "19%" : suggestion.vat_key === 2 ? "7%" : suggestion.vat_key === 0 ? "0%" : `${suggestion.vat_key}%`}
                           </div>
                         </button>
                       ))}
@@ -3247,6 +3247,7 @@ function InvoiceFormModal({
                   value={item.vat_key}
                   onChange={(e) => updateItem(idx, "vat_key", Number(e.target.value))}
                 >
+                  <option value={0}>0% MwSt (Gutschein/steuerfrei)</option>
                   <option value={1}>19% MwSt</option>
                   <option value={2}>7% MwSt</option>
                 </select>
@@ -3397,15 +3398,20 @@ function InvoiceDetailPage() {
 
     const hasAggregates =
       inv.net_19 != null || inv.vat_19 != null || inv.gross_19 != null || inv.net_7 != null || inv.vat_7 != null || inv.gross_7 != null;
+    const gross19 = Number(inv.gross_19 ?? (inv.net_19 ?? 0) + (inv.vat_19 ?? 0));
+    const gross7 = Number(inv.gross_7 ?? (inv.net_7 ?? 0) + (inv.vat_7 ?? 0));
+    const gross0 = Number(inv.gross_total ?? 0) - gross19 - gross7;
 
     if (hasAggregates) {
-      addRow("19%", inv.net_19, inv.vat_19, inv.gross_19 ?? (inv.net_19 ?? 0) + (inv.vat_19 ?? 0));
-      addRow("7%", inv.net_7, inv.vat_7, inv.gross_7 ?? (inv.net_7 ?? 0) + (inv.vat_7 ?? 0));
+      addRow("19%", inv.net_19, inv.vat_19, gross19);
+      addRow("7%", inv.net_7, inv.vat_7, gross7);
+      addRow("0%", gross0, 0, gross0);
     }
 
     if (!rows.length && inv.gross_total != null) {
-      addRow("19%", inv.net_19, inv.vat_19, inv.gross_19 ?? (inv.net_19 || 0) + (inv.vat_19 || 0));
-      addRow("7%", inv.net_7, inv.vat_7, inv.gross_7 ?? (inv.net_7 || 0) + (inv.vat_7 || 0));
+      addRow("19%", inv.net_19, inv.vat_19, gross19);
+      addRow("7%", inv.net_7, inv.vat_7, gross7);
+      addRow("0%", gross0, 0, gross0);
     }
 
     const totalNet = rows.reduce((sum, r) => sum + (r.net || 0), 0);

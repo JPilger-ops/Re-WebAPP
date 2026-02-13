@@ -253,7 +253,9 @@ const formatNumberDe = (val) =>
 const placeholderRegex = (ph) => new RegExp(ph.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
 
 const buildPlaceholderMap = (row = {}, bankSettings = {}, headerSettings = {}) => {
-  const amountValue = row.b2b ? n(row.net_19) + n(row.net_7) : n(row.gross_total);
+  const amountValue = row.b2b
+    ? n(row.gross_total) - (n(row.vat_19) + n(row.vat_7))
+    : n(row.gross_total);
   const amountDisplay = amountValue.toLocaleString("de-DE", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -530,10 +532,11 @@ function setPdfTitle(buffer, title) {
 function calculateTotals(items) {
   let net_19 = 0, vat_19 = 0, gross_19 = 0;
   let net_7 = 0,  vat_7 = 0,  gross_7 = 0;
+  let gross_0 = 0;
 
   for (const item of items) {
     const gross = n(item.quantity) * n(item.unit_price_gross);
-    const vatRate = item.vat_key === 1 ? 0.19 : 0.07;
+    const vatRate = item.vat_key === 1 ? 0.19 : item.vat_key === 2 ? 0.07 : 0;
     const net = gross / (1 + vatRate);
     const vat = gross - net;
 
@@ -541,10 +544,12 @@ function calculateTotals(items) {
       net_19 += net;
       vat_19 += vat;
       gross_19 += gross;
-    } else {
+    } else if (item.vat_key === 2) {
       net_7 += net;
       vat_7 += vat;
       gross_7 += gross;
+    } else {
+      gross_0 += gross;
     }
   }
 
@@ -555,7 +560,7 @@ function calculateTotals(items) {
     net_7,
     vat_7,
     gross_7,
-    gross_total: gross_19 + gross_7
+    gross_total: gross_19 + gross_7 + gross_0
   };
 }
 
@@ -664,7 +669,7 @@ if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
-    if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
+    if (!Number.isFinite(vatKey) || !(vatKey === 0 || vatKey === 1 || vatKey === 2)) {
       return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
@@ -932,7 +937,7 @@ export const updateInvoice = async (req, res) => {
     if (unitPrice === null || !Number.isFinite(unitPrice)) {
       return res.status(400).json({ message: `Einzelpreis fehlt oder ist ungültig in Position ${i + 1}.` });
     }
-    if (!Number.isFinite(vatKey) || !(vatKey === 1 || vatKey === 2)) {
+    if (!Number.isFinite(vatKey) || !(vatKey === 0 || vatKey === 1 || vatKey === 2)) {
       return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
@@ -2070,7 +2075,7 @@ function generateInvoiceHtml(
 
     <div class="totals-wrapper">
       <table>
-        <tr><td>Zwischensumme</td><td><span class="amount">${formatCurrencyDe(invoice.net_19 + invoice.net_7)} €</span></td></tr>
+        <tr><td>Zwischensumme</td><td><span class="amount">${formatCurrencyDe(n(invoice.gross_total) - n(invoice.vat_19) - n(invoice.vat_7))} €</span></td></tr>
         <tr><td>MwSt 19%</td><td><span class="amount">${formatCurrencyDe(invoice.vat_19)} €</span></td></tr>
         <tr><td>MwSt 7%</td><td><span class="amount">${formatCurrencyDe(invoice.vat_7)} €</span></td></tr>
       </table>
@@ -2080,7 +2085,7 @@ function generateInvoiceHtml(
         <span class="amount">
           ${
             invoice.b2b
-              ? `${formatCurrencyDe(invoice.net_19 + invoice.net_7)} € (Netto-Endbetrag)`
+              ? `${formatCurrencyDe(n(invoice.gross_total) - n(invoice.vat_19) - n(invoice.vat_7))} € (Netto-Endbetrag)`
               : `${formatCurrencyDe(invoice.gross_total)} €`
           }
         </span>
