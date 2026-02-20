@@ -2965,6 +2965,7 @@ function InvoiceFormModal({
             description: i.description.trim(),
             quantity: Number(i.quantity),
             unit_price_gross: unitPriceGross,
+            unit_price_net: form.b2b ? roundMoney(inputPrice) : undefined,
             vat_key: vatKey,
           };
         }),

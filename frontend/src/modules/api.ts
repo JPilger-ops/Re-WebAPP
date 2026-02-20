@@ -677,6 +677,7 @@ export interface InvoiceItem {
   description: string;
   quantity: number;
   unit_price_gross: number;
+  unit_price_net?: number;
   vat_key: number;
   line_total_gross?: number;
 }
