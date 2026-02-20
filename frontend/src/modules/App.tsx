@@ -2677,6 +2677,14 @@ function InvoiceFormModal({
     const num = Number(normalized);
     return Number.isFinite(num) ? num : NaN;
   };
+  const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const vatRateForKey = (vatKey: number) => (vatKey === 1 ? 0.19 : vatKey === 2 ? 0.07 : 0);
+  const grossFromNet = (netValue: number, vatKey: number) => roundMoney(netValue * (1 + vatRateForKey(vatKey)));
+  const netFromGross = (grossValue: number, vatKey: number) => {
+    const rate = vatRateForKey(vatKey);
+    if (rate <= 0) return roundMoney(grossValue);
+    return roundMoney(grossValue / (1 + rate));
+  };
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -2711,15 +2719,21 @@ function InvoiceFormModal({
           reservation_request_id: data.invoice.reservation_request_id || "",
           customer_number: data.invoice.customer_number || "",
         });
+        const isB2B = data.invoice.b2b === true;
         setItems(
-          data.items.map((i) => ({
-            id: i.id,
-            description: i.description,
-            quantity: Number(i.quantity),
-            unit_price_gross: Number(i.unit_price_gross),
-            unit_price_input: i.unit_price_gross !== undefined && i.unit_price_gross !== null ? String(i.unit_price_gross) : "",
-            vat_key: Number(i.vat_key),
-          }))
+          data.items.map((i) => {
+            const vatKey = Number(i.vat_key);
+            const grossPrice = Number(i.unit_price_gross);
+            const displayPrice = isB2B ? netFromGross(grossPrice, vatKey) : grossPrice;
+            return {
+              id: i.id,
+              description: i.description,
+              quantity: Number(i.quantity),
+              unit_price_gross: displayPrice,
+              unit_price_input: Number.isFinite(displayPrice) ? String(displayPrice) : "",
+              vat_key: vatKey,
+            };
+          })
         );
       }
     } catch (err: any) {
@@ -2819,6 +2833,9 @@ function InvoiceFormModal({
   };
 
   const applyItemSuggestion = (idx: number, suggestion: InvoiceItemLibrary) => {
+    const suggestionVatKey = Number(suggestion.vat_key);
+    const suggestionGrossPrice = Number(suggestion.unit_price_gross);
+    const suggestionDisplayPrice = form.b2b ? netFromGross(suggestionGrossPrice, suggestionVatKey) : suggestionGrossPrice;
     setItems((prev) =>
       prev.map((it, i) =>
         i === idx
@@ -2826,9 +2843,9 @@ function InvoiceFormModal({
               ...it,
               description: suggestion.description,
               quantity: Number.isFinite(suggestion.default_quantity) ? suggestion.default_quantity : 1,
-              unit_price_gross: suggestion.unit_price_gross,
-              unit_price_input: String(suggestion.unit_price_gross),
-              vat_key: suggestion.vat_key,
+              unit_price_gross: suggestionDisplayPrice,
+              unit_price_input: String(suggestionDisplayPrice),
+              vat_key: suggestionVatKey,
             }
           : it
       )
@@ -2918,11 +2935,6 @@ function InvoiceFormModal({
       setError("Bitte alle Positionen ausfüllen (Beschreibung, Menge > 0, Preis gesetzt).");
       return;
     }
-    if (form.b2b && !form.ust_id.trim()) {
-      setError("Für B2B ist eine USt-ID erforderlich.");
-      return;
-    }
-
     setSaving(true);
     if (onSubmitStart) onSubmitStart();
     try {
@@ -2945,12 +2957,17 @@ function InvoiceFormModal({
           reservation_request_id: form.reservation_request_id.trim() || null,
           customer_number: form.customer_number.trim() || null,
         },
-        items: normalizedItems.map((i) => ({
-          description: i.description.trim(),
-          quantity: Number(i.quantity),
-          unit_price_gross: Number(i.unit_price_gross),
-          vat_key: Number(i.vat_key),
-        })),
+        items: normalizedItems.map((i) => {
+          const inputPrice = Number(i.unit_price_gross);
+          const vatKey = Number(i.vat_key);
+          const unitPriceGross = form.b2b ? grossFromNet(inputPrice, vatKey) : roundMoney(inputPrice);
+          return {
+            description: i.description.trim(),
+            quantity: Number(i.quantity),
+            unit_price_gross: unitPriceGross,
+            vat_key: vatKey,
+          };
+        }),
       };
 
       if (mode === "create") {
@@ -3144,13 +3161,34 @@ function InvoiceFormModal({
               <input
                 type="checkbox"
                 checked={form.b2b}
-                onChange={(e) => setForm((f) => ({ ...f, b2b: e.target.checked }))}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setItems((prev) =>
+                    prev.map((it) => {
+                      const currentInput = parsePriceInput(
+                        it.unit_price_input ?? String(it.unit_price_gross ?? "")
+                      );
+                      const current = Number.isFinite(currentInput)
+                        ? currentInput
+                        : Number(it.unit_price_gross ?? 0);
+                      const converted = checked
+                        ? netFromGross(current, Number(it.vat_key))
+                        : grossFromNet(current, Number(it.vat_key));
+                      return {
+                        ...it,
+                        unit_price_gross: converted,
+                        unit_price_input: String(converted),
+                      };
+                    })
+                  );
+                  setForm((f) => ({ ...f, b2b: checked }));
+                }}
               />
-              <span>B2B (USt-ID Pflicht)</span>
+              <span>B2B (Positionspreise netto)</span>
             </label>
             {form.b2b && (
               <label className="text-sm text-slate-700 md:col-span-2 space-y-1">
-                <span className="font-medium">USt-ID</span>
+                <span className="font-medium">USt-ID (optional)</span>
                 <Input
                   value={form.ust_id}
                   onChange={(e) => setForm((f) => ({ ...f, ust_id: e.target.value }))}
@@ -3167,6 +3205,11 @@ function InvoiceFormModal({
           <Button variant="secondary" type="button" onClick={addItem}>
             Position hinzufügen
           </Button>
+        </div>
+        <div className="text-xs text-slate-500">
+          {form.b2b
+            ? "B2B aktiv: Positionspreise als Netto erfassen, Endbetrag wird als Brutto berechnet."
+            : "B2C aktiv: Positionspreise als Brutto erfassen."}
         </div>
         <div className="space-y-3">
           {items.map((item, idx) => (
@@ -3207,7 +3250,11 @@ function InvoiceFormModal({
                           <div className="font-medium">{suggestion.description}</div>
                           <div className="text-xs text-slate-500">
                             {Number(suggestion.default_quantity || 1).toLocaleString("de-DE")} ×{" "}
-                            {Number(suggestion.unit_price_gross).toLocaleString("de-DE", {
+                            {Number(
+                              form.b2b
+                                ? netFromGross(Number(suggestion.unit_price_gross), Number(suggestion.vat_key))
+                                : suggestion.unit_price_gross
+                            ).toLocaleString("de-DE", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}{" "}
@@ -3230,7 +3277,7 @@ function InvoiceFormModal({
                 className="input"
                 type="text"
                 inputMode="decimal"
-                placeholder="0,00"
+                placeholder={form.b2b ? "0,00 (netto)" : "0,00 (brutto)"}
                 value={
                   item.unit_price_input ??
                   (item.unit_price_gross || item.unit_price_gross === 0 ? String(item.unit_price_gross) : "")
@@ -3382,6 +3429,13 @@ function InvoiceDetailPage() {
   const items = detail?.items ?? [];
   const createdByLabel = inv?.created_by?.username || "–";
   const createdAtLabel = inv?.created_at ? new Date(inv.created_at).toLocaleString() : "–";
+  const isB2B = inv?.b2b === true;
+  const vatRateForItem = (vatKey?: number | null) => (vatKey === 1 ? 0.19 : vatKey === 2 ? 0.07 : 0);
+  const netFromGrossForItem = (grossValue: number, vatKey?: number | null) => {
+    const rate = vatRateForItem(vatKey);
+    if (rate <= 0) return grossValue;
+    return grossValue / (1 + rate);
+  };
 
   const vatSummary = useMemo(() => {
     if (!inv) {
@@ -3730,7 +3784,11 @@ function InvoiceDetailPage() {
                   <div className="flex justify-between text-sm text-slate-900 font-medium">
                     <span className="truncate">{it.description || "–"}</span>
                     <span>
-                      {Number(it.line_total_gross ?? it.unit_price_gross).toLocaleString("de-DE", {
+                      {Number(
+                        isB2B
+                          ? netFromGrossForItem(Number(it.line_total_gross ?? it.unit_price_gross), it.vat_key)
+                          : Number(it.line_total_gross ?? it.unit_price_gross)
+                      ).toLocaleString("de-DE", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}{" "}
@@ -3739,7 +3797,13 @@ function InvoiceDetailPage() {
                   </div>
                   <div className="text-xs text-slate-500 flex gap-3 mt-1">
                     <span>Menge: {Number(it.quantity).toLocaleString("de-DE")}</span>
-                    <span>Preis: {Number(it.unit_price_gross).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                    <span>
+                      Preis:{" "}
+                      {Number(
+                        isB2B ? netFromGrossForItem(Number(it.unit_price_gross), it.vat_key) : Number(it.unit_price_gross)
+                      ).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                      € {isB2B ? "(Netto)" : "(Brutto)"}
+                    </span>
                     <span>
                       MwSt: {it.vat_key === 1 ? "19%" : it.vat_key === 2 ? "7%" : `${it.vat_key}%`}
                     </span>
