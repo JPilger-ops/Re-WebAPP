@@ -253,9 +253,7 @@ const formatNumberDe = (val) =>
 const placeholderRegex = (ph) => new RegExp(ph.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
 
 const buildPlaceholderMap = (row = {}, bankSettings = {}, headerSettings = {}) => {
-  const amountValue = row.b2b
-    ? n(row.gross_total) - (n(row.vat_19) + n(row.vat_7))
-    : n(row.gross_total);
+  const amountValue = n(row.gross_total);
   const amountDisplay = amountValue.toLocaleString("de-DE", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -633,13 +631,6 @@ if (!invoice.date || invoice.date.trim() === "") {
   return res.status(400).json({ message: "Rechnungsdatum fehlt." });
 }
 
-// B2B → USt-ID Pflicht
-if (invoice.b2b) {
-  if (!invoice.ust_id || invoice.ust_id.trim() === "") {
-    return res.status(400).json({ message: "Für B2B ist eine USt-ID erforderlich." });
-  }
-}
-
 if (!invoice.category || invoice.category.trim() === "") {
   return res.status(400).json({ message: "Kategorie ist erforderlich." });
 }
@@ -910,9 +901,6 @@ export const updateInvoice = async (req, res) => {
   if (!invoice.date || invoice.date.trim() === "") return res.status(400).json({ message: "Rechnungsdatum fehlt." });
   if (!invoice.invoice_number || invoice.invoice_number.trim() === "") {
     return res.status(400).json({ message: "Rechnungsnummer fehlt." });
-  }
-  if (invoice.b2b && (!invoice.ust_id || invoice.ust_id.trim() === "")) {
-    return res.status(400).json({ message: "Für B2B ist eine USt-ID erforderlich." });
   }
   if (!invoice.category || invoice.category.trim() === "") {
     return res.status(400).json({ message: "Kategorie ist erforderlich." });
@@ -1608,8 +1596,11 @@ async function ensureInvoicePdf(id) {
     const itemsRowsHtml = items
       .map((item) => {
         const q = formatNumberDe(item.quantity);
-        const up = formatCurrencyDe(item.unit_price_gross);
-        const total = formatCurrencyDe(item.line_total_gross);
+        const vatRate = item.vat_key === 1 ? 0.19 : item.vat_key === 2 ? 0.07 : 0;
+        const unitPrice = invoice.b2b ? n(item.unit_price_gross) / (1 + vatRate) : n(item.unit_price_gross);
+        const lineTotal = invoice.b2b ? n(item.line_total_gross) / (1 + vatRate) : n(item.line_total_gross);
+        const up = formatCurrencyDe(unitPrice);
+        const total = formatCurrencyDe(lineTotal);
         const vatLabel = item.vat_key === 1 ? "19%" : item.vat_key === 2 ? "7%" : "0%";
 
         return `
@@ -2085,7 +2076,7 @@ function generateInvoiceHtml(
         <span class="amount">
           ${
             invoice.b2b
-              ? `${formatCurrencyDe(n(invoice.gross_total) - n(invoice.vat_19) - n(invoice.vat_7))} € (Netto-Endbetrag)`
+              ? `${formatCurrencyDe(invoice.gross_total)} € (Brutto-Endbetrag)`
               : `${formatCurrencyDe(invoice.gross_total)} €`
           }
         </span>
