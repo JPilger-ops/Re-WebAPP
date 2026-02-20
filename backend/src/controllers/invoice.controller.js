@@ -2143,9 +2143,7 @@ function generateInvoiceHtml(
         Zahlbar innerhalb von 10 Tagen ab Belegdatum abzüglich 2% Skonto.<br>
         Zahlbar innerhalb von 30 Tagen ab Belegdatum rein netto Kasse.<br>
         Mit freundlichen Grüßen<br>
-        Thomas Pilger<br>
-        Bestellungen bitte über welcome@elexier-de-balsamico.de<br>
-        oder 0172 9387773 auch WhatsApp.
+        Thomas Pilger
       </p>
     </div>
     `
