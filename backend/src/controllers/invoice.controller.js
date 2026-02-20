@@ -1989,6 +1989,13 @@ function generateInvoiceHtml(
     font-weight: 700;
   }
 
+  .final-total-label {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-bottom: 4px;
+  }
+
   .footer {
     position: absolute;
     bottom: 10mm;
@@ -2102,15 +2109,20 @@ function generateInvoiceHtml(
       </table>
 
       <div class="final-total-box">
+      ${
+        invoice.b2b
+          ? `
+      <div class="final-total-label">(Brutto/Endbetrag)</div>
       <div class="final-total-value">
-        <span class="amount">
-          ${
-            invoice.b2b
-              ? `${formatCurrencyDe(invoice.gross_total)} € (Brutto-Endbetrag)`
-              : `${formatCurrencyDe(invoice.gross_total)} €`
-          }
-        </span>
+        <span class="amount">${formatCurrencyDe(invoice.gross_total)} €</span>
       </div>
+      `
+          : `
+      <div class="final-total-value">
+        <span class="amount">${formatCurrencyDe(invoice.gross_total)} €</span>
+      </div>
+      `
+      }
       </div>
     </div>
         
