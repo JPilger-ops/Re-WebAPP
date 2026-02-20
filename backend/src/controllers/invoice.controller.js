@@ -131,6 +131,8 @@ const parseDecimalInput = (value) => {
   const num = Number(normalized);
   return Number.isFinite(num) ? num : null;
 };
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const vatRateForKey = (vatKey) => (vatKey === 1 ? 0.19 : vatKey === 2 ? 0.07 : 0);
 
 const upsertInvoiceItemLibrary = async (tx, items) => {
   if (!Array.isArray(items) || !items.length) return;
@@ -533,21 +535,25 @@ function calculateTotals(items) {
   let gross_0 = 0;
 
   for (const item of items) {
-    const gross = n(item.quantity) * n(item.unit_price_gross);
-    const vatRate = item.vat_key === 1 ? 0.19 : item.vat_key === 2 ? 0.07 : 0;
-    const net = gross / (1 + vatRate);
-    const vat = gross - net;
+    const gross = roundMoney(
+      item.line_total_gross !== undefined && item.line_total_gross !== null
+        ? n(item.line_total_gross)
+        : n(item.quantity) * n(item.unit_price_gross)
+    );
+    const vatRate = vatRateForKey(item.vat_key);
+    const net = roundMoney(gross / (1 + vatRate));
+    const vat = roundMoney(gross - net);
 
     if (item.vat_key === 1) {
-      net_19 += net;
-      vat_19 += vat;
-      gross_19 += gross;
+      net_19 = roundMoney(net_19 + net);
+      vat_19 = roundMoney(vat_19 + vat);
+      gross_19 = roundMoney(gross_19 + gross);
     } else if (item.vat_key === 2) {
-      net_7 += net;
-      vat_7 += vat;
-      gross_7 += gross;
+      net_7 = roundMoney(net_7 + net);
+      vat_7 = roundMoney(vat_7 + vat);
+      gross_7 = roundMoney(gross_7 + gross);
     } else {
-      gross_0 += gross;
+      gross_0 = roundMoney(gross_0 + gross);
     }
   }
 
@@ -640,12 +646,14 @@ if (!Array.isArray(items) || items.length === 0) {
   return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
 }
 
+  const isB2B = invoice.b2b === true;
   const normalizedItems = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const desc = (item.description || "").trim();
     const quantity = parseDecimalInput(item.quantity);
     const unitPrice = parseDecimalInput(item.unit_price_gross);
+    const unitPriceNet = parseDecimalInput(item.unit_price_net);
     const vatKey = Number(item.vat_key);
 
     if (!desc) {
@@ -664,12 +672,23 @@ if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
+    const vatRate = vatRateForKey(vatKey);
+    let unitPriceGross = roundMoney(unitPrice);
+    let lineTotalGross = roundMoney(n(quantity) * n(unitPriceGross));
+    if (isB2B && unitPriceNet !== null && Number.isFinite(unitPriceNet)) {
+      const lineNet = roundMoney(n(quantity) * n(unitPriceNet));
+      lineTotalGross = roundMoney(lineNet * (1 + vatRate));
+      if (quantity > 0) {
+        unitPriceGross = roundMoney(lineTotalGross / n(quantity));
+      }
+    }
+
     normalizedItems.push({
       description: desc,
       quantity: quantity,
-      unit_price_gross: unitPrice,
+      unit_price_gross: unitPriceGross,
       vat_key: vatKey,
-      line_total_gross: n(quantity) * n(unitPrice),
+      line_total_gross: lineTotalGross,
     });
   }
 
@@ -706,7 +725,6 @@ if (!Array.isArray(items) || items.length === 0) {
     const externalReference = invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : null;
     const customerNumber = invoice.customer_number && invoice.customer_number.trim() !== "" ? invoice.customer_number.trim() : null;
 
-    const isB2B  = invoice.b2b === true;
     const ustId  = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
     await ensureInvoiceCategoriesTable();
@@ -910,12 +928,14 @@ export const updateInvoice = async (req, res) => {
     return res.status(400).json({ message: "Mindestens eine Rechnungsposition ist erforderlich." });
   }
 
+  const isB2B = invoice.b2b === true;
   const normalizedItems = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const desc = (item.description || "").trim();
     const quantity = parseDecimalInput(item.quantity);
     const unitPrice = parseDecimalInput(item.unit_price_gross);
+    const unitPriceNet = parseDecimalInput(item.unit_price_net);
     const vatKey = Number(item.vat_key);
 
     if (!desc) return res.status(400).json({ message: `Beschreibung fehlt in Position ${i + 1}.` });
@@ -929,12 +949,23 @@ export const updateInvoice = async (req, res) => {
       return res.status(400).json({ message: `MwSt-Schlüssel fehlt oder ist ungültig in Position ${i + 1}.` });
     }
 
+    const vatRate = vatRateForKey(vatKey);
+    let unitPriceGross = roundMoney(unitPrice);
+    let lineTotalGross = roundMoney(n(quantity) * n(unitPriceGross));
+    if (isB2B && unitPriceNet !== null && Number.isFinite(unitPriceNet)) {
+      const lineNet = roundMoney(n(quantity) * n(unitPriceNet));
+      lineTotalGross = roundMoney(lineNet * (1 + vatRate));
+      if (quantity > 0) {
+        unitPriceGross = roundMoney(lineTotalGross / n(quantity));
+      }
+    }
+
     normalizedItems.push({
       description: desc,
       quantity,
-      unit_price_gross: unitPrice,
+      unit_price_gross: unitPriceGross,
       vat_key: vatKey,
-      line_total_gross: n(quantity) * n(unitPrice),
+      line_total_gross: lineTotalGross,
     });
   }
 
@@ -966,7 +997,6 @@ export const updateInvoice = async (req, res) => {
       invoice.external_reference && invoice.external_reference.trim() !== "" ? invoice.external_reference.trim() : existing.external_reference || null;
     const customerNumber =
       invoice.customer_number && invoice.customer_number.trim() !== "" ? invoice.customer_number.trim() : null;
-    const isB2B = invoice.b2b === true;
     const ustId = invoice.ust_id && invoice.ust_id.trim() !== "" ? invoice.ust_id.trim() : null;
 
     await ensureInvoiceCategoriesTable();
@@ -2092,15 +2122,18 @@ function generateInvoiceHtml(
       <div style="font-size:11px; color:#333;">Bequem per SEPA-QR bezahlen</div>
     </div>
 
-    <!-- Reverse-Charge Hinweis links unten (nur B2B) -->
+    <!-- B2B Hinweis links unten -->
     ${
       invoice.b2b
         ? `
     <div class="final-box-label" style="position:absolute; bottom:30mm; left:15mm; text-align:left;">
       <p style="margin-top:10px; font-size:12px; color:#444;">
-        Innergemeinschaftliche Leistung / Reverse-Charge.<br>
-        MwSt wird ausgewiesen, der Rechnungsendbetrag ist jedoch ein Netto-Endbetrag gemäß <br>
-        Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG).
+        Zahlbar innerhalb von 10 Tagen ab Belegdatum abzüglich 2% Skonto.<br>
+        Zahlbar innerhalb von 30 Tagen ab Belegdatum rein netto Kasse.<br>
+        Mit freundlichen Grüßen<br>
+        Thomas Pilger<br>
+        Bestellungen bitte über welcome@elexier-de-balsamico.de<br>
+        oder 0172 9387773 auch WhatsApp.
       </p>
     </div>
     `
