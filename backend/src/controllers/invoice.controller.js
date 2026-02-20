@@ -2091,7 +2091,7 @@ function generateInvoiceHtml(
         <tr>
           <th>Beschreibung</th>
           <th>Menge</th>
-          <th>${invoice.b2b ? "Einzelpreis Netto" : "Einzelpreis"}</th>
+          <th ${invoice.b2b ? 'style="text-align:center;"' : ""}>${invoice.b2b ? "Einzelpreis/Netto" : "Einzelpreis"}</th>
           <th>MwSt</th>
           <th>Gesamt</th>
         </tr>
